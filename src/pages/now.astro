@@ -1,0 +1,44 @@
+---
+import WindowLayout from '../layouts/WindowLayout.astro';
+
+const updated = 'May 2026';
+---
+<WindowLayout
+  title="Now — Porter Fairbourne"
+  description="What I'm focused on right now."
+  windowTitle="now.txt"
+  narrow
+>
+    <header style="margin-bottom: var(--s-8);">
+      <div class="t-label" style="margin-bottom: var(--s-4);">Now</div>
+      <h1 class="t-h1">What I'm up to<span class="accent">.</span></h1>
+      <p class="t-caption" style="margin-top: var(--s-4);">Last updated · {updated}</p>
+    </header>
+
+    <div class="prose">
+      <h2>Working on</h2>
+      <ul>
+        <li>Leading product at <strong>Ember</strong> — shipping the next round of supplier-facing onboarding tools.</li>
+        <li>Cleaning up the agent stack that runs Yoodlize's Facebook Marketplace automation on a Mac mini in my apartment.</li>
+        <li>Writing this site, in the open, as I go.</li>
+      </ul>
+
+      <h2>Reading</h2>
+      <ul>
+        <li>[BOOK 1]</li>
+        <li>[BOOK 2]</li>
+        <li>[ESSAY OR ARTICLE]</li>
+      </ul>
+
+      <h2>Thinking about</h2>
+      <ul>
+        <li>How PMs use agents as leverage — not just for code, but for the rest of the job.</li>
+        <li>What "data work" actually looks like inside an industrial supply chain, and how much of it can be automated end-to-end.</li>
+        <li>The shape of a small, durable product team in 2026.</li>
+      </ul>
+
+      <p>
+        Inspired by Derek Sivers's <a href="https://nownownow.com/about" target="_blank" rel="noopener noreferrer">/now page</a> movement.
+      </p>
+    </div>
+</WindowLayout>

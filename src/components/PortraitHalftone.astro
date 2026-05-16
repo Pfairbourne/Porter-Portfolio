@@ -1,0 +1,22 @@
+---
+import { makeDots, PORTRAIT_FIELD } from '../lib/halftone';
+
+const W = 320;
+const H = 320;
+
+const dots = makeDots({
+  W,
+  H,
+  pitch: 6,
+  maxR: 2.6,
+  minR: 0,
+  angleDeg: 0,
+  field: PORTRAIT_FIELD,
+});
+---
+<svg viewBox={`0 0 ${W} ${H}`} class="portrait-svg" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+  <rect width={W} height={H} class="portrait-bg" />
+  <g class="portrait-dots">
+    {dots.map((d) => <circle cx={d.x.toFixed(2)} cy={d.y.toFixed(2)} r={d.r.toFixed(2)} />)}
+  </g>
+</svg>

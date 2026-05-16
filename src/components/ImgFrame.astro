@@ -1,0 +1,15 @@
+---
+interface Props {
+  src?: string;
+  alt?: string;
+  placeholder?: string;
+  ratio?: string;
+  class?: string;
+}
+
+const { src, alt = '', placeholder = 'project screenshot · 16:10', ratio, class: className } = Astro.props;
+const style = ratio ? `aspect-ratio: ${ratio};` : undefined;
+---
+<div class:list={['img-frame', className]} style={style}>
+  {src ? <img src={src} alt={alt} /> : <span>{placeholder}</span>}
+</div>

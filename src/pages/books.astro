@@ -1,0 +1,140 @@
+---
+import WindowLayout from '../layouts/WindowLayout.astro';
+import SectionLabel from '../components/SectionLabel.astro';
+import { getCollection } from 'astro:content';
+
+const books = (await getCollection('books', ({ data }) => !data.draft))
+  .map((b) => b.data)
+  .sort((a, b) => a.order - b.order);
+
+const currentlyReading = books.filter((b) => b.section === 'currently-reading');
+const shapedMe = books.filter((b) => b.section === 'shaped-me');
+const recent = books.filter((b) => b.section === 'recent');
+---
+<WindowLayout
+  title="Reading List — Porter Fairbourne"
+  description="Books I'm reading, books that shaped how I think about product, recent reads."
+  windowTitle="books.app"
+>
+  <section style="margin-bottom: var(--s-7);">
+    <div class="t-label" style="margin-bottom: var(--s-3);">Reading List</div>
+    <h1 class="t-h1">What I'm reading<span class="accent">.</span></h1>
+  </section>
+
+  {currentlyReading.length > 0 && (
+    <aside class="book-callout" aria-label="Currently reading">
+      <span class="t-label" style="color: var(--accent);">Currently reading</span>
+      <div class="book-callout__list">
+        {currentlyReading.map((b) => (
+          <div class="book book--callout">
+            {b.cover && <img class="book__cover" src={b.cover} alt={`Cover of ${b.title}`} />}
+            <div class="book__meta">
+              <h3 class="book__title">{b.title}</h3>
+              <p class="book__author">{b.author}</p>
+              {b.reaction && <p class="book__reaction">{b.reaction}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </aside>
+  )}
+
+  {shapedMe.length > 0 && (
+    <section style="margin-top: var(--s-8);">
+      <SectionLabel text="Books that shaped how I think about product" />
+      <div class="book-list">
+        {shapedMe.map((b) => (
+          <article class="book">
+            {b.cover && <img class="book__cover" src={b.cover} alt={`Cover of ${b.title}`} />}
+            <div class="book__meta">
+              <h3 class="book__title">{b.title}</h3>
+              <p class="book__author">{b.author}</p>
+              {b.reaction && <p class="book__reaction">{b.reaction}</p>}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  )}
+
+  {recent.length > 0 && (
+    <section style="margin-top: var(--s-8);">
+      <SectionLabel text="Recent reads" />
+      <div class="book-list">
+        {recent.map((b) => (
+          <article class="book">
+            {b.cover && <img class="book__cover" src={b.cover} alt={`Cover of ${b.title}`} />}
+            <div class="book__meta">
+              <h3 class="book__title">{b.title}</h3>
+              <p class="book__author">{b.author}</p>
+              {b.reaction && <p class="book__reaction">{b.reaction}</p>}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  )}
+
+  {books.length === 0 && (
+    <p class="t-small" style="color: var(--muted); padding: var(--s-5) 0;">
+      No books yet. Add markdown files to <code>src/content/books/</code> — each needs frontmatter
+      with <code>title</code>, <code>author</code>, and <code>section</code>
+      (<code>currently-reading</code>, <code>shaped-me</code>, or <code>recent</code>).
+    </p>
+  )}
+</WindowLayout>
+
+<style>
+  .book-callout {
+    margin-top: var(--s-5);
+    padding: var(--s-5);
+    background: var(--accent-soft);
+    border-radius: var(--radius-card);
+    border: 1px solid var(--rule);
+  }
+  .book-callout__list { margin-top: var(--s-4); display: grid; gap: var(--s-4); }
+
+  .book-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--s-5) var(--s-6);
+  }
+  .book {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: var(--s-4);
+    align-items: start;
+  }
+  .book--callout { grid-template-columns: 72px 1fr; }
+  .book__cover {
+    width: 64px;
+    height: auto;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--bg-elev);
+  }
+  .book--callout .book__cover { width: 72px; }
+  .book__meta { display: flex; flex-direction: column; gap: 3px; }
+  .book__title {
+    font-family: var(--font-serif);
+    font-size: 20px;
+    line-height: 1.2;
+    color: var(--ink);
+    font-weight: 400;
+  }
+  .book__author {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+  .book__reaction {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--ink-2);
+    margin-top: 4px;
+  }
+</style>

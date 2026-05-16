@@ -1,0 +1,105 @@
+---
+import WindowLayout from '../layouts/WindowLayout.astro';
+import { getCollection } from 'astro:content';
+
+const tracks = (await getCollection('tracks'))
+  .map((t) => t.data)
+  .sort((a, b) => a.order - b.order);
+---
+<WindowLayout
+  title="Music — Porter Fairbourne"
+  description="Five tracks I keep on repeat. Tap to hear a 30-second snippet."
+  windowTitle="music.app"
+>
+  <section style="margin-bottom: var(--s-7);">
+    <div class="t-label" style="margin-bottom: var(--s-3);">Study Tunes</div>
+    <h1 class="t-h1">Five on repeat<span class="accent">.</span></h1>
+    <p class="t-italic-serif" style="margin-top: var(--s-4); max-width: var(--max-w-read);">
+      Tracks I keep coming back to while working. Tap any embed for a 30-second snippet.
+    </p>
+  </section>
+
+  {tracks.length === 0 ? (
+    <p class="t-small" style="color: var(--muted); padding: var(--s-5) 0;">
+      No tracks yet. Add JSON files to <code>src/content/tracks/</code> — each needs a
+      <code>spotifyTrackId</code> (the last segment of any Spotify track URL).
+    </p>
+  ) : (
+    <div class="music-list">
+      {tracks.map((t) => (
+        <article class="music-track">
+          <header class="music-track__meta">
+            <h2 class="music-track__title">{t.title}</h2>
+            <p class="music-track__artist">{t.artist}</p>
+            {t.note && <p class="music-track__note">{t.note}</p>}
+          </header>
+          <iframe
+            class="music-track__embed"
+            src={`https://open.spotify.com/embed/track/${t.spotifyTrackId}?utm_source=oembed`}
+            title={`${t.title} by ${t.artist} — Spotify embed`}
+            loading="lazy"
+            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+            allowfullscreen
+          ></iframe>
+        </article>
+      ))}
+    </div>
+  )}
+</WindowLayout>
+
+<style>
+  .music-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-6);
+  }
+  .music-track {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: var(--s-5);
+    align-items: center;
+    padding-bottom: var(--s-5);
+    border-bottom: 1px solid var(--rule);
+  }
+  .music-track:last-child { border-bottom: 0; padding-bottom: 0; }
+  .music-track__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .music-track__title {
+    font-family: var(--font-serif);
+    font-size: 26px;
+    line-height: 1.1;
+    color: var(--ink);
+    font-weight: 400;
+  }
+  .music-track__artist {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+  .music-track__note {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 16px;
+    color: var(--ink-2);
+    margin-top: 6px;
+    max-width: 32ch;
+  }
+  .music-track__embed {
+    width: 100%;
+    height: 80px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+  }
+  @media (max-width: 720px) {
+    .music-track {
+      grid-template-columns: 1fr;
+      gap: var(--s-3);
+    }
+    .music-track__embed { height: 80px; }
+  }
+</style>

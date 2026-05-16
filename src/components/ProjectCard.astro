@@ -1,0 +1,32 @@
+---
+import Tag from './Tag.astro';
+
+interface Props {
+  href: string;
+  year: number | string;
+  title: string;
+  description: string;
+  tags?: string[];
+  external?: boolean;
+  arrow?: '↗' | '→';
+}
+
+const { href, year, title, description, tags = [], external = false, arrow = '↗' } = Astro.props;
+const rel = external ? 'noopener noreferrer' : undefined;
+const target = external ? '_blank' : undefined;
+---
+<a class="project-card" href={href} target={target} rel={rel}>
+  <div class="project-card-row">
+    <span class="project-year">{year}</span>
+    <div class="project-body">
+      <div class="project-title">{title}</div>
+      <div class="project-desc">{description}</div>
+      {tags.length > 0 && (
+        <div class="project-tags">
+          {tags.map((t) => <Tag label={t} />)}
+        </div>
+      )}
+    </div>
+    <span class="project-arrow">{arrow}</span>
+  </div>
+</a>

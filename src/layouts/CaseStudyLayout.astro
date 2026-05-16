@@ -1,0 +1,110 @@
+---
+import WindowLayout from './WindowLayout.astro';
+import ImgFrame from '../components/ImgFrame.astro';
+import Tag from '../components/Tag.astro';
+
+interface Props {
+  slug: string;
+  title: string;
+  tagline: string;
+  year: number;
+  role: string;
+  team?: string;
+  status: 'live' | 'shipped' | 'archived' | 'in-progress';
+  tags?: string[];
+  hero?: string;
+  heroAlt?: string;
+  summary: string;
+  links?: {
+    live?: string;
+    repo?: string;
+    docs?: string;
+    press?: string;
+  };
+  prev?: { slug: string; title: string } | null;
+  next?: { slug: string; title: string } | null;
+}
+
+const {
+  slug,
+  title,
+  tagline,
+  year,
+  role,
+  team,
+  status,
+  tags = [],
+  hero,
+  heroAlt,
+  summary,
+  links = {},
+  prev,
+  next,
+} = Astro.props;
+
+const statusLabel: Record<string, string> = {
+  live: 'Live',
+  shipped: 'Shipped',
+  archived: 'Archived',
+  'in-progress': 'In progress',
+};
+---
+<WindowLayout
+  title={`${title} — Porter Fairbourne`}
+  description={summary}
+  windowTitle={`${slug}.mdx`}
+  parent={{ href: '/projects', label: 'selected-work' }}
+>
+    <header class="stack-5" style="margin-bottom: var(--s-8);">
+      <div class="t-label">{title.toUpperCase()}</div>
+      <h1 class="t-h1">{tagline}</h1>
+      <p class="t-italic-serif" style="max-width: var(--max-w-read);">{summary}</p>
+      <div class="meta-row">
+        <span>{year}</span>
+        <span>{role}</span>
+        {team && <span>{team}</span>}
+        <span>{statusLabel[status]}</span>
+      </div>
+      {tags.length > 0 && (
+        <div class="project-tags">
+          {tags.map((t) => <Tag label={t} />)}
+        </div>
+      )}
+    </header>
+
+    <ImgFrame src={hero} alt={heroAlt ?? title} placeholder={`${title} · hero`} />
+
+    <div class="prose" style="margin-top: var(--s-8);">
+      <slot />
+    </div>
+
+    {(links.live || links.repo || links.docs || links.press) && (
+      <div style="margin-top: var(--s-8); display: flex; gap: var(--s-3); flex-wrap: wrap;">
+        {links.live && <a class="btn btn-solid" href={links.live} target="_blank" rel="noopener noreferrer">Visit live site</a>}
+        {links.repo && <a class="btn" href={links.repo} target="_blank" rel="noopener noreferrer">View on GitHub</a>}
+        {links.docs && <a class="btn" href={links.docs} target="_blank" rel="noopener noreferrer">Read docs</a>}
+        {links.press && <a class="btn" href={links.press} target="_blank" rel="noopener noreferrer">Press</a>}
+      </div>
+    )}
+
+    {(prev || next) && (
+      <nav class="case-nav" aria-label="Project navigation">
+        <div class="case-nav__cell">
+          {prev && (
+            <>
+              <span class="t-label">← Previous</span>
+              <a href={`/projects/${prev.slug}`}>{prev.title}</a>
+            </>
+          )}
+        </div>
+        <div class="case-nav__cell case-nav__cell--end">
+          {next && (
+            <>
+              <span class="t-label">Next →</span>
+              <a href={`/projects/${next.slug}`}>{next.title}</a>
+            </>
+          )}
+        </div>
+      </nav>
+    )}
+</WindowLayout>

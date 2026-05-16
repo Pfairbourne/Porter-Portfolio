@@ -1,0 +1,49 @@
+---
+import FileGlyph from './FileGlyph.astro';
+import FolderGlyph from './FolderGlyph.astro';
+
+interface Props {
+  /** Stable identifier used to persist drag positions in localStorage. */
+  id: string;
+  href: string;
+  label: string;
+  /** File extension shown inside the SVG label band (e.g. "md", "pdf"). Ignored for folders. */
+  ext?: string;
+  /** Visual style of the glyph. */
+  variant?: 'file' | 'folder';
+  /** Open the link in a new tab (sets target="_blank" + rel). */
+  external?: boolean;
+  /** Trigger a download instead of navigation. */
+  download?: boolean;
+}
+
+const {
+  id,
+  href,
+  label,
+  ext = '',
+  variant = 'file',
+  external = false,
+  download = false,
+} = Astro.props;
+
+const rel = external ? 'noopener noreferrer' : undefined;
+const target = external ? '_blank' : undefined;
+const variantClass = variant === 'folder' ? 'icon--folder' : 'icon--file';
+---
+<a
+  class:list={['icon', variantClass]}
+  href={href}
+  target={target}
+  rel={rel}
+  download={download ? '' : undefined}
+  data-icon-id={id}
+  draggable="false"
+>
+  <div class="icon__glyph">
+    {variant === 'folder'
+      ? <FolderGlyph uid={id} />
+      : <FileGlyph uid={id} ext={ext} />}
+  </div>
+  <span class="icon__label">{label}</span>
+</a>

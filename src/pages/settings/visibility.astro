@@ -1,0 +1,183 @@
+---
+import WindowLayout from '../../layouts/WindowLayout.astro';
+import { getVisibility, isKvConfigured } from '../../lib/kv';
+
+export const prerender = false;
+
+const [dock, desktop] = await Promise.all([
+  getVisibility('dock'),
+  getVisibility('desktop'),
+]);
+
+const dockIcons = [
+  { id: 'photos',   label: 'Photos' },
+  { id: 'notepad',  label: 'Notepad' },
+  { id: 'books',    label: 'Books' },
+  { id: 'music',    label: 'Music' },
+  { id: 'calendar', label: 'Calendar' },
+  { id: 'settings', label: 'Settings' },
+];
+
+const desktopIcons = [
+  { id: 'selected-work',     label: 'selected-work' },
+  { id: 'ember',             label: 'ember.mdx' },
+  { id: 'yoodlize',          label: 'yoodlize.mdx' },
+  { id: 'fun-projects',      label: 'fun-projects' },
+  { id: 'mindstudio-agents', label: 'mindstudio-agents' },
+  { id: 'writing',           label: 'writing' },
+  { id: 'about',             label: 'about.md' },
+  { id: 'now',               label: 'now.txt' },
+  { id: 'resume',            label: 'résumé.pdf' },
+  { id: 'style-guide',       label: 'style-guide.html' },
+];
+
+const configured = isKvConfigured();
+---
+<WindowLayout
+  title="Visibility — Settings"
+  description="Toggle which icons appear on the desktop and dock."
+  windowTitle="visibility.toml"
+  parent={{ href: '/settings', label: 'settings.app' }}
+  narrow
+>
+  <header style="margin-bottom: var(--s-6);">
+    <h1 class="t-h1">Icon visibility<span class="accent">.</span></h1>
+    <p class="t-italic-serif" style="margin-top: var(--s-3);">
+      Untick anything you want hidden. Changes save instantly.
+    </p>
+  </header>
+
+  {!configured && (
+    <p class="visibility-warning" role="alert">
+      Upstash isn't configured for this environment — toggles will appear to save but won't persist.
+      Set <code>UPSTASH_REDIS_REST_URL</code> + <code>UPSTASH_REDIS_REST_TOKEN</code> in Vercel env.
+    </p>
+  )}
+
+  <section style="margin-bottom: var(--s-8);">
+    <div class="section-label">Dock (apps)</div>
+    <ul class="visibility-list" data-scope="dock">
+      {dockIcons.map((icon) => (
+        <li class="visibility-row">
+          <label class="visibility-label">
+            <input
+              type="checkbox"
+              checked={dock[icon.id] !== false}
+              data-id={icon.id}
+              class="visibility-checkbox"
+            />
+            <span class="visibility-name">{icon.label}</span>
+          </label>
+          <span class="visibility-status" aria-live="polite"></span>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section>
+    <div class="section-label">Desktop (files + folders)</div>
+    <ul class="visibility-list" data-scope="desktop">
+      {desktopIcons.map((icon) => (
+        <li class="visibility-row">
+          <label class="visibility-label">
+            <input
+              type="checkbox"
+              checked={desktop[icon.id] !== false}
+              data-id={icon.id}
+              class="visibility-checkbox"
+            />
+            <span class="visibility-name">{icon.label}</span>
+          </label>
+          <span class="visibility-status" aria-live="polite"></span>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <script is:inline>
+    (function () {
+      var lists = document.querySelectorAll('.visibility-list');
+      lists.forEach(function (list) {
+        var scope = list.getAttribute('data-scope');
+        list.addEventListener('change', async function (e) {
+          var input = e.target;
+          if (!(input instanceof HTMLInputElement)) return;
+          var id = input.getAttribute('data-id');
+          if (!id) return;
+          var status = input.closest('.visibility-row').querySelector('.visibility-status');
+          status.textContent = 'saving…';
+          status.dataset.state = 'pending';
+          try {
+            var res = await fetch('/api/admin/visibility', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ scope: scope, id: id, visible: input.checked }),
+            });
+            if (res.ok) {
+              status.textContent = 'saved';
+              status.dataset.state = 'ok';
+              setTimeout(function () { status.textContent = ''; }, 1400);
+            } else {
+              status.textContent = 'failed';
+              status.dataset.state = 'err';
+              input.checked = !input.checked;
+            }
+          } catch (_) {
+            status.textContent = 'failed';
+            status.dataset.state = 'err';
+            input.checked = !input.checked;
+          }
+        });
+      });
+    })();
+  </script>
+</WindowLayout>
+
+<style>
+  .visibility-warning {
+    margin-bottom: var(--s-5);
+    padding: var(--s-3) var(--s-4);
+    background: var(--accent-soft);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+    color: var(--ink);
+    font-size: 13px;
+  }
+  .visibility-list { list-style: none; padding: 0; margin: 0; display: grid; }
+  .visibility-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--s-3);
+    padding: var(--s-3) 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .visibility-row:last-child { border-bottom: 0; }
+  .visibility-label {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    cursor: pointer;
+    flex: 1;
+  }
+  .visibility-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .visibility-name {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink);
+    letter-spacing: 0.01em;
+  }
+  .visibility-status {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .visibility-status[data-state="ok"]   { color: var(--accent); }
+  .visibility-status[data-state="err"]  { color: var(--accent); }
+  .visibility-status[data-state="pending"] { color: var(--muted); }
+</style>

@@ -1,0 +1,6 @@
+{
+  "src": "/images/photos/REPLACE_ME.jpg",
+  "label": "Example headshot",
+  "description": "Drop image files into public/images/photos/ and add one JSON file per image here.",
+  "order": 999
+}

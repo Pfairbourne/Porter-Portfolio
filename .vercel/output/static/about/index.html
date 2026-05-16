@@ -1,0 +1,98 @@
+<!DOCTYPE html><html lang="en" data-astro-cid-ptylqrxg> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><script>
+      (function () {
+        try { sessionStorage.setItem('porter-os/open', location.pathname); } catch (_) {}
+        location.replace('/');
+      })();
+    </script><noscript><style>html { visibility: visible !important; }</style></noscript><title>About — Porter Fairbourne</title><meta name="description" content="Product Manager, Builder, and Operator. Based in Draper, Utah."><link rel="canonical" href="https://porterfairbourne.com/about"><meta property="og:title" content="About — Porter Fairbourne"><meta property="og:description" content="Product Manager, Builder, and Operator. Based in Draper, Utah."><meta property="og:url" content="https://porterfairbourne.com/about"><meta property="og:type" content="article"><meta property="og:image" content="/og-default.png"><meta name="twitter:card" content="summary_large_image"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="/_astro/index.DtFzzW1k.css">
+<style>html{visibility:hidden;background:#fafaf7}
+</style></head> <body class="window-page" data-astro-cid-ptylqrxg> <canvas id="halftone-wallpaper" class="halftone-wallpaper" aria-hidden="true"></canvas> <script>
+  // — Halftone wallpaper renderer —
+  // Verbatim port of HalftoneWallpaper from halftone-app.jsx (spotlight mode, recommended defaults).
+  (function () {
+    var CFG = {
+      mode: 'spotlight',
+      pitch: 18,
+      maxR: 5.5,
+      minR: 0,
+      angleDeg: 0,
+      focalX: 0.5,
+      focalY: 0.5,
+      falloff: 0.55,
+      contrast: 1.0,
+      color: 'rgba(22, 21, 19, 0.92)'
+    };
+    var TAU = Math.PI * 2;
+
+    function smoothstep(a, b, x) {
+      var t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    }
+    function field(x, y, W, H) {
+      var dx = (x / W) - CFG.focalX;
+      var dy = (y / H) - CFG.focalY;
+      var t = 1 - smoothstep(0, CFG.falloff, Math.hypot(dx, dy));
+      return Math.pow(t, 1 / Math.max(0.1, CFG.contrast));
+    }
+    function draw(canvas) {
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      var W = canvas.clientWidth, H = canvas.clientHeight;
+      if (!W || !H) return;
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      var ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = CFG.color;
+
+      var ang = (CFG.angleDeg * Math.PI) / 180;
+      var cs = Math.cos(ang), sn = Math.sin(ang);
+      var cx = W / 2, cy = H / 2;
+      var span = Math.hypot(W, H);
+
+      for (var v = -span / 2; v < span / 2; v += CFG.pitch) {
+        for (var u = -span / 2; u < span / 2; u += CFG.pitch) {
+          var x = cx + u * cs - v * sn;
+          var y = cy + u * sn + v * cs;
+          if (x < -CFG.maxR || x > W + CFG.maxR || y < -CFG.maxR || y > H + CFG.maxR) continue;
+          var t = field(x, y, W, H);
+          var r = CFG.minR + (CFG.maxR - CFG.minR) * t;
+          if (r < 0.25) continue;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, TAU);
+          ctx.fill();
+        }
+      }
+    }
+
+    var canvas = document.getElementById('halftone-wallpaper');
+    if (!canvas) return;
+    var render = function () { draw(canvas); };
+    render();
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(render).observe(canvas);
+    } else {
+      window.addEventListener('resize', render);
+    }
+  })();
+</script> <div class="window" data-astro-cid-ptylqrxg> <div class="window__chrome" data-astro-cid-ptylqrxg> <div class="window__title" aria-label="Path" data-astro-cid-ptylqrxg>  <span class="window__crumb-current" data-astro-cid-ptylqrxg>about.md</span> </div> <a class="window__close" href="/" aria-label="Close and return to desktop" title="Close (Esc)" data-astro-cid-ptylqrxg> <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-astro-cid-ptylqrxg> <line x1="2.5" y1="2.5" x2="9.5" y2="9.5" data-astro-cid-ptylqrxg></line> <line x1="9.5" y1="2.5" x2="2.5" y2="9.5" data-astro-cid-ptylqrxg></line> </svg> </a> </div> <main class="window__content" data-astro-cid-ptylqrxg>  <section class="hero"> <div class="t-label" style="margin-bottom: var(--s-4);">About</div> <h1 class="t-h1">Porter Fairbourne<span class="accent">.</span></h1> <p class="ethos">
+Product Manager, Builder, and Operator. Based in Draper, Utah. I care about clear thinking, sharp products, and the parts of building that don't show up on roadmaps.
+</p> </section> <div class="prose"> <h2>What I do</h2> <p>
+I lead product at <strong>Ember</strong>, an AI-native PIM platform automating SKU onboarding and chargeback prevention for industrial supply chains. The short version: distributors and manufacturers have product data scattered across spreadsheets, supplier portals, and customer-specific formats. We turn that mess into clean, customer-ready data — fast.
+</p> <p>
+Before Ember, I [REPLACE WITH PRIOR ROLES]. I've spent most of my career at the intersection of product, sales, and operations — usually somewhere small enough that the lines between those don't matter.
+</p> <h2>How I work</h2> <p>
+I think the best PMs are obsessed with the customer's job and ruthless about scope. I write a lot — PRDs, decision memos, internal updates — because writing is how I figure out whether I actually understand something. I prefer talking to five users over reading a deck about them.
+</p> <p>
+I'm allergic to process for its own sake. If a tool, ritual, or doc isn't earning its keep, I'll cut it. The same goes for code in my side projects.
+</p> <h2>What I care about</h2> <ul> <li>Products that respect the user's time.</li> <li>Teams where everyone can write a clear paragraph.</li> <li>Tools that compound — agents, automations, the stack you build once and use forever.</li> <li>Operators who can hold both the spreadsheet and the strategy.</li> </ul> <h2>Outside of work</h2> <p>
+[REPLACE WITH PERSONAL DETAILS — hobbies, interests, family, the Mac mini under your desk running 12 agents, etc.]
+</p> </div> <section style="margin-top: var(--s-9);"> <div class="section-label">Get in touch</div> <p class="t-body" style="max-width: var(--max-w-read);">
+The best way to reach me is <a class="link-subtle" href="mailto:pfairbourne@gmail.com">pfairbourne@gmail.com</a>. I read everything, I reply to most. Tell me what you're working on.
+</p> </section>  </main> </div> <script>
+      // Esc key closes the window (returns to desktop).
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          window.location.href = '/';
+        }
+      });
+    </script> </body> </html>

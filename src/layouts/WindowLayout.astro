@@ -1,0 +1,105 @@
+---
+import '../styles/global.css';
+import HalftoneWallpaper from '../components/HalftoneWallpaper.astro';
+
+interface Props {
+  /** Browser tab title. Defaults to `${windowTitle} — Porter Fairbourne`. */
+  title?: string;
+  description?: string;
+  ogImage?: string;
+  /** File name shown in the window's title bar — e.g. "ember.mdx", "about.md". */
+  windowTitle: string;
+  /** Optional parent folder shown as a clickable breadcrumb prefix. */
+  parent?: { href: string; label: string };
+  /** Narrows the window for prose / single-column content. */
+  narrow?: boolean;
+}
+
+const {
+  title,
+  description,
+  ogImage = '/og-default.png',
+  windowTitle,
+  parent,
+  narrow = false,
+} = Astro.props;
+
+const fullTitle = title ?? `${windowTitle} — Porter Fairbourne`;
+const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://porterfairbourne.com').toString();
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    {/*
+      Windowed pages exist as real routes (for SEO + as fetch targets for the modal),
+      but they aren't meant to be visited directly — the experience is always meant
+      to be a popup on the desktop. If we landed here from a refresh, share link, or
+      bookmark, stash the path and redirect home so the modal can re-open it.
+
+      The visibility:hidden + <noscript> override keeps a flash from rendering for
+      JS-enabled visitors while still serving the page content to anyone without JS.
+    */}
+    <style>html { visibility: hidden; background: #fafaf7; }</style>
+    <script is:inline>
+      (function () {
+        try { sessionStorage.setItem('porter-os/open', location.pathname); } catch (_) {}
+        location.replace('/');
+      })();
+    </script>
+    <noscript><style>html { visibility: visible !important; }</style></noscript>
+
+    <title>{fullTitle}</title>
+    {description && <meta name="description" content={description} />}
+    <link rel="canonical" href={canonical} />
+    <meta property="og:title" content={fullTitle} />
+    {description && <meta property="og:description" content={description} />}
+    <meta property="og:url" content={canonical} />
+    <meta property="og:type" content="article" />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="window-page">
+    <HalftoneWallpaper />
+    <div class:list={['window', narrow && 'window--narrow']}>
+      <div class="window__chrome">
+        <div class="window__title" aria-label="Path">
+          {parent && (
+            <>
+              <a class="window__crumb" href={parent.href}>{parent.label}</a>
+              <span class="window__crumb-sep" aria-hidden="true">/</span>
+            </>
+          )}
+          <span class="window__crumb-current">{windowTitle}</span>
+        </div>
+        <a class="window__close" href="/" aria-label="Close and return to desktop" title="Close (Esc)">
+          <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <line x1="2.5" y1="2.5" x2="9.5" y2="9.5" />
+            <line x1="9.5" y1="2.5" x2="2.5" y2="9.5" />
+          </svg>
+        </a>
+      </div>
+      <main class="window__content">
+        <slot />
+      </main>
+    </div>
+
+    <script is:inline>
+      // Esc key closes the window (returns to desktop).
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          window.location.href = '/';
+        }
+      });
+    </script>
+  </body>
+</html>

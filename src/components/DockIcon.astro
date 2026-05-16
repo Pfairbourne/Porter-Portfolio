@@ -1,0 +1,15 @@
+---
+interface Props {
+  id: string;
+  href: string;
+  label: string;
+}
+const { id, href, label } = Astro.props;
+---
+<a class="dock__icon" href={href} aria-label={label} data-dock-icon-id={id} draggable="false">
+  <span class="dock__tile">
+    <slot />
+  </span>
+  <span class="dock__tooltip" aria-hidden="true">{label}</span>
+  <span class="dock__caption" aria-hidden="true">{label}</span>
+</a>

@@ -1,0 +1,155 @@
+<!DOCTYPE html><html lang="en" data-astro-cid-ptylqrxg> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><script>
+      (function () {
+        try { sessionStorage.setItem('porter-os/open', location.pathname); } catch (_) {}
+        location.replace('/');
+      })();
+    </script><noscript><style>html { visibility: visible !important; }</style></noscript><title>Notepad — Porter Fairbourne</title><meta name="description" content="Leave Porter a quick note. Lands in his inbox."><link rel="canonical" href="https://porterfairbourne.com/notepad"><meta property="og:title" content="Notepad — Porter Fairbourne"><meta property="og:description" content="Leave Porter a quick note. Lands in his inbox."><meta property="og:url" content="https://porterfairbourne.com/notepad"><meta property="og:type" content="article"><meta property="og:image" content="/og-default.png"><meta name="twitter:card" content="summary_large_image"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="/_astro/index.DtFzzW1k.css">
+<style>.notepad[data-astro-cid-i7m5peqr]{background:var(--bg-elev);border:1px solid var(--rule);border-radius:var(--radius-card);padding:var(--s-6) var(--s-6) var(--s-5);background-image:repeating-linear-gradient(to bottom,transparent 0px,transparent 31px,var(--rule) 31px,var(--rule) 32px);background-position:0 28px;transform-origin:top center}.notepad__form[data-astro-cid-i7m5peqr]{display:flex;flex-direction:column;gap:var(--s-4)}.notepad__field[data-astro-cid-i7m5peqr]{display:flex;flex-direction:column;gap:6px}.notepad__field[data-astro-cid-i7m5peqr] input[data-astro-cid-i7m5peqr],.notepad__field[data-astro-cid-i7m5peqr] textarea[data-astro-cid-i7m5peqr]{padding:10px 12px;border:1px solid var(--rule);border-radius:var(--radius-card);background:var(--bg);color:var(--ink);font:inherit;transition:border-color .16s ease;resize:vertical}.notepad__field[data-astro-cid-i7m5peqr] input[data-astro-cid-i7m5peqr]:focus,.notepad__field[data-astro-cid-i7m5peqr] textarea[data-astro-cid-i7m5peqr]:focus{outline:none;border-color:var(--ink-2)}.notepad__req[data-astro-cid-i7m5peqr]{color:var(--accent)}.notepad__opt[data-astro-cid-i7m5peqr]{color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0}.notepad__pot[data-astro-cid-i7m5peqr]{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}.notepad__row[data-astro-cid-i7m5peqr]{display:flex;align-items:center;justify-content:space-between;gap:var(--s-4);margin-top:var(--s-2);flex-wrap:wrap}.notepad__error[data-astro-cid-i7m5peqr]{color:var(--accent);font-size:13px;margin:0;flex:1 1 60%;min-width:0}#notepad-submit[data-astro-cid-i7m5peqr]{cursor:pointer}.notepad__form--folding[data-astro-cid-i7m5peqr]{animation:notepad-fold .48s cubic-bezier(.4,0,.6,1) forwards;transform-origin:top center;pointer-events:none}@keyframes notepad-fold{0%{transform:scaleY(1) translateY(0);opacity:1}50%{transform:scaleY(.35) translateY(0);opacity:.6}to{transform:scaleY(0) translateY(40px);opacity:0}}.notepad__success[data-astro-cid-i7m5peqr]{display:flex;flex-direction:column;align-items:center;gap:var(--s-4);padding:var(--s-6) 0;opacity:0;transform:translateY(8px);transition:opacity .32s ease 80ms,transform .32s ease 80ms}.notepad__success[data-astro-cid-i7m5peqr][hidden]{display:none}.notepad__success--in[data-astro-cid-i7m5peqr]{opacity:1;transform:translateY(0)}.notepad__handwritten[data-astro-cid-i7m5peqr]{width:180px;height:64px;color:var(--accent)}.notepad__got-it[data-astro-cid-i7m5peqr]{font-family:var(--font-serif);font-style:italic;font-size:22px;color:var(--ink);line-height:1.3;text-align:center}@media(prefers-reduced-motion:reduce){.notepad__form--folding[data-astro-cid-i7m5peqr]{animation:none}.notepad__success[data-astro-cid-i7m5peqr]{transition:none;transform:none}}
+html{visibility:hidden;background:#fafaf7}
+</style></head> <body class="window-page" data-astro-cid-ptylqrxg> <canvas id="halftone-wallpaper" class="halftone-wallpaper" aria-hidden="true"></canvas> <script>
+  // — Halftone wallpaper renderer —
+  // Verbatim port of HalftoneWallpaper from halftone-app.jsx (spotlight mode, recommended defaults).
+  (function () {
+    var CFG = {
+      mode: 'spotlight',
+      pitch: 18,
+      maxR: 5.5,
+      minR: 0,
+      angleDeg: 0,
+      focalX: 0.5,
+      focalY: 0.5,
+      falloff: 0.55,
+      contrast: 1.0,
+      color: 'rgba(22, 21, 19, 0.92)'
+    };
+    var TAU = Math.PI * 2;
+
+    function smoothstep(a, b, x) {
+      var t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    }
+    function field(x, y, W, H) {
+      var dx = (x / W) - CFG.focalX;
+      var dy = (y / H) - CFG.focalY;
+      var t = 1 - smoothstep(0, CFG.falloff, Math.hypot(dx, dy));
+      return Math.pow(t, 1 / Math.max(0.1, CFG.contrast));
+    }
+    function draw(canvas) {
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      var W = canvas.clientWidth, H = canvas.clientHeight;
+      if (!W || !H) return;
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      var ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = CFG.color;
+
+      var ang = (CFG.angleDeg * Math.PI) / 180;
+      var cs = Math.cos(ang), sn = Math.sin(ang);
+      var cx = W / 2, cy = H / 2;
+      var span = Math.hypot(W, H);
+
+      for (var v = -span / 2; v < span / 2; v += CFG.pitch) {
+        for (var u = -span / 2; u < span / 2; u += CFG.pitch) {
+          var x = cx + u * cs - v * sn;
+          var y = cy + u * sn + v * cs;
+          if (x < -CFG.maxR || x > W + CFG.maxR || y < -CFG.maxR || y > H + CFG.maxR) continue;
+          var t = field(x, y, W, H);
+          var r = CFG.minR + (CFG.maxR - CFG.minR) * t;
+          if (r < 0.25) continue;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, TAU);
+          ctx.fill();
+        }
+      }
+    }
+
+    var canvas = document.getElementById('halftone-wallpaper');
+    if (!canvas) return;
+    var render = function () { draw(canvas); };
+    render();
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(render).observe(canvas);
+    } else {
+      window.addEventListener('resize', render);
+    }
+  })();
+</script> <div class="window window--narrow" data-astro-cid-ptylqrxg> <div class="window__chrome" data-astro-cid-ptylqrxg> <div class="window__title" aria-label="Path" data-astro-cid-ptylqrxg>  <span class="window__crumb-current" data-astro-cid-ptylqrxg>notepad.app</span> </div> <a class="window__close" href="/" aria-label="Close and return to desktop" title="Close (Esc)" data-astro-cid-ptylqrxg> <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" data-astro-cid-ptylqrxg> <line x1="2.5" y1="2.5" x2="9.5" y2="9.5" data-astro-cid-ptylqrxg></line> <line x1="9.5" y1="2.5" x2="2.5" y2="9.5" data-astro-cid-ptylqrxg></line> </svg> </a> </div> <main class="window__content" data-astro-cid-ptylqrxg>  <section style="margin-bottom: var(--s-6);" data-astro-cid-i7m5peqr> <div class="t-label" style="margin-bottom: var(--s-3);" data-astro-cid-i7m5peqr>Notepad</div> <h1 class="t-h1" data-astro-cid-i7m5peqr>Leave a note<span class="accent" data-astro-cid-i7m5peqr>.</span></h1> <p class="t-italic-serif" style="margin-top: var(--s-4); max-width: 36ch;" data-astro-cid-i7m5peqr>
+Hiring, hellos, what you're building — anything. Lands in my inbox.
+</p> </section> <div class="notepad" id="notepad" data-astro-cid-i7m5peqr> <form class="notepad__form" id="notepad-form" novalidate data-astro-cid-i7m5peqr> <label class="notepad__field" data-astro-cid-i7m5peqr> <span class="t-label" data-astro-cid-i7m5peqr>Name <span class="notepad__req" aria-hidden="true" data-astro-cid-i7m5peqr>*</span></span> <input type="text" name="name" required minlength="1" maxlength="80" autocomplete="name" data-astro-cid-i7m5peqr> </label> <label class="notepad__field" data-astro-cid-i7m5peqr> <span class="t-label" data-astro-cid-i7m5peqr>Email <span class="notepad__opt" data-astro-cid-i7m5peqr>(optional)</span></span> <input type="email" name="email" maxlength="120" autocomplete="email" data-astro-cid-i7m5peqr> </label> <label class="notepad__field" data-astro-cid-i7m5peqr> <span class="t-label" data-astro-cid-i7m5peqr>Message <span class="notepad__req" aria-hidden="true" data-astro-cid-i7m5peqr>*</span></span> <textarea name="message" required minlength="1" maxlength="2000" rows="8" data-astro-cid-i7m5peqr></textarea> </label>  <div class="notepad__pot" aria-hidden="true" data-astro-cid-i7m5peqr> <label data-astro-cid-i7m5peqr>Company<input type="text" name="company" tabindex="-1" autocomplete="off" data-astro-cid-i7m5peqr></label> </div> <div class="notepad__row" data-astro-cid-i7m5peqr> <p class="notepad__error" id="notepad-error" role="alert" aria-live="polite" data-astro-cid-i7m5peqr></p> <button type="submit" class="btn btn-solid" id="notepad-submit" data-astro-cid-i7m5peqr>Send note ↗</button> </div> </form> <div class="notepad__success" id="notepad-success" hidden aria-live="polite" data-astro-cid-i7m5peqr> <svg viewBox="0 0 200 80" class="notepad__handwritten" aria-hidden="true" data-astro-cid-i7m5peqr> <path d="M 8 50 q 6 -20 18 -18 t 14 18 q 0 -22 18 -22 t 16 26 q 4 -28 22 -28 t 14 24 q 6 -18 22 -16 t 18 20 q 8 -16 24 -14 t 22 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" data-astro-cid-i7m5peqr></path> </svg> <p class="notepad__got-it" data-astro-cid-i7m5peqr>got it, talk soon — porter</p> </div> </div> <script>
+    (function () {
+      var form = document.getElementById('notepad-form');
+      var submit = document.getElementById('notepad-submit');
+      var errorEl = document.getElementById('notepad-error');
+      var successEl = document.getElementById('notepad-success');
+      var notepad = document.getElementById('notepad');
+      if (!form || !submit || !errorEl || !successEl || !notepad) return;
+
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      function setError(msg) { errorEl.textContent = msg || ''; }
+
+      function showSuccess() {
+        // Hide form, show success block. With motion, the form folds first.
+        if (reduceMotion) {
+          form.hidden = true;
+          successEl.hidden = false;
+          return;
+        }
+        form.classList.add('notepad__form--folding');
+        setTimeout(function () {
+          form.hidden = true;
+          successEl.hidden = false;
+          successEl.classList.add('notepad__success--in');
+        }, 480);
+      }
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        setError('');
+        submit.disabled = true;
+        submit.textContent = 'Sending…';
+
+        var fd = new FormData(form);
+        var payload = {
+          name: String(fd.get('name') || ''),
+          email: String(fd.get('email') || ''),
+          message: String(fd.get('message') || ''),
+          company: String(fd.get('company') || ''),
+        };
+
+        try {
+          var res = await fetch('/api/notepad', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          var data = await res.json().catch(function () { return {}; });
+          if (res.ok && data.ok) {
+            showSuccess();
+            return;
+          }
+          if (res.status === 429) {
+            setError('Too many notes from this address today. Try again in a bit, or email me directly: pfairbourne@gmail.com');
+          } else if (data.error === 'bad_name' || data.error === 'bad_message' || data.error === 'bad_email') {
+            setError('Looks like one of the fields is empty or too long.');
+          } else {
+            setError("Couldn't deliver right now — email me at pfairbourne@gmail.com.");
+          }
+        } catch (_) {
+          setError("Couldn't deliver right now — email me at pfairbourne@gmail.com.");
+        } finally {
+          submit.disabled = false;
+          submit.textContent = 'Send note ↗';
+        }
+      });
+    })();
+  </script>  </main> </div> <script>
+      // Esc key closes the window (returns to desktop).
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          window.location.href = '/';
+        }
+      });
+    </script> </body> </html> 

@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Porter Fairbourne — Resume</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafaf7;
+    --ink: #161513;
+    --ink-2: #3d3a36;
+    --muted: #8a847d;
+    --rule: #e8e4dd;
+    --accent: #b45309;
+    --max: 760px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14.5px;
+    line-height: 1.6;
+    font-weight: 400;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .page {
+    max-width: var(--max);
+    margin: 0 auto;
+    padding: 80px 48px 96px;
+  }
+
+  /* ─── Header ─── */
+  header {
+    margin-bottom: 56px;
+  }
+
+  .name {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-size: 52px;
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin-bottom: 18px;
+  }
+
+  .name .dot {
+    color: var(--accent);
+  }
+
+  .contact-icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--muted);
+    text-decoration: none;
+    line-height: 0;
+    transition: color 160ms ease;
+  }
+
+  .contact-icon:hover {
+    color: var(--accent);
+  }
+
+  .contact-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .contact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0;
+  }
+
+  .contact a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .contact .sep {
+    color: var(--rule);
+  }
+
+  /* ─── Inline links (companies, portfolio cos) ─── */
+  a.link-subtle {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: color 160ms ease, border-color 160ms ease;
+  }
+
+  a.link-subtle:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* ─── Sections ─── */
+  section {
+    margin-bottom: 44px;
+  }
+
+  .section-label {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  /* ─── Job entry ─── */
+  .entry {
+    margin-bottom: 32px;
+  }
+
+  .entry:last-child {
+    margin-bottom: 0;
+  }
+
+  .entry-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 4px;
+  }
+
+  .company {
+    font-weight: 600;
+    font-size: 15.5px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+
+  .company .tag {
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 13px;
+    margin-left: 6px;
+  }
+
+  .dates {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    color: var(--muted);
+    white-space: nowrap;
+    letter-spacing: 0;
+  }
+
+  .role-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+
+  .role {
+    font-style: italic;
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-size: 16px;
+    color: var(--ink-2);
+    font-weight: 400;
+  }
+
+  .location {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+
+  ul {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  ul li {
+    position: relative;
+    padding-left: 18px;
+    margin-bottom: 5px;
+    color: var(--ink-2);
+    line-height: 1.55;
+  }
+
+  ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 11px;
+    width: 6px;
+    height: 1px;
+    background: var(--accent);
+  }
+
+  /* ─── Education ─── */
+  .edu-meta {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  /* ─── Skills section ─── */
+  .skills-grid {
+    display: grid;
+    gap: 14px;
+  }
+
+  .skill-row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 16px;
+    align-items: baseline;
+  }
+
+  .skill-label {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+
+  .skill-content {
+    color: var(--ink-2);
+    line-height: 1.55;
+  }
+
+  /* ─── Responsive ─── */
+  @media (max-width: 600px) {
+    .page { padding: 48px 24px 64px; }
+    .name { font-size: 40px; }
+    .entry-head, .role-line { flex-direction: column; gap: 2px; align-items: flex-start; }
+    .dates, .location { font-size: 11px; }
+    .skill-row { grid-template-columns: 1fr; gap: 4px; }
+  }
+
+  /* ─── Print ─── */
+  @page {
+    size: letter;
+    margin: 0;
+  }
+
+  @media print {
+    :root {
+      --bg: #ffffff;
+    }
+    body {
+      font-size: 9.5pt;
+      line-height: 1.5;
+    }
+    .page {
+      padding: 0.45in 0.55in;
+      max-width: 100%;
+    }
+
+    /* Header */
+    header { margin-bottom: 20px; }
+    .name { font-size: 28pt; margin-bottom: 8px; }
+    .contact { font-size: 8.75pt; gap: 4px 13px; }
+    .contact-icon svg { width: 12px; height: 12px; }
+
+    /* Sections */
+    section { margin-bottom: 14px; page-break-inside: avoid; }
+    .section-label { margin-bottom: 10px; font-size: 8.75pt; }
+
+    /* Entries */
+    .entry { page-break-inside: avoid; margin-bottom: 11px; }
+    .entry-head { margin-bottom: 1px; }
+    .role-line { margin-bottom: 5px; }
+    .company { font-size: 10pt; }
+    .company .tag { font-size: 8.75pt; }
+    .role { font-size: 10.5pt; }
+    .dates, .location { font-size: 8pt; }
+
+    /* Bullets — generous line-height so they breathe */
+    ul li { margin-bottom: 3px; line-height: 1.45; padding-left: 15px; }
+    ul li::before { top: 7.5pt; width: 7px; height: 1.2pt; }
+
+    /* Skills */
+    .skills-grid { gap: 7px; }
+    .skill-label { font-size: 8.25pt; }
+    .skill-row { grid-template-columns: 92px 1fr; gap: 13px; }
+
+    /* Links */
+    a { color: var(--ink-2); }
+    .contact a { border-bottom: none; }
+    a.link-subtle { color: var(--ink-2); border-bottom: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+
+    <header>
+      <h1 class="name">Porter Fairbourne<span class="dot">.</span></h1>
+      <div class="contact">
+        <a href="mailto:pfairbourne@gmail.com">pfairbourne@gmail.com</a>
+        <span class="sep">/</span>
+        <a href="tel:8015979812">(801) 597-9812</a>
+        <span class="sep">/</span>
+        <a class="contact-icon" href="https://www.linkedin.com/in/porter-fairbourne-6a472a28a/" target="_blank" rel="noopener" aria-label="LinkedIn profile">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.5 2h-17A1.5 1.5 0 0 0 2 3.5v17A1.5 1.5 0 0 0 3.5 22h17a1.5 1.5 0 0 0 1.5-1.5v-17A1.5 1.5 0 0 0 20.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 1 1 8.3 6.5a1.78 1.78 0 0 1-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0 0 13 14.19a.66.66 0 0 0 0 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 0 1 2.7-1.4c1.55 0 3.36.86 3.36 3.66z"/></svg>
+        </a>
+        <span class="sep">/</span>
+        <span>Draper, UT</span>
+      </div>
+    </header>
+
+    <section>
+      <div class="section-label">Experience</div>
+
+      <div class="entry">
+        <div class="entry-head">
+          <div class="company"><a class="link-subtle" href="https://get-ember.com" target="_blank" rel="noopener">Ember</a> <span class="tag">— Early-stage B2B startup</span></div>
+          <div class="dates">2025 — Present</div>
+        </div>
+        <div class="role-line">
+          <div class="role">Co-Founder</div>
+          <div class="location">Utah</div>
+        </div>
+        <ul>
+          <li>Co-founded and lead product, sales, and operations; ran 50+ customer meetings and won 2 pitch competitions.</li>
+          <li>Ran Traeger enterprise pilot: gathered user feedback, analyzed usage data, and designed product requirements.</li>
+          <li>Led customer discovery with retailers and manufacturers, translating user insights into product roadmap decisions.</li>
+          <li>Rebuilt Ember's front end with Claude Code based on customer needs; built and shipped 20+ AI agents to user specs.</li>
+        </ul>
+      </div>
+
+      <div class="entry">
+        <div class="entry-head">
+          <div class="company">AI Contractor <span class="tag">— Replacing manual workflows with shipped AI systems</span></div>
+          <div class="dates">2025 — Present</div>
+        </div>
+        <div class="role-line">
+          <div class="role">Independent Contractor</div>
+          <div class="location">Remote</div>
+        </div>
+        <ul>
+          <li>Shipped AI systems at <a class="link-subtle" href="https://yoodlize.com" target="_blank" rel="noopener">Yoodlize</a> replacing manual SOPs for copywriting, cross-platform listing, and reporting.</li>
+          <li>Built lead-finder, cold outreach, competitor research, and data-enrichment agents for clients with auto-scraping.</li>
+          <li>Architected multi-agent orchestration using Claude Code, MindStudio, n8n, computer-use agents, and browser automation tools.</li>
+        </ul>
+      </div>
+
+      <div class="entry">
+        <div class="entry-head">
+          <div class="company"><a class="link-subtle" href="https://www.ugrowthfund.com" target="_blank" rel="noopener">University Growth Fund</a> <span class="tag">— Largest student-run growth equity fund in the world</span></div>
+          <div class="dates">May 2024 — Aug 2025</div>
+        </div>
+        <div class="role-line">
+          <div class="role">Analyst</div>
+          <div class="location">Salt Lake City, UT</div>
+        </div>
+        <ul>
+          <li>Led diligence on 30+ deals (<a class="link-subtle" href="https://openai.com" target="_blank" rel="noopener">OpenAI</a>, <a class="link-subtle" href="https://databricks.com" target="_blank" rel="noopener">Databricks</a>, <a class="link-subtle" href="https://filevine.com" target="_blank" rel="noopener">Filevine</a>); built theses on customer interviews and market analysis.</li>
+          <li>Synthesized product metrics, user feedback, and market signals into memos briefing the investment committee.</li>
+          <li>Led a diligence team of 10 students through full due diligence on <a class="link-subtle" href="https://iralogix.com" target="_blank" rel="noopener">IRALogix</a>, resulting in a $500K fund investment.</li>
+        </ul>
+      </div>
+
+      <div class="entry">
+        <div class="entry-head">
+          <div class="company"><a class="link-subtle" href="https://www.convoiventures.com" target="_blank" rel="noopener">Convoi Ventures Fund</a> <span class="tag">— Utah-only pre-seed venture fund</span></div>
+          <div class="dates">Jan 2025 — May 2025</div>
+        </div>
+        <div class="role-line">
+          <div class="role">Diligence Intern</div>
+          <div class="location">Orem, UT</div>
+        </div>
+        <ul>
+          <li>Evaluated 40+ early-stage SaaS startups (invested in <a class="link-subtle" href="https://www.torus.co" target="_blank" rel="noopener">Torus</a>, <a class="link-subtle" href="https://schoolai.com" target="_blank" rel="noopener">SchoolAI</a>); surfaced insights on product-market fit.</li>
+          <li>Screened 10+ startups per week, evaluating product demos, landing-page UX, and go-to-market positioning.</li>
+        </ul>
+      </div>
+
+      <div class="entry">
+        <div class="entry-head">
+          <div class="company"><a class="link-subtle" href="https://www.vivint.com" target="_blank" rel="noopener">Vivint</a> <span class="tag">— Publicly traded smart-home security company</span></div>
+          <div class="dates">Apr 2020 — Jan 2024</div>
+        </div>
+        <div class="role-line">
+          <div class="role">Sales Manager</div>
+          <div class="location">Provo, UT</div>
+        </div>
+        <ul>
+          <li>Generated $3.5M in contracted revenue over 16 months; consistently ranked in the top 10% of reps nationwide.</li>
+          <li>Ran 25K+ customer discovery conversations, translating real user needs into tailored smart-home configurations.</li>
+          <li>Placed 1st of 150 teams in the annual company-wide sales competition, demonstrating consistent top-tier performance.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-label">Education</div>
+
+      <div class="entry">
+        <div class="entry-head">
+          <div class="company"><a class="link-subtle" href="https://www.uvu.edu" target="_blank" rel="noopener">Utah Valley University</a> <span class="tag">— Woodbury School of Business</span></div>
+          <div class="dates">Aug 2020 — Jul 2025</div>
+        </div>
+        <div class="role-line">
+          <div class="role">B.S. Finance, Minor in Economics</div>
+          <div class="location">Orem, UT</div>
+        </div>
+        <ul>
+          <li>GPA: 3.7 (Major). Represented UVU in the Venture Capital Investment Competition — placed 2nd.</li>
+          <li>Member of Wolverine Fund ($15M AUM), Finance Club, and Marketing Club.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-label">Skills &amp; Awards</div>
+      <div class="skills-grid">
+        <div class="skill-row">
+          <div class="skill-label">AI &amp; Auto</div>
+          <div class="skill-content">Claude Code, Cursor, MindStudio, Replit, Lovable, multi-agent orchestration, browser agents</div>
+        </div>
+        <div class="skill-row">
+          <div class="skill-label">Tools</div>
+          <div class="skill-content">Figma, Jira, Notion, HubSpot, SQL, Google Analytics, Mixpanel, Excel (Microsoft Associate Certified)</div>
+        </div>
+        <div class="skill-row">
+          <div class="skill-label">Awards</div>
+          <div class="skill-content">1st — Sorenson Capital Case Comp · 2nd — VCIC · 2× Ember pitch wins</div>
+        </div>
+        <div class="skill-row">
+          <div class="skill-label">Off-hours</div>
+          <div class="skill-content">Skier, silversmith, rockhounder, and avid glamper</div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</body>
+</html>

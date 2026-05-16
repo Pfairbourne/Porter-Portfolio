@@ -1,0 +1,45 @@
+---
+import WindowLayout from '../../layouts/WindowLayout.astro';
+import ProjectCard from '../../components/ProjectCard.astro';
+import SectionLabel from '../../components/SectionLabel.astro';
+import { getCollection } from 'astro:content';
+
+const agents = (await getCollection('agents', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.order - a.data.order || b.data.year - a.data.year);
+---
+<WindowLayout
+  title="MindStudio Agents — Porter Fairbourne"
+  description="Agents and automations Porter Fairbourne has built with MindStudio."
+  windowTitle="mindstudio-agents"
+>
+  <section class="hero">
+    <div class="t-label" style="margin-bottom: var(--s-4);">MindStudio Agents</div>
+    <h1 class="t-h1">Agents I've built<span class="accent">.</span></h1>
+    <p class="ethos">
+      Multi-agent systems, orchestrations, and tooling shipped with MindStudio — for Ember, for clients, and for fun.
+    </p>
+  </section>
+
+  <section>
+    <SectionLabel text="All Agents" />
+    <div role="list">
+      {agents.length === 0 ? (
+        <p class="t-small" style="color: var(--muted); padding: var(--s-5) 0;">
+          New agents coming soon. Drop a markdown file in <code>src/content/agents/</code> to add one.
+        </p>
+      ) : (
+        agents.map((a) => (
+          <ProjectCard
+            href={a.data.link ?? '#'}
+            year={a.data.year}
+            title={a.data.title}
+            description={a.data.summary}
+            tags={a.data.tags}
+            external={!!a.data.link}
+            arrow={a.data.link ? '↗' : '→'}
+          />
+        ))
+      )}
+    </div>
+  </section>
+</WindowLayout>

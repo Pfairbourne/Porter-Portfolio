@@ -1,0 +1,522 @@
+---
+import DesktopLayout from '../layouts/DesktopLayout.astro';
+import MenuBar from '../components/MenuBar.astro';
+import DesktopIcon from '../components/DesktopIcon.astro';
+import PortraitHalftone from '../components/PortraitHalftone.astro';
+import HalftoneWallpaper from '../components/HalftoneWallpaper.astro';
+import Dock from '../components/Dock.astro';
+import { getVisibility, getMenubarStatus } from '../lib/kv';
+
+// Server-render so the dock + desktop icon visibility and the menubar status
+// read fresh from KV at request time (lets admin toggles take effect without
+// a redeploy). Cold-start cost on Vercel free tier is acceptable.
+export const prerender = false;
+
+const [dockVisibility, desktopVisibility, menubarStatus] = await Promise.all([
+  getVisibility('dock'),
+  getVisibility('desktop'),
+  getMenubarStatus(),
+]);
+
+// Halftone portrait frames. Drop the two photos into public/images/about/.
+// If PORTRAIT_OPEN is null, the SVG silhouette renders instead.
+// If PORTRAIT_CLOSED is null, the open photo shows with no blink.
+const PORTRAIT_OPEN: string | null = '/images/about/Eyes_Open.png';
+const PORTRAIT_CLOSED: string | null = '/images/about/Eyes_Closed.png';
+const PORTRAIT_ALT = 'Porter Fairbourne — halftone portrait';
+
+type IconConfig = {
+  id: string;
+  href: string;
+  label: string;
+  ext?: string;
+  variant: 'file' | 'folder';
+  external?: boolean;
+  download?: boolean;
+};
+
+const leftIcons: IconConfig[] = [
+  { id: 'selected-work', href: '/projects', label: 'selected-work', variant: 'folder' },
+  { id: 'ember', href: '/projects/ember', label: 'ember.mdx', ext: 'mdx', variant: 'file' },
+  { id: 'yoodlize', href: '/projects/yoodlize-fb-automation', label: 'yoodlize.mdx', ext: 'mdx', variant: 'file' },
+  { id: 'fun-projects', href: '/fun', label: 'fun-projects', variant: 'folder' },
+  { id: 'mindstudio-agents', href: '/agents', label: 'mindstudio-agents', variant: 'folder' },
+  { id: 'writing', href: '/writing', label: 'writing', variant: 'folder' },
+];
+
+const rightIcons: IconConfig[] = [
+  { id: 'about', href: '/about', label: 'about.md', ext: 'md', variant: 'file' },
+  { id: 'now', href: '/now', label: 'now.txt', ext: 'txt', variant: 'file' },
+  { id: 'resume', href: '/resume', label: 'résumé.pdf', ext: 'pdf', variant: 'file' },
+  { id: 'style-guide', href: '/style-guide', label: 'style-guide.html', ext: 'html', variant: 'file' },
+];
+---
+<DesktopLayout
+  title="Porter Fairbourne — Product Manager"
+  description="The workspace of Porter Fairbourne — Product Manager, Builder, and Operator. Click around — every icon is a file."
+>
+  <HalftoneWallpaper />
+
+  <div class="os">
+    <MenuBar status={menubarStatus} />
+
+    <div class="surface">
+      <!-- Left column -->
+      <nav class="icon-column" aria-label="Work">
+        {leftIcons.filter((i) => desktopVisibility[i.id] !== false).map((icon) => (
+          <DesktopIcon
+            id={icon.id}
+            href={icon.href}
+            label={icon.label}
+            ext={icon.ext}
+            variant={icon.variant}
+          />
+        ))}
+      </nav>
+
+      <!-- Wallpaper / portrait -->
+      <section class="wallpaper" aria-label="Porter">
+        <div class="wallpaper__portrait">
+          {PORTRAIT_OPEN ? (
+            <div class="portrait-photo">
+              <div class="portrait-photo__fallback"><PortraitHalftone /></div>
+              <img
+                class="portrait-photo__img"
+                src={PORTRAIT_OPEN}
+                alt={PORTRAIT_ALT}
+                onerror="this.style.display='none'"
+              />
+              {PORTRAIT_CLOSED && (
+                <img
+                  class="portrait-photo__img portrait-photo__img--blink"
+                  src={PORTRAIT_CLOSED}
+                  alt=""
+                  aria-hidden="true"
+                  id="portrait-blink"
+                  onerror="this.style.display='none'"
+                />
+              )}
+            </div>
+          ) : (
+            <PortraitHalftone />
+          )}
+        </div>
+        <div>
+          <div class="wallpaper__name">Porter Fairbourne<span class="accent">.</span></div>
+          <p class="wallpaper__caption">
+            Product Manager, Builder, and Operator. Building <a class="link-subtle" href="/projects/ember">Ember</a> by day, small things at night.
+          </p>
+        </div>
+      </section>
+
+      <!-- Right column -->
+      <nav class="icon-column" aria-label="About">
+        {rightIcons.filter((i) => desktopVisibility[i.id] !== false).map((icon) => (
+          <DesktopIcon
+            id={icon.id}
+            href={icon.href}
+            label={icon.label}
+            ext={icon.ext}
+            variant={icon.variant}
+            external={icon.external}
+            download={icon.download}
+          />
+        ))}
+      </nav>
+    </div>
+  </div>
+
+  <Dock visibility={dockVisibility} />
+
+  <!-- Floating window — opens when a file/folder is clicked -->
+  <div class="desktop-window" id="desktop-window" role="dialog" aria-modal="true" aria-labelledby="desktop-window-title" hidden>
+    <div class="window">
+      <div class="window__chrome">
+        <div class="window__title" id="desktop-window-title" aria-label="Path">—</div>
+        <button class="window__close" type="button" data-close aria-label="Close (Esc)" title="Close (Esc)">
+          <svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <line x1="2.5" y1="2.5" x2="9.5" y2="9.5" />
+            <line x1="9.5" y1="2.5" x2="2.5" y2="9.5" />
+          </svg>
+        </button>
+      </div>
+      <div class="window__content" id="desktop-window-body"></div>
+    </div>
+  </div>
+
+  <script is:inline>
+    // — Desktop window controller —
+    // Intercepts clicks on file/folder icons (and internal links inside the open window).
+    // Fetches the target page's window content, injects it into the floating window,
+    // and updates the URL via History API. No actual navigation.
+    (function () {
+      var modal = document.getElementById('desktop-window');
+      var titleEl = document.getElementById('desktop-window-title');
+      var bodyEl = document.getElementById('desktop-window-body');
+      if (!modal || !titleEl || !bodyEl) return;
+
+      var WINDOWED_PREFIXES = [
+        '/about', '/now', '/resume', '/fun', '/writing', '/projects',
+        '/agents', '/style-guide', '/photos', '/notepad', '/books', '/music', '/calendar'
+      ];
+      var ORIGINAL_TITLE = document.title;
+      var cache = {};
+      var triggerEl = null;
+
+      function isWindowedPath(pathname) {
+        for (var i = 0; i < WINDOWED_PREFIXES.length; i++) {
+          var p = WINDOWED_PREFIXES[i];
+          if (pathname === p || pathname.indexOf(p + '/') === 0) return true;
+        }
+        return false;
+      }
+
+      function shouldIntercept(link) {
+        if (!link || !link.href) return false;
+        var url;
+        try { url = new URL(link.href); } catch (_) { return false; }
+        if (url.origin !== location.origin) return false;
+        if (link.target === '_blank') return false;
+        if (link.hasAttribute('download')) return false;
+        if (link.protocol === 'mailto:' || link.protocol === 'tel:') return false;
+        if (url.pathname.endsWith('.pdf') || url.pathname.endsWith('.html')) return false;
+        return isWindowedPath(url.pathname);
+      }
+
+      function setOpen(open) {
+        if (open) {
+          modal.removeAttribute('hidden');
+          document.body.classList.add('has-modal');
+        } else {
+          modal.setAttribute('hidden', '');
+          document.body.classList.remove('has-modal');
+        }
+      }
+
+      function openWindowAt(path, push, trigger) {
+        if (trigger) triggerEl = trigger;
+        setOpen(true);
+        bodyEl.innerHTML = '<div class="modal-loading">opening…</div>';
+        titleEl.textContent = '';
+        bodyEl.scrollTop = 0;
+
+        var pending = cache[path] || (cache[path] = fetch(path, { credentials: 'same-origin' }).then(function (r) {
+          if (!r.ok) throw new Error('not found');
+          return r.text();
+        }));
+
+        pending.then(function (html) {
+          var doc = new DOMParser().parseFromString(html, 'text/html');
+          var content = doc.querySelector('.window__content');
+          var title = doc.querySelector('.window__title');
+          var pageTitle = doc.querySelector('title');
+          if (content) bodyEl.innerHTML = content.innerHTML;
+          else bodyEl.innerHTML = '<div class="modal-error">No content found.</div>';
+          if (title) titleEl.innerHTML = title.innerHTML;
+          if (pageTitle) document.title = pageTitle.textContent;
+          bodyEl.scrollTop = 0;
+          var closeBtn = modal.querySelector('.window__close');
+          if (closeBtn) closeBtn.focus({ preventScroll: true });
+
+          // Auto-size same-origin iframes (e.g. the embedded résumé) to content height
+          var frames = bodyEl.querySelectorAll('iframe');
+          for (var i = 0; i < frames.length; i++) {
+            (function (frame) {
+              function fit() {
+                try {
+                  var h = frame.contentDocument && frame.contentDocument.body
+                    ? frame.contentDocument.body.scrollHeight + 24
+                    : 0;
+                  if (h > 0) frame.style.height = h + 'px';
+                } catch (_) {}
+              }
+              if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
+                fit();
+              } else {
+                frame.addEventListener('load', fit);
+              }
+            })(frames[i]);
+          }
+        }).catch(function () {
+          delete cache[path];
+          bodyEl.innerHTML = '<div class="modal-error">Could not open this file.</div>';
+        });
+
+        if (push) {
+          history.pushState({ modal: path }, '', path);
+        }
+      }
+
+      function closeWindow(push) {
+        setOpen(false);
+        bodyEl.innerHTML = '';
+        titleEl.textContent = '';
+        document.title = ORIGINAL_TITLE;
+        if (push) {
+          history.pushState({ modal: null }, '', '/');
+        }
+        if (triggerEl && document.body.contains(triggerEl)) {
+          triggerEl.focus({ preventScroll: true });
+        }
+        triggerEl = null;
+      }
+
+      // Initial state — if we were redirected here from a direct hit on a windowed URL
+      // (refresh / share link / bookmark), restore that URL and open the modal.
+      var initialPath = null;
+      try {
+        var stash = sessionStorage.getItem('porter-os/open');
+        if (stash && stash !== '/' && isWindowedPath(stash)) {
+          sessionStorage.removeItem('porter-os/open');
+          initialPath = stash;
+        }
+      } catch (_) {}
+
+      if (initialPath) {
+        history.replaceState({ modal: initialPath }, '', initialPath);
+        openWindowAt(initialPath, false, null);
+      } else if (!history.state) {
+        history.replaceState({ modal: null }, '', location.pathname);
+      }
+
+      // Delegated click handler
+      document.addEventListener('click', function (e) {
+        if (e.defaultPrevented) return;
+
+        // Close on backdrop or close button
+        if (modal.contains(e.target)) {
+          var closer = e.target.closest('[data-close]');
+          if (closer) {
+            e.preventDefault();
+            closeWindow(true);
+            return;
+          }
+          if (e.target === modal) {
+            e.preventDefault();
+            closeWindow(true);
+            return;
+          }
+        }
+
+        // Find an anchor we should intercept
+        var link = e.target.closest('a');
+        if (!link) return;
+        if (!shouldIntercept(link)) return;
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+        e.preventDefault();
+        openWindowAt(new URL(link.href).pathname, true, link);
+      });
+
+      // Esc closes
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !modal.hasAttribute('hidden')) {
+          closeWindow(true);
+        }
+      });
+
+      // Browser back/forward
+      window.addEventListener('popstate', function () {
+        var path = location.pathname;
+        if (path === '/' || !isWindowedPath(path)) {
+          closeWindow(false);
+        } else {
+          openWindowAt(path, false, null);
+        }
+      });
+    })();
+  </script>
+
+  <script is:inline>
+    // — Portrait blink controller —
+    // Randomized blinks every 2.2–5.4s, ~130ms duration, ~12% chance of double blink.
+    // Skips when tab is hidden or user prefers reduced motion.
+    (function () {
+      var blink = document.getElementById('portrait-blink');
+      if (!blink) return;
+      var mq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
+      if (mq && mq.matches) return;
+
+      function rand(min, max) { return min + Math.random() * (max - min); }
+
+      function schedule() {
+        var delay = rand(2200, 5400);
+        setTimeout(function () {
+          if (document.hidden) { schedule(); return; }
+          blink.style.opacity = '1';
+          setTimeout(function () {
+            blink.style.opacity = '0';
+            if (Math.random() < 0.12) {
+              setTimeout(function () {
+                blink.style.opacity = '1';
+                setTimeout(function () {
+                  blink.style.opacity = '0';
+                  schedule();
+                }, 110);
+              }, 170);
+            } else {
+              schedule();
+            }
+          }, 130);
+        }, delay);
+      }
+      schedule();
+    })();
+  </script>
+
+  <script is:inline>
+    (function () {
+      var KEY = 'porter-os/icons-v1';
+      var root = document.querySelector('.os');
+      var surface = document.querySelector('.surface');
+      if (!root || !surface) return;
+
+      var icons = Array.prototype.slice.call(document.querySelectorAll('.icon[data-icon-id]'));
+      if (!icons.length) return;
+
+      // Load saved positions
+      var saved = {};
+      try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) { saved = {}; }
+
+      function measureNatural() {
+        var surfRect = surface.getBoundingClientRect();
+        var out = {};
+        for (var i = 0; i < icons.length; i++) {
+          var r = icons[i].getBoundingClientRect();
+          out[icons[i].getAttribute('data-icon-id')] = {
+            x: Math.round(r.left - surfRect.left),
+            y: Math.round(r.top - surfRect.top)
+          };
+        }
+        return out;
+      }
+
+      function constrain(x, y, w, h) {
+        var sw = surface.clientWidth;
+        var sh = surface.clientHeight;
+        return {
+          x: Math.max(0, Math.min(sw - w, x)),
+          y: Math.max(0, Math.min(sh - h, y))
+        };
+      }
+
+      function init() {
+        var natural = measureNatural();
+        root.classList.add('os--free');
+        for (var i = 0; i < icons.length; i++) {
+          var icon = icons[i];
+          var id = icon.getAttribute('data-icon-id');
+          var pos = saved[id] || natural[id] || { x: 0, y: 0 };
+          var w = icon.offsetWidth || 104;
+          var h = icon.offsetHeight || 104;
+          var fixed = constrain(pos.x, pos.y, w, h);
+          icon.style.left = fixed.x + 'px';
+          icon.style.top = fixed.y + 'px';
+        }
+      }
+
+      // Wait for fonts so layout has settled before measuring
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(init);
+      } else {
+        // fallback if Font Loading API is missing
+        if (document.readyState === 'complete') init();
+        else window.addEventListener('load', init);
+      }
+
+      function persist() {
+        try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (_) {}
+      }
+
+      // Drag state (single active drag at a time)
+      var active = null;
+      var startX = 0, startY = 0, originX = 0, originY = 0;
+      var moved = false;
+
+      icons.forEach(function (icon) {
+        icon.addEventListener('pointerdown', function (e) {
+          if (e.pointerType === 'mouse' && e.button !== 0) return;
+          if (!root.classList.contains('os--free')) return;
+          active = icon;
+          startX = e.clientX;
+          startY = e.clientY;
+          originX = parseFloat(icon.style.left) || 0;
+          originY = parseFloat(icon.style.top) || 0;
+          moved = false;
+          try { icon.setPointerCapture(e.pointerId); } catch (_) {}
+          icon.classList.add('icon--dragging');
+        });
+
+        icon.addEventListener('pointermove', function (e) {
+          if (active !== icon) return;
+          var dx = e.clientX - startX;
+          var dy = e.clientY - startY;
+          if (!moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) moved = true;
+          if (moved) {
+            var next = constrain(originX + dx, originY + dy, icon.offsetWidth, icon.offsetHeight);
+            icon.style.left = next.x + 'px';
+            icon.style.top = next.y + 'px';
+          }
+        });
+
+        function endDrag(e) {
+          if (active !== icon) return;
+          icon.classList.remove('icon--dragging');
+          try { icon.releasePointerCapture(e.pointerId); } catch (_) {}
+          if (moved) {
+            saved[icon.getAttribute('data-icon-id')] = {
+              x: parseFloat(icon.style.left) || 0,
+              y: parseFloat(icon.style.top) || 0
+            };
+            persist();
+          }
+          active = null;
+        }
+        icon.addEventListener('pointerup', endDrag);
+        icon.addEventListener('pointercancel', endDrag);
+
+        // If a drag occurred, suppress the click so we don't navigate
+        icon.addEventListener('click', function (e) {
+          if (moved) {
+            e.preventDefault();
+            e.stopPropagation();
+            moved = false;
+          }
+        });
+
+        // Stop the browser's native drag image
+        icon.addEventListener('dragstart', function (e) { e.preventDefault(); });
+      });
+
+      // Reset desktop: clear saved positions and reload
+      document.addEventListener('click', function (e) {
+        var t = e.target;
+        while (t && t !== document.body) {
+          if (t.getAttribute && t.getAttribute('data-action') === 'reset-desktop') {
+            e.preventDefault();
+            try { localStorage.removeItem(KEY); } catch (_) {}
+            location.reload();
+            return;
+          }
+          t = t.parentNode;
+        }
+      });
+
+      // Re-constrain on resize so icons don't get stranded offscreen
+      var resizeTimer = null;
+      window.addEventListener('resize', function () {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () {
+          for (var i = 0; i < icons.length; i++) {
+            var icon = icons[i];
+            var x = parseFloat(icon.style.left) || 0;
+            var y = parseFloat(icon.style.top) || 0;
+            var next = constrain(x, y, icon.offsetWidth, icon.offsetHeight);
+            icon.style.left = next.x + 'px';
+            icon.style.top = next.y + 'px';
+          }
+        }, 150);
+      });
+    })();
+  </script>
+</DesktopLayout>

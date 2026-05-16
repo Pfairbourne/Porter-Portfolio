@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Porter Fairbourne — Style Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ──────────────────────────────────────────
+     TOKENS — copy these into your project root
+     ────────────────────────────────────────── */
+  :root {
+    /* color */
+    --bg:        #fafaf7;
+    --bg-elev:   #ffffff;
+    --ink:       #161513;
+    --ink-2:     #3d3a36;
+    --muted:     #8a847d;
+    --rule:      #e8e4dd;
+    --accent:    #b45309;
+    --accent-soft: #fef3c7;
+
+    /* type */
+    --font-serif: 'Instrument Serif', Georgia, serif;
+    --font-sans:  'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono:  'JetBrains Mono', ui-monospace, monospace;
+
+    /* spacing scale (4px base) */
+    --s-1: 4px;
+    --s-2: 8px;
+    --s-3: 12px;
+    --s-4: 16px;
+    --s-5: 24px;
+    --s-6: 32px;
+    --s-7: 48px;
+    --s-8: 64px;
+    --s-9: 96px;
+    --s-10: 128px;
+
+    /* layout */
+    --max-w: 1040px;
+    --max-w-read: 720px;
+    --radius-pill: 999px;
+    --radius-card: 4px;
+  }
+
+  /* ──────────────────────────────────────────
+     RESET & BASE
+     ────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  .container {
+    max-width: var(--max-w);
+    margin: 0 auto;
+    padding: var(--s-9) var(--s-7) var(--s-10);
+  }
+
+  /* ──────────────────────────────────────────
+     TYPOGRAPHY CLASSES
+     ────────────────────────────────────────── */
+  .t-display {
+    font-family: var(--font-serif);
+    font-size: 72px;
+    line-height: 0.95;
+    letter-spacing: -0.015em;
+    font-weight: 400;
+  }
+  .t-h1 {
+    font-family: var(--font-serif);
+    font-size: 52px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    font-weight: 400;
+  }
+  .t-h2 {
+    font-family: var(--font-serif);
+    font-size: 36px;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    font-weight: 400;
+  }
+  .t-h3 {
+    font-family: var(--font-sans);
+    font-size: 20px;
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .t-body  { font-size: 15px; line-height: 1.6; color: var(--ink-2); }
+  .t-small { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
+  .t-caption {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    letter-spacing: 0;
+  }
+  .t-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+  }
+  .t-italic-serif {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 18px;
+    color: var(--ink-2);
+  }
+  .accent { color: var(--accent); }
+
+  /* ──────────────────────────────────────────
+     SECTION LABEL — divider rule on the right
+     ────────────────────────────────────────── */
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: var(--s-5);
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  /* ──────────────────────────────────────────
+     LINKS
+     ────────────────────────────────────────── */
+  a.link-subtle {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: color 160ms ease, border-color 160ms ease;
+  }
+  a.link-subtle:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  a.link-arrow {
+    color: var(--ink);
+    text-decoration: none;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 160ms ease, gap 160ms ease;
+  }
+  a.link-arrow::after { content: '→'; transition: transform 160ms ease; }
+  a.link-arrow:hover { color: var(--accent); gap: 10px; }
+
+  /* ──────────────────────────────────────────
+     BUTTONS — pill, bordered, hover to accent
+     ────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--ink-2);
+    text-decoration: none;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+  }
+  .btn:hover { color: var(--accent); border-color: var(--accent); }
+  .btn-solid {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+  }
+  .btn-solid:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* ──────────────────────────────────────────
+     TAG / CHIP — for tech stack on project cards
+     ────────────────────────────────────────── */
+  .tag {
+    display: inline-block;
+    padding: 3px 9px;
+    background: transparent;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-pill);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+
+  /* ──────────────────────────────────────────
+     PROJECT CARD
+     ────────────────────────────────────────── */
+  .project-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    padding: var(--s-5) 0;
+    border-top: 1px solid var(--rule);
+    transition: padding-left 200ms ease;
+  }
+  .project-card:hover { padding-left: 12px; }
+  .project-card:hover .project-title { color: var(--accent); }
+  .project-card-row {
+    display: grid;
+    grid-template-columns: 110px 1fr auto;
+    gap: var(--s-5);
+    align-items: baseline;
+  }
+  .project-year {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .project-body { display: flex; flex-direction: column; gap: 6px; }
+  .project-title {
+    font-family: var(--font-serif);
+    font-size: 26px;
+    line-height: 1.1;
+    color: var(--ink);
+    transition: color 200ms ease;
+  }
+  .project-desc { font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+  .project-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .project-arrow { color: var(--muted); font-size: 18px; align-self: center; }
+
+  /* ──────────────────────────────────────────
+     IMAGE FRAME — subtle border for project shots
+     ────────────────────────────────────────── */
+  .img-frame {
+    background: var(--bg-elev);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    aspect-ratio: 16 / 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  /* ──────────────────────────────────────────
+     CODE BLOCK
+     ────────────────────────────────────────── */
+  pre {
+    background: #1a1815;
+    color: #e8e4dd;
+    padding: var(--s-5);
+    border-radius: var(--radius-card);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    overflow-x: auto;
+    margin-top: var(--s-4);
+  }
+  pre .c-prop { color: #f4b260; }
+  pre .c-val { color: #d4d0c8; }
+  pre .c-com { color: #6a665f; font-style: italic; }
+
+  /* ──────────────────────────────────────────
+     LAYOUT BLOCKS FOR THIS PAGE
+     ────────────────────────────────────────── */
+  .guide-header { margin-bottom: var(--s-9); }
+  .guide-header .ethos {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 22px;
+    color: var(--ink-2);
+    max-width: 560px;
+    line-height: 1.4;
+    margin-top: var(--s-4);
+  }
+  .guide-section { margin-bottom: var(--s-9); }
+  .guide-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s-7);
+    align-items: start;
+  }
+  .demo-block {
+    padding: var(--s-5);
+    background: var(--bg-elev);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+  }
+  .swatch {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    padding: var(--s-3) 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .swatch:last-child { border-bottom: none; }
+  .swatch-chip {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-card);
+    border: 1px solid var(--rule);
+    flex-shrink: 0;
+  }
+  .swatch-meta { display: flex; flex-direction: column; gap: 2px; }
+  .swatch-name { font-size: 13.5px; color: var(--ink); }
+  .swatch-hex { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+
+  .type-row { padding: var(--s-4) 0; border-bottom: 1px solid var(--rule); }
+  .type-row:last-child { border-bottom: none; }
+  .type-label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 6px;
+  }
+
+  .spacing-bar {
+    background: var(--accent-soft);
+    border-left: 2px solid var(--accent);
+    height: 16px;
+  }
+  .spacing-row {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    align-items: center;
+    gap: var(--s-4);
+    padding: 8px 0;
+  }
+  .spacing-row .t-caption { color: var(--ink-2); }
+
+  hr.divider {
+    border: 0;
+    border-top: 1px solid var(--rule);
+    margin: var(--s-7) 0;
+  }
+
+  @media (max-width: 720px) {
+    .container { padding: var(--s-7) var(--s-5); }
+    .t-display { font-size: 52px; }
+    .t-h1 { font-size: 40px; }
+    .guide-grid-2 { grid-template-columns: 1fr; gap: var(--s-5); }
+    .project-card-row { grid-template-columns: 1fr; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- ─── HEADER ─── -->
+    <header class="guide-header">
+      <div class="t-label" style="margin-bottom: var(--s-4);">Porter Fairbourne / Design System v1</div>
+      <h1 class="t-display">Style guide<span class="accent">.</span></h1>
+      <p class="ethos">Refined minimalism. A serif for personality, mono for system, sans for prose. One warm accent, used with restraint. Whitespace earns its keep.</p>
+    </header>
+
+    <!-- ─── 01 FOUNDATIONS ─── -->
+    <section class="guide-section">
+      <div class="section-label">01 — Foundations</div>
+
+      <div class="guide-grid-2">
+
+        <!-- Colors -->
+        <div>
+          <h3 class="t-h3" style="margin-bottom: var(--s-4);">Color</h3>
+          <p class="t-small" style="margin-bottom: var(--s-4); max-width: 360px;">
+            Mostly grayscale on warm off-white. The amber accent is rare on purpose — use it for one thing per view: a hover state, a single mark, a callout.
+          </p>
+
+          <div class="swatch">
+            <div class="swatch-chip" style="background: var(--bg);"></div>
+            <div class="swatch-meta">
+              <span class="swatch-name">Background</span>
+              <span class="swatch-hex">--bg · #fafaf7</span>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch-chip" style="background: var(--ink);"></div>
+            <div class="swatch-meta">
+              <span class="swatch-name">Ink (primary text)</span>
+              <span class="swatch-hex">--ink · #161513</span>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch-chip" style="background: var(--ink-2);"></div>
+            <div class="swatch-meta">
+              <span class="swatch-name">Ink 2 (body text)</span>
+              <span class="swatch-hex">--ink-2 · #3d3a36</span>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch-chip" style="background: var(--muted);"></div>
+            <div class="swatch-meta">
+              <span class="swatch-name">Muted (labels, captions)</span>
+              <span class="swatch-hex">--muted · #8a847d</span>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch-chip" style="background: var(--rule);"></div>
+            <div class="swatch-meta">
+              <span class="swatch-name">Rule (borders, dividers)</span>
+              <span class="swatch-hex">--rule · #e8e4dd</span>
+            </div>
+          </div>
+          <div class="swatch">
+            <div class="swatch-chip" style="background: var(--accent);"></div>
+            <div class="swatch-meta">
+              <span class="swatch-name">Accent (hover, marks)</span>
+              <span class="swatch-hex">--accent · #b45309</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Spacing -->
+        <div>
+          <h3 class="t-h3" style="margin-bottom: var(--s-4);">Spacing</h3>
+          <p class="t-small" style="margin-bottom: var(--s-4); max-width: 360px;">
+            4px base scale. Most components use s-3 through s-7. Section gaps use s-8 or s-9.
+          </p>
+          <div class="spacing-row"><span class="t-caption">--s-1</span><div class="spacing-bar" style="width: 4px;"></div></div>
+          <div class="spacing-row"><span class="t-caption">--s-2</span><div class="spacing-bar" style="width: 8px;"></div></div>
+          <div class="spacing-row"><span class="t-caption">--s-3</span><div class="spacing-bar" style="width: 12px;"></div></div>
+          <div class="spacing-row"><span class="t-caption">--s-4</span><div class="spacing-bar" style="width: 16px;"></div></div>
+          <div class="spacing-row"><span class="t-caption">--s-5</span><div class="spacing-bar" style="width: 24px;"></div></div>
+          <div class="spacing-row"><span class="t-caption">--s-6</span><div class="spacing-bar" style="width: 32px;"></div></div>
+          <div class="spacing-row"><span class="t-caption">--s-7</span><div class="spacing-bar" style="width: 48px;"></div></div>
+          <div class="spacing-row"><span class="t-caption">--s-8</span><div class="spacing-bar" style="width: 64px;"></div></div>
+          <div class="spacing-row"><span class="t-caption">--s-9</span><div class="spacing-bar" style="width: 96px;"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── 02 TYPOGRAPHY ─── -->
+    <section class="guide-section">
+      <div class="section-label">02 — Typography</div>
+
+      <p class="t-body" style="max-width: var(--max-w-read); margin-bottom: var(--s-6);">
+        Three families. <strong>Instrument Serif</strong> for display headings — adds warmth and editorial personality. <strong>Geist</strong> for prose and UI — modern, neutral, highly legible. <strong>JetBrains Mono</strong> for system text — labels, dates, metadata, tech tags.
+      </p>
+
+      <div class="type-row">
+        <div class="type-label">Display · Instrument Serif · 72/0.95</div>
+        <div class="t-display">Build things<span class="accent">.</span></div>
+      </div>
+      <div class="type-row">
+        <div class="type-label">H1 · Instrument Serif · 52/1.0</div>
+        <div class="t-h1">Selected work</div>
+      </div>
+      <div class="type-row">
+        <div class="type-label">H2 · Instrument Serif · 36/1.1</div>
+        <div class="t-h2">Ember — Product data infrastructure</div>
+      </div>
+      <div class="type-row">
+        <div class="type-label">H3 · Geist Semibold · 20/1.3</div>
+        <div class="t-h3">Section heading in sans</div>
+      </div>
+      <div class="type-row">
+        <div class="type-label">Italic serif · 18 · for taglines, role titles</div>
+        <div class="t-italic-serif">A PIM and data enrichment platform for industrial supply chains.</div>
+      </div>
+      <div class="type-row">
+        <div class="type-label">Body · Geist · 15/1.6</div>
+        <div class="t-body">Body copy for descriptions, case studies, and prose. Lean toward paragraphs of 2–4 sentences. Maximum reading width is 720px.</div>
+      </div>
+      <div class="type-row">
+        <div class="type-label">Small · Geist · 13.5/1.55</div>
+        <div class="t-small">Used for project descriptions, footnotes, and secondary copy.</div>
+      </div>
+      <div class="type-row">
+        <div class="type-label">Caption · JetBrains Mono · 11.5</div>
+        <div class="t-caption">2025 · Co-Founder · Salt Lake City, UT</div>
+      </div>
+      <div class="type-row">
+        <div class="type-label">Label · JetBrains Mono · 11 · UPPER · tracked</div>
+        <div class="t-label">SELECTED WORK</div>
+      </div>
+    </section>
+
+    <!-- ─── 03 COMPONENTS ─── -->
+    <section class="guide-section">
+      <div class="section-label">03 — Components</div>
+
+      <h3 class="t-h3" style="margin-bottom: var(--s-3);">Section label</h3>
+      <p class="t-small" style="margin-bottom: var(--s-4); max-width: 560px;">Page anchor. Use sparingly — one per major section. The trailing rule pulls the eye across.</p>
+      <div class="demo-block">
+        <div class="section-label">01 — Foundations</div>
+      </div>
+
+      <hr class="divider">
+
+      <h3 class="t-h3" style="margin-bottom: var(--s-3);">Buttons</h3>
+      <p class="t-small" style="margin-bottom: var(--s-4); max-width: 560px;">Pill buttons. Outlined for secondary actions, solid for primary CTAs. Mono label gives them a technical feel.</p>
+      <div class="demo-block" style="display: flex; gap: var(--s-3); flex-wrap: wrap;">
+        <a class="btn" href="#">Read case study</a>
+        <a class="btn btn-solid" href="#">Get in touch</a>
+        <a class="btn" href="#"><span>→</span> View on GitHub</a>
+      </div>
+
+      <hr class="divider">
+
+      <h3 class="t-h3" style="margin-bottom: var(--s-3);">Links</h3>
+      <p class="t-small" style="margin-bottom: var(--s-4); max-width: 560px;">Inline links blend in until hovered, then go amber with an underline. Arrow links signal "go somewhere" — the arrow drifts on hover.</p>
+      <div class="demo-block" style="display: flex; flex-direction: column; gap: var(--s-3);">
+        <span class="t-body">Inline: I lead product and sales at <a class="link-subtle" href="#">Ember</a>, a PIM platform for B2B supply chains.</span>
+        <span><a class="link-arrow" href="#">See all projects</a></span>
+      </div>
+
+      <hr class="divider">
+
+      <h3 class="t-h3" style="margin-bottom: var(--s-3);">Tags</h3>
+      <p class="t-small" style="margin-bottom: var(--s-4); max-width: 560px;">Tech stack chips for project cards. Mono, lowercase, hairline border.</p>
+      <div class="demo-block" style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <span class="tag">Next.js</span>
+        <span class="tag">TypeScript</span>
+        <span class="tag">Supabase</span>
+        <span class="tag">Claude API</span>
+        <span class="tag">Firecrawl</span>
+      </div>
+
+      <hr class="divider">
+
+      <h3 class="t-h3" style="margin-bottom: var(--s-3);">Project card</h3>
+      <p class="t-small" style="margin-bottom: var(--s-4); max-width: 560px;">List-style cards over grid-style cards. Year on the left, title in serif, mono tags below. Hover slides the card right and shifts the title to amber.</p>
+      <div class="demo-block" style="padding: 0;">
+        <a class="project-card" href="#" style="padding-left: var(--s-5); padding-right: var(--s-5); border-top: none;">
+          <div class="project-card-row">
+            <span class="project-year">2025 →</span>
+            <div class="project-body">
+              <div class="project-title">Ember</div>
+              <div class="project-desc">AI-native PIM platform automating SKU onboarding and chargeback prevention for industrial supply chains.</div>
+              <div class="project-tags">
+                <span class="tag">Next.js</span>
+                <span class="tag">Supabase</span>
+                <span class="tag">Claude API</span>
+                <span class="tag">Firecrawl</span>
+              </div>
+            </div>
+            <span class="project-arrow">↗</span>
+          </div>
+        </a>
+        <a class="project-card" href="#" style="padding-left: var(--s-5); padding-right: var(--s-5);">
+          <div class="project-card-row">
+            <span class="project-year">2025</span>
+            <div class="project-body">
+              <div class="project-title">Yoodlize FB automation</div>
+              <div class="project-desc">Multi-account Facebook Marketplace cross-listing and auto-reply agent stack running on a persistent Mac mini.</div>
+              <div class="project-tags">
+                <span class="tag">MindStudio</span>
+                <span class="tag">Skyvern</span>
+                <span class="tag">n8n</span>
+              </div>
+            </div>
+            <span class="project-arrow">↗</span>
+          </div>
+        </a>
+      </div>
+
+      <hr class="divider">
+
+      <h3 class="t-h3" style="margin-bottom: var(--s-3);">Image frame</h3>
+      <p class="t-small" style="margin-bottom: var(--s-4); max-width: 560px;">Hairline border, soft elevated background, slight border-radius. Use for screenshots and product shots inside case studies.</p>
+      <div class="demo-block">
+        <div class="img-frame" style="max-width: 480px;">project screenshot · 16:10</div>
+      </div>
+    </section>
+
+    <!-- ─── 04 LAYOUT ─── -->
+    <section class="guide-section">
+      <div class="section-label">04 — Layout</div>
+
+      <div class="guide-grid-2">
+        <div>
+          <h3 class="t-h3" style="margin-bottom: var(--s-3);">Widths</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li class="t-small" style="padding: 8px 0; border-bottom: 1px solid var(--rule);"><span class="t-caption" style="margin-right: 12px;">--max-w</span> 1040px · page container</li>
+            <li class="t-small" style="padding: 8px 0; border-bottom: 1px solid var(--rule);"><span class="t-caption" style="margin-right: 12px;">--max-w-read</span> 720px · prose blocks, case-study text</li>
+            <li class="t-small" style="padding: 8px 0;"><span class="t-caption" style="margin-right: 12px;">side padding</span> 48px desktop · 24px mobile</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="t-h3" style="margin-bottom: var(--s-3);">Rhythm</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li class="t-small" style="padding: 8px 0; border-bottom: 1px solid var(--rule);">Page top padding: <span class="t-caption">--s-9 (96)</span></li>
+            <li class="t-small" style="padding: 8px 0; border-bottom: 1px solid var(--rule);">Between sections: <span class="t-caption">--s-9 (96)</span></li>
+            <li class="t-small" style="padding: 8px 0; border-bottom: 1px solid var(--rule);">Inside a section: <span class="t-caption">--s-5 to --s-6</span></li>
+            <li class="t-small" style="padding: 8px 0;">Between paragraphs: <span class="t-caption">--s-4 (16)</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── 05 PRINCIPLES ─── -->
+    <section class="guide-section">
+      <div class="section-label">05 — Principles</div>
+
+      <div style="max-width: var(--max-w-read);">
+        <p class="t-italic-serif" style="margin-bottom: var(--s-5);">A few rules I'm holding myself to.</p>
+
+        <div style="display: flex; flex-direction: column; gap: var(--s-4);">
+          <div>
+            <div class="t-label" style="margin-bottom: 4px;">1 · One accent, used rarely</div>
+            <p class="t-body">Amber appears at most once per screen. The period after the name. A hover state. A single mark. If everything's accented, nothing is.</p>
+          </div>
+          <div>
+            <div class="t-label" style="margin-bottom: 4px;">2 · Serif for warmth, mono for system, sans for prose</div>
+            <p class="t-body">Don't mix roles. Don't put body copy in serif. Don't put dates in sans. Each font signals what kind of information it is.</p>
+          </div>
+          <div>
+            <div class="t-label" style="margin-bottom: 4px;">3 · Whitespace > dividers</div>
+            <p class="t-body">If something needs separation, try more space first. Lines and borders are a last resort. The eye finds rhythm in whitespace.</p>
+          </div>
+          <div>
+            <div class="t-label" style="margin-bottom: 4px;">4 · Asymmetric grids, right-aligned metadata</div>
+            <p class="t-body">Dates, years, locations float to the right. Titles and content anchor left. The eye sweeps and lands without working.</p>
+          </div>
+          <div>
+            <div class="t-label" style="margin-bottom: 4px;">5 · Hover is where personality lives</div>
+            <p class="t-body">Resting states are quiet. Hover states do the work — color shift, a small slide, the arrow drifting. Reward the cursor.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── 06 TOKEN REFERENCE ─── -->
+    <section class="guide-section">
+      <div class="section-label">06 — Tokens (paste into :root)</div>
+
+      <pre><span class="c-com">/* Drop into your global stylesheet */</span>
+:root {
+  <span class="c-com">/* color */</span>
+  <span class="c-prop">--bg</span>:        <span class="c-val">#fafaf7</span>;
+  <span class="c-prop">--bg-elev</span>:   <span class="c-val">#ffffff</span>;
+  <span class="c-prop">--ink</span>:       <span class="c-val">#161513</span>;
+  <span class="c-prop">--ink-2</span>:     <span class="c-val">#3d3a36</span>;
+  <span class="c-prop">--muted</span>:     <span class="c-val">#8a847d</span>;
+  <span class="c-prop">--rule</span>:      <span class="c-val">#e8e4dd</span>;
+  <span class="c-prop">--accent</span>:    <span class="c-val">#b45309</span>;
+  <span class="c-prop">--accent-soft</span>: <span class="c-val">#fef3c7</span>;
+
+  <span class="c-com">/* type */</span>
+  <span class="c-prop">--font-serif</span>: <span class="c-val">'Instrument Serif', Georgia, serif</span>;
+  <span class="c-prop">--font-sans</span>:  <span class="c-val">'Geist', -apple-system, sans-serif</span>;
+  <span class="c-prop">--font-mono</span>:  <span class="c-val">'JetBrains Mono', ui-monospace, monospace</span>;
+
+  <span class="c-com">/* spacing (4px base) */</span>
+  <span class="c-prop">--s-1</span>: <span class="c-val">4px</span>;   <span class="c-prop">--s-2</span>: <span class="c-val">8px</span>;
+  <span class="c-prop">--s-3</span>: <span class="c-val">12px</span>;  <span class="c-prop">--s-4</span>: <span class="c-val">16px</span>;
+  <span class="c-prop">--s-5</span>: <span class="c-val">24px</span>;  <span class="c-prop">--s-6</span>: <span class="c-val">32px</span>;
+  <span class="c-prop">--s-7</span>: <span class="c-val">48px</span>;  <span class="c-prop">--s-8</span>: <span class="c-val">64px</span>;
+  <span class="c-prop">--s-9</span>: <span class="c-val">96px</span>;  <span class="c-prop">--s-10</span>: <span class="c-val">128px</span>;
+
+  <span class="c-com">/* layout */</span>
+  <span class="c-prop">--max-w</span>:      <span class="c-val">1040px</span>;
+  <span class="c-prop">--max-w-read</span>: <span class="c-val">720px</span>;
+  <span class="c-prop">--radius-pill</span>: <span class="c-val">999px</span>;
+  <span class="c-prop">--radius-card</span>: <span class="c-val">4px</span>;
+}
+
+<span class="c-com">/* Google Fonts link to add to &lt;head&gt; */</span>
+<span class="c-prop">&lt;link</span> <span class="c-val">href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&amp;family=Instrument+Serif:ital@0;1&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"</span> <span class="c-prop">rel="stylesheet"</span><span class="c-prop">&gt;</span></pre>
+    </section>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,42 @@
+---
+import WindowLayout from './WindowLayout.astro';
+
+interface Props {
+  slug: string;
+  title: string;
+  date: Date;
+  excerpt: string;
+  tags?: string[];
+}
+
+const { slug, title, date, excerpt, tags = [] } = Astro.props;
+const formatted = date.toLocaleDateString('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+<WindowLayout
+  title={`${title} — Porter Fairbourne`}
+  description={excerpt}
+  windowTitle={`${slug}.md`}
+  parent={{ href: '/writing', label: 'writing' }}
+  narrow
+>
+  <header class="stack-4" style="margin-bottom: var(--s-8);">
+    <div class="t-label">Writing</div>
+    <h1 class="t-h1">{title}</h1>
+    <div class="meta-row">
+      <span>{formatted}</span>
+      {tags.map((t) => <span>{t}</span>)}
+    </div>
+  </header>
+
+  <article class="prose">
+    <slot />
+  </article>
+
+  <div style="margin-top: var(--s-9);">
+    <a class="link-arrow" href="/writing">All writing</a>
+  </div>
+</WindowLayout>

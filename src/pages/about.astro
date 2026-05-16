@@ -1,0 +1,55 @@
+---
+import WindowLayout from '../layouts/WindowLayout.astro';
+import SectionLabel from '../components/SectionLabel.astro';
+---
+<WindowLayout
+  title="About — Porter Fairbourne"
+  description="Product Manager, Builder, and Operator. Based in Draper, Utah."
+  windowTitle="about.md"
+>
+    <section class="hero">
+      <div class="t-label" style="margin-bottom: var(--s-4);">About</div>
+      <h1 class="t-h1">Porter Fairbourne<span class="accent">.</span></h1>
+      <p class="ethos">
+        Product Manager, Builder, and Operator. Based in Draper, Utah. I care about clear thinking, sharp products, and the parts of building that don't show up on roadmaps.
+      </p>
+    </section>
+
+    <div class="prose">
+      <h2>What I do</h2>
+      <p>
+        I lead product at <strong>Ember</strong>, an AI-native PIM platform automating SKU onboarding and chargeback prevention for industrial supply chains. The short version: distributors and manufacturers have product data scattered across spreadsheets, supplier portals, and customer-specific formats. We turn that mess into clean, customer-ready data — fast.
+      </p>
+      <p>
+        Before Ember, I [REPLACE WITH PRIOR ROLES]. I've spent most of my career at the intersection of product, sales, and operations — usually somewhere small enough that the lines between those don't matter.
+      </p>
+
+      <h2>How I work</h2>
+      <p>
+        I think the best PMs are obsessed with the customer's job and ruthless about scope. I write a lot — PRDs, decision memos, internal updates — because writing is how I figure out whether I actually understand something. I prefer talking to five users over reading a deck about them.
+      </p>
+      <p>
+        I'm allergic to process for its own sake. If a tool, ritual, or doc isn't earning its keep, I'll cut it. The same goes for code in my side projects.
+      </p>
+
+      <h2>What I care about</h2>
+      <ul>
+        <li>Products that respect the user's time.</li>
+        <li>Teams where everyone can write a clear paragraph.</li>
+        <li>Tools that compound — agents, automations, the stack you build once and use forever.</li>
+        <li>Operators who can hold both the spreadsheet and the strategy.</li>
+      </ul>
+
+      <h2>Outside of work</h2>
+      <p>
+        [REPLACE WITH PERSONAL DETAILS — hobbies, interests, family, the Mac mini under your desk running 12 agents, etc.]
+      </p>
+    </div>
+
+    <section style="margin-top: var(--s-9);">
+      <SectionLabel text="Get in touch" />
+      <p class="t-body" style="max-width: var(--max-w-read);">
+        The best way to reach me is <a class="link-subtle" href="mailto:pfairbourne@gmail.com">pfairbourne@gmail.com</a>. I read everything, I reply to most. Tell me what you're working on.
+      </p>
+    </section>
+</WindowLayout>

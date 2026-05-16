@@ -1,0 +1,44 @@
+---
+import WindowLayout from '../../layouts/WindowLayout.astro';
+import ProjectCard from '../../components/ProjectCard.astro';
+import SectionLabel from '../../components/SectionLabel.astro';
+import { getCollection } from 'astro:content';
+
+const projects = (await getCollection('projects', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.order - a.data.order || b.data.year - a.data.year);
+---
+<WindowLayout
+  title="Selected Work — Porter Fairbourne"
+  description="Case studies and selected work from Porter Fairbourne."
+  windowTitle="selected-work"
+>
+  <section class="hero">
+    <div class="t-label" style="margin-bottom: var(--s-4);">Selected Work</div>
+    <h1 class="t-h1">Things I've built<span class="accent">.</span></h1>
+    <p class="ethos">
+      Case studies showing the thinking, decisions, and outcomes — not just the screenshots.
+    </p>
+  </section>
+
+  <section>
+    <SectionLabel text="Case Studies" />
+    <div role="list">
+      {projects.length === 0 ? (
+        <p class="t-small" style="color: var(--muted); padding: var(--s-5) 0;">
+          Case studies coming soon.
+        </p>
+      ) : (
+        projects.map((p) => (
+          <ProjectCard
+            href={`/projects/${p.id}`}
+            year={p.data.year}
+            title={p.data.title}
+            description={p.data.summary}
+            tags={p.data.tags}
+            arrow="↗"
+          />
+        ))
+      )}
+    </div>
+  </section>
+</WindowLayout>

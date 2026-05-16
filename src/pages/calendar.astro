@@ -1,0 +1,87 @@
+---
+import WindowLayout from '../layouts/WindowLayout.astro';
+
+const CAL_USERNAME = import.meta.env.CAL_USERNAME ?? 'porterfairbourne';
+const CAL_EVENT_SLUG = import.meta.env.CAL_EVENT_SLUG ?? '20min';
+const calLink = `${CAL_USERNAME}/${CAL_EVENT_SLUG}`;
+---
+<WindowLayout
+  title="Book a chat — Porter Fairbourne"
+  description="Book a 20-minute chat with Porter — product, hiring, or your project."
+  windowTitle="calendar.app"
+>
+  <section style="margin-bottom: var(--s-6);">
+    <div class="t-label" style="margin-bottom: var(--s-3);">Calendar</div>
+    <h1 class="t-h1">Book a chat<span class="accent">.</span></h1>
+    <p class="t-italic-serif" style="margin-top: var(--s-4); max-width: var(--max-w-read);">
+      Book a 20-minute chat — I'm happy to talk product, hiring, or your project.
+    </p>
+  </section>
+
+  <div id="cal-embed" class="cal-embed" data-cal-link={calLink}></div>
+
+  <noscript>
+    <p class="t-body" style="margin-top: var(--s-5);">
+      Calendar embed needs JavaScript. Open <a class="link-subtle" href={`https://cal.com/${calLink}`} target="_blank" rel="noopener noreferrer">cal.com/{calLink}</a> directly.
+    </p>
+  </noscript>
+
+  <script is:inline define:vars={{ calLink }}>
+    // Cal.com inline embed loader — official snippet, lightly adapted so it
+    // re-initializes when the page is reopened in the modal (same script tag
+    // gets re-executed each time `.window__content` is replaced).
+    (function (C, A, L) {
+      let p = function (a, ar) { a.q.push(ar); };
+      let d = C.document;
+      C.Cal =
+        C.Cal ||
+        function () {
+          let cal = C.Cal;
+          let ar = arguments;
+          if (!cal.loaded) {
+            cal.ns = {};
+            cal.q = cal.q || [];
+            d.head.appendChild(d.createElement('script')).src = A;
+            cal.loaded = true;
+          }
+          if (ar[0] === L) {
+            const api = function () { p(api, arguments); };
+            const namespace = ar[1];
+            api.q = api.q || [];
+            if (typeof namespace === 'string') {
+              cal.ns[namespace] = cal.ns[namespace] || api;
+              p(cal.ns[namespace], ar);
+              p(cal, ['initNamespace', namespace]);
+            } else p(cal, ar);
+            return;
+          }
+          p(cal, ar);
+        };
+    })(window, 'https://app.cal.com/embed/embed.js', 'init');
+
+    Cal('init', '20min', { origin: 'https://cal.com' });
+    Cal.ns['20min']('inline', {
+      elementOrSelector: '#cal-embed',
+      config: { layout: 'month_view' },
+      calLink: calLink,
+    });
+    Cal.ns['20min']('ui', {
+      hideEventTypeDetails: false,
+      layout: 'month_view',
+      cssVarsPerTheme: {
+        light: { 'cal-brand': '#b45309' },
+      },
+    });
+  </script>
+</WindowLayout>
+
+<style>
+  .cal-embed {
+    width: 100%;
+    min-height: 720px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+    background: var(--bg-elev);
+    overflow: hidden;
+  }
+</style>

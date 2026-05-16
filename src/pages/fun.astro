@@ -1,0 +1,45 @@
+---
+import WindowLayout from '../layouts/WindowLayout.astro';
+import ProjectCard from '../components/ProjectCard.astro';
+import SectionLabel from '../components/SectionLabel.astro';
+import { getCollection } from 'astro:content';
+
+const funProjects = (await getCollection('fun', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.order - a.data.order || b.data.year - a.data.year);
+---
+<WindowLayout
+  title="Fun Projects — Porter Fairbourne"
+  description="Side projects, agents, automations, and small things built for fun."
+  windowTitle="fun-projects"
+>
+    <section class="hero">
+      <div class="t-label" style="margin-bottom: var(--s-4);">Fun Projects</div>
+      <h1 class="t-h1">Things I built for fun<span class="accent">.</span></h1>
+      <p class="ethos">
+        No PRDs, no roadmaps, no stakeholders. Sometimes the best way to learn a new tool is to point it at a problem I have and see what falls out.
+      </p>
+    </section>
+
+    <section>
+      <SectionLabel text="All Side Projects" />
+      <div role="list">
+        {funProjects.length === 0 ? (
+          <p class="t-small" style="color: var(--muted); padding: var(--s-5) 0;">
+            More side projects coming soon.
+          </p>
+        ) : (
+          funProjects.map((f) => (
+            <ProjectCard
+              href={f.data.link ?? '#'}
+              year={f.data.year}
+              title={f.data.title}
+              description={f.data.summary}
+              tags={f.data.tags}
+              external={!!f.data.link}
+              arrow={f.data.link ? '↗' : '→'}
+            />
+          ))
+        )}
+      </div>
+    </section>
+</WindowLayout>
