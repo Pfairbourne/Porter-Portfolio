@@ -2,9 +2,10 @@
 import DockIcon from './DockIcon.astro';
 import PhotosGlyph from './dock-glyphs/PhotosGlyph.astro';
 import NotepadGlyph from './dock-glyphs/NotepadGlyph.astro';
-import BooksGlyph from './dock-glyphs/BooksGlyph.astro';
+import ReaderGlyph from './dock-glyphs/ReaderGlyph.astro';
 import MusicGlyph from './dock-glyphs/MusicGlyph.astro';
 import CalendarGlyph from './dock-glyphs/CalendarGlyph.astro';
+import MailGlyph from './dock-glyphs/MailGlyph.astro';
 import SettingsGlyph from './dock-glyphs/SettingsGlyph.astro';
 import type { VisibilityMap } from '../lib/kv';
 
@@ -13,16 +14,26 @@ interface Props {
 }
 
 const { visibility = {} } = Astro.props;
-
 const showIf = (id: string) => visibility[id] !== false;
 
-type DockApp = { id: string; href: string; label: string; Glyph: typeof PhotosGlyph };
+// Mail uses the visitor's own email client. Adjust the address in the
+// `mailto:` href if your contact email changes.
+const MAIL_TO = 'mailto:pfairbourne@gmail.com';
+
+type DockApp = {
+  id: string;
+  href: string;
+  label: string;
+  Glyph: typeof PhotosGlyph;
+};
+
 const apps: DockApp[] = [
   { id: 'photos',   href: '/photos',   label: 'Photos',   Glyph: PhotosGlyph },
-  { id: 'notepad',  href: '/notepad',  label: 'Notepad',  Glyph: NotepadGlyph },
-  { id: 'books',    href: '/books',    label: 'Books',    Glyph: BooksGlyph },
+  { id: 'notepad',  href: '/notepad',  label: 'Writing',  Glyph: NotepadGlyph },
+  { id: 'reader',   href: '/books',    label: 'Reading',  Glyph: ReaderGlyph },
   { id: 'music',    href: '/music',    label: 'Music',    Glyph: MusicGlyph },
   { id: 'calendar', href: '/calendar', label: 'Calendar', Glyph: CalendarGlyph },
+  { id: 'mail',     href: MAIL_TO,     label: 'Mail',     Glyph: MailGlyph },
   { id: 'settings', href: '/settings', label: 'Settings', Glyph: SettingsGlyph },
 ];
 ---

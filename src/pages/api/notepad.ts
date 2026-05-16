@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { isSameOriginRequest } from '../../lib/auth';
 import { checkNotepadRateLimit } from '../../lib/ratelimit';
-import { sendNotepad } from '../../lib/email';
+import { addNote, type NoteRecord } from '../../lib/kv';
 
 export const prerender = false;
 
@@ -11,9 +11,18 @@ export const prerender = false;
  * Body:  { name, message, email?, company? }   (company is honeypot)
  * Reply: { ok: true } on success/honeypot-trip, { ok: false, error } otherwise.
  *
- * The honeypot is treated as success silently so bots don't get feedback.
+ * Notes are stored in Upstash KV under `notepad:notes` (hash). Browse + delete
+ * them via /settings/notes. The honeypot is treated as success silently so
+ * bots don't get feedback.
  */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function newId(): string {
+  // Sortable-by-time prefix + short random suffix.
+  const ts = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${ts}-${rand}`;
+}
 
 export const POST: APIRoute = async (context) => {
   if (!isSameOriginRequest(context.request)) {
@@ -77,20 +86,24 @@ export const POST: APIRoute = async (context) => {
     });
   }
 
-  const result = await sendNotepad({
+  const record: NoteRecord = {
+    id: newId(),
     name: cleanName,
     message: cleanMessage,
-    fromEmail: cleanEmail || undefined,
-  });
+    ...(cleanEmail ? { email: cleanEmail } : {}),
+    receivedAt: Date.now(),
+  };
 
-  if (!result.ok) {
+  try {
+    await addNote(record);
+  } catch (err) {
     return new Response(
-      JSON.stringify({ ok: false, error: 'send_failed' }),
+      JSON.stringify({ ok: false, error: 'storage_failed' }),
       { status: 502, headers: { 'content-type': 'application/json' } },
     );
   }
 
-  return new Response(JSON.stringify({ ok: true, delivered: result.delivered }), {
+  return new Response(JSON.stringify({ ok: true }), {
     status: 200,
     headers: { 'content-type': 'application/json' },
   });

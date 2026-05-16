@@ -2,8 +2,6 @@
 import DesktopLayout from '../layouts/DesktopLayout.astro';
 import MenuBar from '../components/MenuBar.astro';
 import DesktopIcon from '../components/DesktopIcon.astro';
-import PortraitHalftone from '../components/PortraitHalftone.astro';
-import HalftoneWallpaper from '../components/HalftoneWallpaper.astro';
 import Dock from '../components/Dock.astro';
 import { getVisibility, getMenubarStatus } from '../lib/kv';
 
@@ -18,12 +16,12 @@ const [dockVisibility, desktopVisibility, menubarStatus] = await Promise.all([
   getMenubarStatus(),
 ]);
 
-// Halftone portrait frames. Drop the two photos into public/images/about/.
-// If PORTRAIT_OPEN is null, the SVG silhouette renders instead.
-// If PORTRAIT_CLOSED is null, the open photo shows with no blink.
-const PORTRAIT_OPEN: string | null = '/images/about/Eyes_Open.png';
-const PORTRAIT_CLOSED: string | null = '/images/about/Eyes_Closed.png';
-const PORTRAIT_ALT = 'Porter Fairbourne — halftone portrait';
+// Halftone full-body figure (transparent PNG). The lower body intentionally
+// extends below the viewport; the name + tagline overlay the white sign in the
+// image. Two frames swap to produce a quick blink.
+const PORTRAIT_OPEN = '/images/about/Porter_eyesOpen.png';
+const PORTRAIT_CLOSED = '/images/about/Porter_eyesClosed.png';
+const PORTRAIT_ALT = 'Porter Fairbourne — halftone portrait holding a blank sign';
 
 type IconConfig = {
   id: string;
@@ -55,7 +53,30 @@ const rightIcons: IconConfig[] = [
   title="Porter Fairbourne — Product Manager"
   description="The workspace of Porter Fairbourne — Product Manager, Builder, and Operator. Click around — every icon is a file."
 >
-  <HalftoneWallpaper />
+  <!-- Full-body figure with the name + tagline overlaying the white sign.
+       Fixed-position layer behind icon clicks; lower body extends offscreen. -->
+  <figure class="hero-figure" aria-label="Porter Fairbourne">
+    <div class="hero-figure__stack">
+      <img
+        class="hero-figure__img"
+        src={PORTRAIT_OPEN}
+        alt={PORTRAIT_ALT}
+        onerror="this.style.display='none'"
+      />
+      <img
+        class="hero-figure__img hero-figure__img--blink"
+        src={PORTRAIT_CLOSED}
+        alt=""
+        aria-hidden="true"
+        id="portrait-blink"
+        onerror="this.style.display='none'"
+      />
+      <figcaption class="hero-figure__sign">
+        <div class="hero-figure__name">Porter Fairbourne<span class="accent">.</span></div>
+        <p class="hero-figure__tagline">Product Manager, Builder, and Operator.</p>
+      </figcaption>
+    </div>
+  </figure>
 
   <div class="os">
     <MenuBar status={menubarStatus} />
@@ -73,41 +94,6 @@ const rightIcons: IconConfig[] = [
           />
         ))}
       </nav>
-
-      <!-- Wallpaper / portrait -->
-      <section class="wallpaper" aria-label="Porter">
-        <div class="wallpaper__portrait">
-          {PORTRAIT_OPEN ? (
-            <div class="portrait-photo">
-              <div class="portrait-photo__fallback"><PortraitHalftone /></div>
-              <img
-                class="portrait-photo__img"
-                src={PORTRAIT_OPEN}
-                alt={PORTRAIT_ALT}
-                onerror="this.style.display='none'"
-              />
-              {PORTRAIT_CLOSED && (
-                <img
-                  class="portrait-photo__img portrait-photo__img--blink"
-                  src={PORTRAIT_CLOSED}
-                  alt=""
-                  aria-hidden="true"
-                  id="portrait-blink"
-                  onerror="this.style.display='none'"
-                />
-              )}
-            </div>
-          ) : (
-            <PortraitHalftone />
-          )}
-        </div>
-        <div>
-          <div class="wallpaper__name">Porter Fairbourne<span class="accent">.</span></div>
-          <p class="wallpaper__caption">
-            Product Manager, Builder, and Operator. Building <a class="link-subtle" href="/projects/ember">Ember</a> by day, small things at night.
-          </p>
-        </div>
-      </section>
 
       <!-- Right column -->
       <nav class="icon-column" aria-label="About">

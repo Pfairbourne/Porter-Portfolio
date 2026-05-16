@@ -1,6 +1,5 @@
 ---
 import '../styles/global.css';
-import HalftoneWallpaper from '../components/HalftoneWallpaper.astro';
 
 interface Props {
   /** Browser tab title. Defaults to `${windowTitle} — Porter Fairbourne`. */
@@ -69,7 +68,6 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://porterfairb
     />
   </head>
   <body class="window-page">
-    <HalftoneWallpaper />
     <div class:list={['window', narrow && 'window--narrow']}>
       <div class="window__chrome">
         <div class="window__title" aria-label="Path">

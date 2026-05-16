@@ -431,10 +431,9 @@ pre code {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(circle at 18% 22%, rgba(180, 83, 9, 0.04) 0px, transparent 220px),
-    radial-gradient(circle at 82% 78%, rgba(180, 83, 9, 0.025) 0px, transparent 260px),
-    var(--bg);
+  /* Transparent so the hero figure shows through. The body has var(--bg)
+     underneath; this layer is just the icon + menubar scaffold. */
+  background: transparent;
 }
 
 /* — Menu bar — */
@@ -509,17 +508,19 @@ pre code {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 11px;
+  padding: 6px 12px;
   border: 1px solid var(--rule);
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: 11px;
+  line-height: 1;
   letter-spacing: 0.04em;
   cursor: pointer;
   transition: color 160ms ease, border-color 160ms ease;
 }
+.menubar__cta { line-height: 1; }
 .menubar__action:hover {
   color: var(--accent);
   border-color: var(--accent);
@@ -711,16 +712,86 @@ pre code {
   transition: opacity 60ms ease-out;
 }
 
-/* Wallpaper canvas — fixed full-viewport behind everything */
-.halftone-wallpaper {
+/* ──────────────────────────────────────────
+   HERO FIGURE — full-body portrait holding a blank sign.
+   Fixed layer behind the desktop UI; lower body extends below the viewport;
+   the name + tagline overlay the white sign.
+   ────────────────────────────────────────── */
+.hero-figure {
   position: fixed;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
+  z-index: 1;
+  margin: 0;
   pointer-events: none;
+  overflow: hidden;
 }
-.os { position: relative; z-index: 1; }
+.hero-figure__stack {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  height: 110vh;
+  /* width auto via the natural image aspect ratio */
+}
+.hero-figure__img {
+  height: 100%;
+  width: auto;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.hero-figure__img--blink {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  transition: opacity 60ms ease-out;
+}
+.hero-figure__sign {
+  position: absolute;
+  top: 65%;
+  left: 48%;
+  transform: translate(-50%, -50%);
+  width: 70%;
+  max-width: 600px;
+  text-align: center;
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+.hero-figure__name {
+  font-family: var(--font-serif);
+  font-size: clamp(36px, 4.75vw, 60px);
+  color: var(--ink);
+  line-height: 1;
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+}
+.hero-figure__tagline {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: clamp(18px, 2vw, 25px);
+  line-height: 1.35;
+  color: var(--ink-2);
+  margin-top: 18px;
+}
+
+@media (max-width: 720px) {
+  .hero-figure__stack {
+    height: 90vh;
+    max-width: 88vw;
+  }
+  .hero-figure__stack .hero-figure__img {
+    height: 100%;
+    width: 100%;
+    object-fit: contain;
+    object-position: top center;
+  }
+  .hero-figure__sign {
+    top: 64%;
+    width: 72%;
+  }
+}
+.os { position: relative; z-index: 2; }
 
 /* ──────────────────────────────────────────
    WINDOW — file opened on the desktop
@@ -989,28 +1060,27 @@ body.has-modal { overflow: hidden; }
 }
 
 /* ──────────────────────────────────────────
-   DOCK — floating app tray at the bottom
-   "Apps" not "files": dark tiles, no labels, tooltips only.
+   DOCK — paper-toned app tray at the bottom
+   Ink edges, paper tiles, single ember accent per glyph.
    ────────────────────────────────────────── */
 .dock {
   position: fixed;
   bottom: var(--s-5);
-  left: 50%;
-  transform: translateX(-50%);
+  right: calc(var(--s-5) + 1.5vw);
   z-index: 80;
   display: flex;
   align-items: flex-end;
-  gap: 10px;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid var(--rule);
-  border-radius: 16px;
-  -webkit-backdrop-filter: saturate(140%) blur(10px);
-  backdrop-filter: saturate(140%) blur(10px);
+  gap: 12px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 18px;
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
   box-shadow:
     0 1px 0 0 rgba(255, 255, 255, 0.6) inset,
-    0 12px 30px -10px rgba(22, 21, 19, 0.12),
-    0 4px 10px -2px rgba(22, 21, 19, 0.06);
+    0 10px 30px -10px rgba(22, 21, 19, 0.18),
+    0 2px 6px -2px rgba(22, 21, 19, 0.06);
 }
 
 .dock__icon {
@@ -1021,81 +1091,93 @@ body.has-modal { overflow: hidden; }
   gap: 4px;
   text-decoration: none;
   color: var(--ink);
-  border-radius: 14px;
-  padding: 2px;
+  border-radius: 3px;
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
   outline: none;
 }
 .dock__icon:hover,
 .dock__icon:focus-visible {
-  transform: translateY(-6px) scale(1.3);
+  transform: translateY(-4px);
 }
 .dock__icon:focus-visible .dock__tile {
   box-shadow:
     0 0 0 2px var(--bg),
-    0 0 0 4px var(--accent);
+    0 0 0 3px var(--accent);
 }
 
 .dock__tile {
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
-  background: var(--ink);
+  width: 48px;
+  height: 48px;
+  border-radius: 3px;
+  background: var(--bg-elev);
+  border: 1px solid var(--ink);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.08) inset,
-    0 6px 12px -4px rgba(22, 21, 19, 0.35);
-  transition: box-shadow 180ms ease;
+  transition: background 160ms ease, border-color 160ms ease;
 }
 .dock__icon:hover .dock__tile,
 .dock__icon:focus-visible .dock__tile {
-  box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.12) inset,
-    0 12px 22px -6px rgba(22, 21, 19, 0.5);
+  background: var(--bg);
+  border-color: var(--accent);
 }
 
 .dock-glyph {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   display: block;
 }
 .dock-glyph .dg-stroke {
-  fill: var(--bg-elev);
-  fill-opacity: 0;
-  stroke: var(--bg-elev);
+  fill: none;
+  stroke: var(--ink);
   stroke-width: 1.4;
   stroke-linejoin: round;
   stroke-linecap: round;
+  transition: stroke 160ms ease;
 }
-.dock-glyph .dg-fill { fill: var(--bg-elev); }
-.dock-glyph .dg-fill-accent { fill: var(--accent); }
+.dock-glyph .dg-fill {
+  fill: var(--ink);
+  transition: fill 160ms ease;
+}
+.dock-glyph .dg-fill-accent {
+  fill: var(--accent);
+  transition: fill 160ms ease;
+}
 .dock-glyph .dg-line {
-  stroke: var(--bg-elev);
-  stroke-width: 1.4;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.2;
   stroke-linecap: round;
   stroke-opacity: 0.85;
+  transition: stroke 160ms ease;
 }
+.dock__icon:hover .dock-glyph .dg-stroke,
+.dock__icon:focus-visible .dock-glyph .dg-stroke,
+.dock__icon:hover .dock-glyph .dg-line,
+.dock__icon:focus-visible .dock-glyph .dg-line {
+  stroke: var(--accent);
+}
+.dock__icon:hover .dock-glyph .dg-fill,
+.dock__icon:focus-visible .dock-glyph .dg-fill,
 .dock__icon:hover .dock-glyph .dg-fill-accent,
 .dock__icon:focus-visible .dock-glyph .dg-fill-accent {
-  fill: var(--accent-soft);
+  fill: var(--accent);
 }
 
-/* Tooltip — hover/focus only on desktop */
+/* Tooltip — inverted ink-on-paper pop on hover/focus */
 .dock__tooltip {
   position: absolute;
-  bottom: calc(100% + 12px);
+  bottom: calc(100% + 10px);
   left: 50%;
   transform: translateX(-50%) translateY(4px);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   letter-spacing: 0.04em;
-  color: var(--ink);
-  background: var(--bg-elev);
-  border: 1px solid var(--rule);
-  padding: 5px 10px;
-  border-radius: var(--radius-pill);
+  color: var(--bg-elev);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  padding: 3px 8px;
+  border-radius: 2px;
   white-space: nowrap;
   opacity: 0;
   pointer-events: none;
@@ -1107,7 +1189,7 @@ body.has-modal { overflow: hidden; }
   transform: translateX(-50%) translateY(0);
 }
 
-/* Mobile caption — shown only on touch viewports as a tiny label under tile */
+/* Mobile caption — shown on touch viewports under each tile */
 .dock__caption {
   display: none;
   font-family: var(--font-mono);
@@ -1130,16 +1212,18 @@ body.has-modal { overflow: hidden; }
     left: 0;
     right: 0;
     transform: none;
-    border-radius: 16px 16px 0 0;
+    border-radius: 18px 18px 0 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
     padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
     justify-content: space-around;
-    gap: 6px;
+    gap: 10px;
   }
-  .dock__icon { padding: 4px 2px; }
   .dock__icon:hover,
   .dock__icon:focus-visible { transform: none; }
   .dock__tooltip { display: none; }
   .dock__caption { display: block; }
-  .dock__tile { width: 44px; height: 44px; }
-  .dock-glyph { width: 26px; height: 26px; }
+  .dock__tile { width: 40px; height: 40px; }
+  .dock-glyph { width: 22px; height: 22px; }
 }

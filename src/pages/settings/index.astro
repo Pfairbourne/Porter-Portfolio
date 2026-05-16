@@ -1,7 +1,10 @@
 ---
 import WindowLayout from '../../layouts/WindowLayout.astro';
+import { getNotes } from '../../lib/kv';
 
 export const prerender = false;
+
+const noteCount = (await getNotes()).length;
 ---
 <WindowLayout
   title="Settings — Porter Fairbourne"
@@ -26,6 +29,19 @@ export const prerender = false;
   <section>
     <div class="section-label">Live now</div>
     <div class="settings-grid">
+      <a class="settings-card" href="/settings/notes">
+        <div class="settings-card__head">
+          <span class="settings-card__label">notes.txt</span>
+          {noteCount > 0 ? (
+            <span class="settings-card__instant">{noteCount} {noteCount === 1 ? 'note' : 'notes'}</span>
+          ) : (
+            <span class="settings-card__instant">inbox</span>
+          )}
+        </div>
+        <h2 class="settings-card__title">Notepad inbox</h2>
+        <p class="settings-card__desc">Messages visitors left via the Notepad. Browse and delete.</p>
+      </a>
+
       <a class="settings-card" href="/settings/visibility">
         <div class="settings-card__head">
           <span class="settings-card__label">visibility.toml</span>
