@@ -41,9 +41,15 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://porterfairb
       The visibility:hidden + <noscript> override keeps a flash from rendering for
       JS-enabled visitors while still serving the page content to anyone without JS.
     */}
-    <style>html { visibility: hidden; background: #fafaf7; }</style>
+    {/* /settings/* is a full-page app, not a windowed file — skip the bounce. */}
+    <style>html:not([data-standalone]) { visibility: hidden; background: #fafaf7; }</style>
     <script is:inline>
       (function () {
+        // Settings pages are real navigable pages, not modal-bound files.
+        if (location.pathname.startsWith('/settings')) {
+          document.documentElement.setAttribute('data-standalone', '');
+          return;
+        }
         try { sessionStorage.setItem('porter-os/open', location.pathname); } catch (_) {}
         location.replace('/');
       })();
