@@ -74,15 +74,37 @@ export async function verifyPassword(candidate: string): Promise<boolean> {
   }
 }
 
-/** Convenience: same-origin Origin / Referer check for state-changing POSTs. */
+/** Convenience: same-origin Origin / Referer check for state-changing POSTs.
+ *
+ * On hosted platforms behind aliases (e.g. Vercel), `request.url` reports the
+ * internal deployment URL, not the canonical public domain — so we compare
+ * against the `host` header the visitor is connecting to, not the URL Astro
+ * built the request from.
+ */
 export function isSameOriginRequest(request: Request): boolean {
-  const url = new URL(request.url);
+  const host = request.headers.get('host');
+  if (!host) return true; // unknown host — fall through; auth is the real gate
+  const proto = request.headers.get('x-forwarded-proto') ?? 'https';
+  const expectedOrigin = `${proto}://${host}`;
+
   const origin = request.headers.get('origin');
+  if (origin) {
+    try {
+      return new URL(origin).origin === expectedOrigin;
+    } catch {
+      return false;
+    }
+  }
   const referer = request.headers.get('referer');
-  if (origin) return new URL(origin).origin === url.origin;
-  if (referer) return new URL(referer).origin === url.origin;
+  if (referer) {
+    try {
+      return new URL(referer).origin === expectedOrigin;
+    } catch {
+      return false;
+    }
+  }
   // Some user agents omit both for top-level navigations; allow GET-equivalent
-  // safe cases by returning true. State-changing routes should also require
-  // a valid session, which is the primary defense.
+  // safe cases. State-changing admin routes are also guarded by middleware
+  // (session cookie required), which is the primary defense.
   return true;
 }
