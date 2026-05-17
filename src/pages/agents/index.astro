@@ -1,11 +1,17 @@
 ---
 import WindowLayout from '../../layouts/WindowLayout.astro';
-import ProjectCard from '../../components/ProjectCard.astro';
 import SectionLabel from '../../components/SectionLabel.astro';
+import Tag from '../../components/Tag.astro';
 import { getCollection } from 'astro:content';
 
+// Newest first (by year); within a year, lower `order` wins. Year is used for
+// sorting only — never shown in the listing UI.
 const agents = (await getCollection('agents', ({ data }) => !data.draft))
-  .sort((a, b) => b.data.order - a.data.order || b.data.year - a.data.year);
+  .sort((a, b) => {
+    const yearDiff = b.data.year - a.data.year;
+    if (yearDiff !== 0) return yearDiff;
+    return (a.data.order ?? 0) - (b.data.order ?? 0);
+  });
 ---
 <WindowLayout
   title="MindStudio Agents — Porter Fairbourne"
@@ -29,15 +35,20 @@ const agents = (await getCollection('agents', ({ data }) => !data.draft))
         </p>
       ) : (
         agents.map((a) => (
-          <ProjectCard
-            href={a.data.link ?? '#'}
-            year={a.data.year}
-            title={a.data.title}
-            description={a.data.summary}
-            tags={a.data.tags}
-            external={!!a.data.link}
-            arrow={a.data.link ? '↗' : '→'}
-          />
+          <a class="project-card" href={`/agents/${a.id}`}>
+            <div class="project-card-row" style="grid-template-columns: 1fr auto;">
+              <div class="project-body">
+                <div class="project-title">{a.data.title}</div>
+                <div class="project-desc">{a.data.summary}</div>
+                {a.data.tags.length > 0 && (
+                  <div class="project-tags">
+                    {a.data.tags.slice(0, 3).map((t) => <Tag label={t} />)}
+                  </div>
+                )}
+              </div>
+              <span class="project-arrow">↗</span>
+            </div>
+          </a>
         ))
       )}
     </div>
