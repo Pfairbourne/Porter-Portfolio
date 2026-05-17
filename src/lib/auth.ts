@@ -76,35 +76,30 @@ export async function verifyPassword(candidate: string): Promise<boolean> {
 
 /** Convenience: same-origin Origin / Referer check for state-changing POSTs.
  *
- * On hosted platforms behind aliases (e.g. Vercel), `request.url` reports the
- * internal deployment URL, not the canonical public domain — so we compare
- * against the `host` header the visitor is connecting to, not the URL Astro
- * built the request from.
+ * Compares the host portion of Origin/Referer against the `host` header — the
+ * thing the visitor's browser is actually connecting to. This sidesteps the
+ * protocol mismatch on local HTTP dev (http vs https) and Vercel's internal
+ * deployment URLs (which don't match the canonical public alias).
  */
 export function isSameOriginRequest(request: Request): boolean {
   const host = request.headers.get('host');
   if (!host) return true; // unknown host — fall through; auth is the real gate
-  const proto = request.headers.get('x-forwarded-proto') ?? 'https';
-  const expectedOrigin = `${proto}://${host}`;
 
-  const origin = request.headers.get('origin');
-  if (origin) {
+  function matches(headerValue: string | null): boolean | null {
+    if (!headerValue) return null;
     try {
-      return new URL(origin).origin === expectedOrigin;
+      return new URL(headerValue).host === host;
     } catch {
       return false;
     }
   }
-  const referer = request.headers.get('referer');
-  if (referer) {
-    try {
-      return new URL(referer).origin === expectedOrigin;
-    } catch {
-      return false;
-    }
-  }
-  // Some user agents omit both for top-level navigations; allow GET-equivalent
-  // safe cases. State-changing admin routes are also guarded by middleware
-  // (session cookie required), which is the primary defense.
+
+  const originMatch = matches(request.headers.get('origin'));
+  if (originMatch !== null) return originMatch;
+  const refererMatch = matches(request.headers.get('referer'));
+  if (refererMatch !== null) return refererMatch;
+  // Some user agents omit both for top-level navigations; allow safe cases.
+  // State-changing admin routes are also guarded by middleware (session
+  // cookie required), which is the primary defense.
   return true;
 }
