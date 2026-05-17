@@ -25,3 +25,6 @@ pnpm-debug.log*
 # editor
 .vscode/
 .idea/
+
+# bulk import staging — screenshots are copied into public/ which IS committed
+import/shots/

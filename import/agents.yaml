@@ -1,0 +1,697 @@
+# Bulk import manifest for MindStudio agents.
+# Each entry becomes src/content/agents/<slug>.md (slug derived from title).
+# If `shot` is set and the file exists under import/shots/, it is copied to
+# public/images/agents/<slug>.<ext> and the entry's `hero` is set automatically.
+#
+# Fields:
+#   title    string   required
+#   year     number   required
+#   summary  string   required
+#   tags     string[] optional, default []
+#   link     url      optional
+#   order    number   optional, default 0
+#   draft    boolean  optional, default false
+#   body     string   optional markdown body (omit or "" for empty)
+#   shot     string   optional filename under import/shots/ (e.g. "meeting-prep.png")
+
+- title: SKU Enrichment Agent
+  year: 2026
+  summary: Enriches a single product SKU into a structured JSON record with merged attributes, weighted confidence scores, and a full evidence trail — designed to run in parallel across an entire catalog.
+  tags:
+    - MindStudio
+    - Claude
+    - Gemini
+    - GPT-4o
+    - Google Search
+    - Web Scraping
+    - Multi-model
+    - API / Webhook
+  link: https://app.mindstudio.ai/agents/sku-enrichment-agent-0bacfd03
+  order: 10
+  draft: false
+  shot: sku-enrichment-agent.png
+  shots:
+    - file: sku-enrichment-entry-flow.png
+      caption: Entry Flow — flattens incoming product data and hands off to Main
+    - file: sku-enrichment-main-flow.png
+      caption: Main Flow — discovery, scraping, extraction, weighted merge
+  body: |
+    ## End of run
+
+    One API call in, one `Enriched_SKU` JSON record out:
+
+    ```json
+    {
+      "coverageScore": 0.44,
+      "mergedAttributes": { ... },
+      "discoveredAttributes": { ... },
+      "missingRequiredAttributes": [ ... ]
+    }
+    ```
+
+    Every value carries the source snippet that justified it, weighted by
+    source type (PDF spec sheet 0.8 > vendor PDP 0.6 > retailer page 0.4).
+    Fan out across thousands of SKUs in parallel and a customer's
+    half-blank product catalog becomes a structured, audit-ready dataset
+    overnight.
+
+    Representative run: nine requested attributes (Universal Code,
+    Category, Length, Width, ASIN, Primary Color, Fabric, Stock Unit,
+    Handle) resolved end-to-end in 89 seconds for $0.03.
+
+    ## Challenges it solves
+
+    **LLM hallucination on URLs.** Discovery is deterministic — Google
+    Search finds real vendor PDPs, retailer pages, and spec PDFs. LLMs
+    only classify which of the returned results is which type. They
+    never guess a URL.
+
+    **Bot walls.** A JavaScript pre-processor detects Cloudflare,
+    Incapsula, and other WAF blocks before they corrupt the extraction
+    pipeline, and the agent silently routes around them to the next
+    candidate source.
+
+    **Conflicting sources.** Vendor PDPs, retailer listings, and PDF
+    spec sheets disagree constantly on basic facts. A weighted merge
+    resolves conflicts by source authority and per-attribute
+    confidence — the highest-weighted confident value wins, and the
+    losing values are kept in the evidence log.
+
+    **Cost at catalog scale.** Heavy lifting (HTML cleaning, content
+    assembly, output formatting) runs in JavaScript. LLMs only do the
+    work LLMs are good at — classification and structured extraction.
+    Net cost: $0.03 per SKU.
+
+    **Catalog-scale orchestration.** No internal loops. Each invocation
+    processes exactly one SKU, so the agent is trivially parallel — fan
+    it out from Make.com, Zapier, the MindStudio NPM package, or a raw
+    webhook POST.
+
+    ## Under the hood
+
+    Two workflows — `Entry Flow.flow` flattens incoming product data and
+    hands off to `Main.flow`, which runs the four phases: discovery
+    (primary + three fallback Google queries), scraping (up to three
+    sources), per-source attribute extraction, and weighted merge into
+    the final assembly.
+
+    Four models, picked per job: GPT-4o Mini classifies search results,
+    Gemini 2.5 Pro reads PDFs, Claude 4.5 Haiku handles cleaning, Claude
+    4.6 Sonnet does the structured extraction.
+
+- title: Email Campaign Sender and Marketer
+  year: 2025
+  summary: Ember's high-volume outreach engine — pulls leads from Google Sheets, researches each company live, writes personalized cold email in the right voice, sends from the right co-founder's inbox, and logs status back to the sheet. Paced to look human, deduped to never double-send.
+  tags:
+    - MindStudio
+    - Claude
+    - Google Sheets
+    - Google Search
+    - HTTP / Webhook
+    - Cold Email
+    - Scheduled Automation
+  link: https://app.mindstudio.ai/agents/the-email-campain-sender-and-marker-offical-0b36faa9
+  order: 20
+  draft: false
+  shot: email-campaign-sender.png
+  shots:
+    - file: email-campaign-main-flow.png
+      caption: Main Flow — fetch leads, categorize by owner, dispatch per sender
+    - file: email-campaign-build-email-flow.png
+      caption: BuildEmail.flow — per-lead company research and personalized generation
+    - file: email-campaign-send-email-flow.png
+      caption: SendEmail.flow — branches by sender identity and POSTs to the right mailer
+  body: |
+    ## End of run
+
+    Personalized cold emails land in real prospects' inboxes, sent from
+    the correct co-founder's identity (mine or Eli's), with status
+    written back to the source-of-truth Google Sheet so the next run
+    never double-touches the same lead.
+
+    The agent ran ten times a day, Monday through Friday, 9am to 6pm
+    sharp, for six months as Ember's outbound engine — 1.2k runs deep,
+    26 published versions, $0.05 a run, 35 seconds end-to-end. We've
+    since downscaled the scheduled runs to focus on hand-crafted
+    messaging, but as a large-scale outreach tool it was excellent.
+
+    ## Challenges it solves
+
+    **Two senders, one pipeline.** Leads are owned by either me or my
+    co-founder Eli. Each run categorizes leads by owner, fetches the
+    matching OAuth token (Porter Token or ELI Token), and sends from
+    that identity — same playbook, two voices, zero crossed wires.
+
+    **Per-lead personalization without a research analyst.**
+    `BuildEmail.flow` extracts the company from each lead, runs a fresh
+    Google search for current context, and writes the email with that
+    context baked in. No mail-merge clichés — every send references
+    something current about the recipient's company.
+
+    **Don't look like a bot.** A randomizer node staggers send timing
+    inside each hourly window so a thousand emails don't leave the
+    server at exactly :00:00. Sends are paced — ten cycles per day, not
+    one giant blast — to keep deliverability and sender reputation
+    intact.
+
+    **Never double-send.** A `Normalize & Gate 48h` function checks
+    every recipient against recent send history and silently drops
+    anyone who's been contacted in the last 48 hours, regardless of
+    which sender touched them.
+
+    **The Google Sheet as the only UI.** No CRM, no admin dashboard.
+    Leads in, status out — A:M columns, read on every run, updated on
+    every send. Whoever owns the campaign edits a sheet; the agent does
+    the rest.
+
+    ## Under the hood
+
+    Three workflows wire it together. `Main.flow` is the orchestrator:
+    fetch sheet, process, categorize, bucket leads by owner, then for
+    each owner fetch the matching auth token and call `BuildEmail.flow`
+    (extract company → Google search → generate personalized email →
+    queue) and `SendEmail.flow` (format → branch by sender → HTTP POST
+    to the right send endpoint). Status updates land back in the same
+    sheet before End.
+
+    Built on Claude 3.7 Sonnet for the generation step; everything else
+    is deterministic JavaScript or HTTP.
+
+- title: Realestate Setter Agent
+  year: 2026
+  summary: A realtor that lives on Facebook Marketplace. Every run, a real homeowner with a for-sale-by-owner listing in Utah opens Messenger to a personalized note from Porter Fairbourne at Fairbourne Realty — sent through a stealth browser session that Facebook never flags.
+  tags:
+    - MindStudio
+    - Skyvern
+    - Claude
+    - Facebook Marketplace
+    - Google Sheets
+    - Browser Automation
+    - Anti-Bot Evasion
+    - Real Estate
+  link: https://app.mindstudio.ai/agents/realestate_setter_agent-cb755f96
+  order: 30
+  draft: false
+  shot: realestate-setter-agent.png
+  shots:
+    - file: realestate-setter-main-flow.png
+      caption: Main Flow — build Skyvern payload, dispatch, poll, parse, update sheet
+    - file: realestate-setter-fb-refresh-flow.png
+      caption: FB_Refresh.flow — keeps the persistent FB browser profile session warm
+  body: |
+    ## End of run
+
+    A homeowner in Utah County opens Facebook Messenger to a real-sounding
+    note from Porter Fairbourne at Fairbourne Realty, asking about their
+    for-sale-by-owner listing. From Facebook's side, nothing looks
+    automated: same returning browser profile, same residential session,
+    same persona, a believable human cadence (max 10 messages per day,
+    randomized timing), zero duplicate sends. The Skyvern run completes
+    cleanly, the listing is marked contacted in the Google Sheet, and the
+    next listing is queued for tomorrow's cap.
+
+    No CAPTCHAs. No "we noticed unusual activity." No banned account.
+    Just an inbox.
+
+    ## Challenges it solves
+
+    **The hard part isn't sending — it's not getting caught.** Facebook
+    Marketplace aggressively bot-flags new sessions, repeated patterns,
+    and accounts that suddenly start messaging at scale. The agent
+    pins every run to a single Skyvern Browser Profile (`Browser_ID`),
+    so cookies, fingerprint, and history carry over between runs — to
+    Facebook, it's one person checking their account, not a script
+    logging in cold.
+
+    **Sessions still expire.** A second workflow, `FB_Refresh.flow`,
+    keeps the persistent browser profile warm — re-establishing the
+    Facebook session on a schedule so the outreach workflow never tries
+    to act on a logged-out browser.
+
+    **Don't behave like a script.** A configurable Daily Message Cap
+    (set to 10, defaults to 8) throttles outreach to a believable human
+    volume. The agent also excludes any listing or seller already
+    contacted, so even at the cap there are no repeat messages.
+
+    **Don't sound like a template.** Each message is generated against
+    the specific listing — neighborhood, price, the homeowner's listing
+    copy — so two recipients never see the same boilerplate.
+
+    **Async by design.** Skyvern runs take real time. The agent fires
+    the Skyvern workflow, gets a Run ID back, then polls completion
+    until the browser session finishes its work, parses the result,
+    and writes status back to the Google Sheet — all in about 4
+    seconds of agent compute per dispatch.
+
+    ## Under the hood
+
+    Two workflows. `Main.flow` orchestrates: reads target listings and
+    message history from Google Sheets, builds the Skyvern outreach
+    payload (with realtor profile, search location, radius, daily cap,
+    and exclusion lists baked in), POSTs to the Skyvern API, extracts
+    the Run ID, polls until complete, parses the structured Skyvern
+    result, and updates the sheet. `FB_Refresh.flow` runs separately
+    to keep the underlying browser session alive.
+
+    Configured against a specific Skyvern Workflow (`wpid_5221...`)
+    and a fixed Browser Profile — the same identity logs in, browses,
+    and messages, every single time. $0.0009 per dispatch.
+
+- title: Adding Leads Agent
+  year: 2026
+  summary: Run-on-demand prospector that turns an ICP into a fresh batch of qualified, deduped leads pulled live from Apollo, cross-checked against the CRM, and reasoned over by Claude Opus — ready to drop straight into outbound.
+  tags:
+    - MindStudio
+    - Claude
+    - Claude Opus
+    - Apollo.io
+    - SQL Database
+    - Lead Generation
+    - ICP Matching
+  link: https://app.mindstudio.ai/agents/adding-leads-agent-0270d253
+  order: 40
+  draft: false
+  shot: adding-leads-agent.png
+  body: |
+    ## End of run
+
+    A payload of fresh, ICP-matched B2B leads — never previously
+    contacted, filtered against the live CRM, scored and rationalized
+    by Claude Opus — handed back to the caller in ~45 seconds, ready
+    to drop straight into the outbound queue.
+
+    The run names from history tell the story of how it actually gets
+    used: "Building Materials Leaders Canada US," "Industrial
+    Distribution Leaders US Canada Search," "Plumbing HVAC Leaders
+    Search," "Electrical Distribution Leaders." One agent, many
+    verticals, one ICP at a time.
+
+    332 runs in production at $0.82 each — Opus isn't cheap, but Opus
+    is what makes the qualification reasoning hold up.
+
+    ## Challenges it solves
+
+    **Apollo returns thousands. You want the right twenty.** The agent
+    composes a tight Apollo search query per ICP, pulls candidates,
+    then has Claude Opus reason over each one against the
+    customer-profile definition before anything ships back.
+
+    **Never re-contact a lead.** Before search, the agent fetches the
+    blocklist of already-contacted prospects and queries the SQL
+    database of existing CRM records. Apollo results get filtered
+    against both — by the time Claude scores anything, the duplicates
+    are already gone.
+
+    **Handle empty searches gracefully.** Run history is dotted with
+    "Search Returned Zero" and "Search Returned Empty" results — the
+    agent doesn't error out when Apollo has no matches; it returns a
+    clean "no new leads for this ICP" response so the caller can
+    rotate to the next vertical.
+
+    **Reasoning that actually scales.** Cheap models miss nuance on
+    B2B qualification (industry adjacency, company size signals,
+    "real" decision-maker vs. job-title noise). Opus does this well
+    enough that the qualified leads coming out are actually qualified.
+
+    ## Under the hood
+
+    Single-flow agent: `Start → Fetch Blocklist → Router → Set ICP →
+    Build Query → Apollo Search → Execute Function (dedupe vs SQL) →
+    Generate Text (Opus qualification) → Return Payload`. The Router
+    picks the right ICP branch based on input; everything downstream
+    is deterministic until the final qualification pass.
+
+- title: Product Image Compliance Editor
+  year: 2026
+  summary: Takes a messy supplier product photo plus a retailer's image specs and returns a fully retailer-compliant image — background swapped, dimensions fixed, lifestyle context generated, compliance checklist verified.
+  tags:
+    - MindStudio
+    - Claude
+    - Gemini Image
+    - Image Generation
+    - Retail Compliance
+    - E-commerce
+  link: https://app.mindstudio.ai/agents/product-image-compliance-editor-2ba8fc4b
+  order: 50
+  draft: false
+  shot: product-image-compliance-editor.png
+  body: |
+    ## End of run
+
+    A product image that actually passes the retailer's intake review
+    — correct background (pure white or generated lifestyle scene),
+    correct dimensions, correct format, free of low-resolution flags
+    and demographic-rule violations, with the original product
+    untouched in the center of the frame. Ready to upload to the
+    retailer's catalog without bouncing.
+
+    ~4 minutes of compute per image, $0.44, three models cooperating
+    (Claude for analysis and compliance, Gemini 3 Pro Image for the
+    background and lifestyle generation).
+
+    ## Challenges it solves
+
+    **Every retailer wants something different.** White background at
+    a specific pixel ratio. Lifestyle scene with no people of a
+    specific demographic. Specific aspect ratio. Specific format. The
+    agent collects requirements as input and routes through a
+    `Validation Router` that catches contradictions, conflicting
+    requirements, and demographic-rule violations before generation
+    even starts — so you don't pay for a render that was always going
+    to fail QA.
+
+    **Source images are not retailer-grade.** Vendor product photos
+    arrive in mixed resolutions, on messy backgrounds, in the wrong
+    aspect. The agent runs a `Resolution Check`, refreshes the
+    product, removes the background, re-renders against a clean or
+    lifestyle background, then composites at the required dimensions.
+
+    **The product can't drift.** The single non-negotiable: the
+    physical product in the final image must match the source. The
+    refresh / re-upload / background-render loop is designed so the
+    generated background is layered around an unmodified product
+    cut-out, not regenerated from scratch.
+
+    **Compliance is verified, not assumed.** Before returning, the
+    agent runs a `Compliance Checklist` against the original
+    requirements (dimensions, format, background type, content
+    rules), then routes to `Review & Accept` or `Revised
+    Requirements` for another pass.
+
+    ## Under the hood
+
+    One ambitious workflow, deeply branched. Linear at the start
+    (`Collect Inputs → Analyze Product → Get Dimensions → Validation
+    Router`), with error branches for each kind of bad-input
+    condition. The image-modification arm runs `Remove Background →
+    Background Render → Composite & Render → Apply Effects → Convert
+    Format`, with a `Generate Lifestyle BG` branch for retailers that
+    want scene-based imagery. Final loop: `Compliance Checklist →
+    Display Results → Review & Accept`, with `Revised Requirements`
+    feeding back in if the checklist fails.
+
+- title: Sales Call Analyzer
+  year: 2025
+  summary: Drop in a sales call recording. Out comes a coaching report for the rep and a CRM-ready summary of the call — transcript, sentiment, objections, next steps — built on GPT-5.
+  tags:
+    - MindStudio
+    - GPT-5
+    - Audio Transcription
+    - Sales Coaching
+    - CRM
+  link: https://app.mindstudio.ai/agents/sales-call-analyzer-ca7e525e
+  order: 60
+  draft: false
+  shot: sales-call-analyzer.png
+  body: |
+    ## End of run
+
+    Two things land at once: a coaching note for the rep (what worked,
+    what didn't, specific moments to listen back to) and a tidy CRM
+    summary of the call (key topics, objections raised, next steps,
+    decision-maker signals). The recording stops being an opaque
+    50-minute MP3 and starts being structured data the team can act on.
+
+    ## Challenges it solves
+
+    **The post-call writeup tax.** Reps either rush a half-summary
+    into the CRM or skip it entirely. The agent does both in one
+    pass — a coaching artifact and a CRM artifact — so the rep doesn't
+    have to choose between coaching themselves and updating the
+    system.
+
+    **Coaching needs specificity.** Generic "ask more discovery
+    questions" feedback is useless. The analysis step runs on the full
+    transcript with GPT-5 so feedback can cite specific moments —
+    where a buying signal was missed, where a question went answered
+    too thinly, where the rep over-talked the close.
+
+    **Two formats from one input.** Coaching prose and CRM-shaped data
+    are different writing tasks. The workflow handles them separately
+    (`Generate Feedback`, then `Create CRM Summary`) so neither has to
+    compromise.
+
+    ## Under the hood
+
+    Linear pipeline: `Start → Upload Audio → Transcribe Audio →
+    Analyze Call → Generate Feedback → Create CRM Summary → Format
+    Output → End`. Single model (GPT-5) across the analysis steps;
+    deterministic upload, transcribe, and format steps around them.
+
+- title: Ember Intelligence Brief
+  year: 2026
+  summary: Every morning at 9am, my phone buzzes with an SMS digest of the prior day's competitor moves, M&A activity, market shifts, and policy news — filtered to what actually matters for product data management companies, with memory so it never repeats yesterday's brief.
+  tags:
+    - MindStudio
+    - Claude
+    - Gemini Deep Research
+    - SMS
+    - Slack
+    - Daily Brief
+    - Scheduled Automation
+    - Stateful Memory
+  link: https://app.mindstudio.ai/agents/ember-intelligence-brief-569989af
+  order: 70
+  draft: false
+  shot: ember-intelligence-brief.png
+  body: |
+    ## End of run
+
+    A real SMS lands on my phone at 9am with the day's intelligence
+    brief for Ember's space — competitor moves, M&A in product data
+    management, geopolitical/policy items that touch the supply
+    chain, market signals worth knowing — filtered hard for relevance
+    and explicitly checked against prior briefs so the same story
+    never gets surfaced twice. A longer-form version simultaneously
+    posts to Slack for the team.
+
+    Six minutes of compute, $2.20 per brief, running daily since
+    January. Cheaper than a part-time analyst and more reliable.
+
+    ## Challenges it solves
+
+    **Five sources of signal, one phone notification.** The agent runs
+    parallel searches across M&A news, geopolitical news, general
+    Google news, market conditions, and policy news — then
+    synthesizes everything into a single SMS-readable brief plus a
+    fuller Slack post. Same source data, two delivery formats sized
+    for two reading contexts.
+
+    **Don't repeat yesterday's news.** Before the day's searches even
+    start, `Load Previous Context` pulls the running memory of what
+    has been covered this week. After delivery, `Update Memory`
+    appends the new items. Today's brief leads with what's actually
+    new.
+
+    **Relevance over recency.** The Comp Query Builder + Deep Research
+    pass narrows everything to the lens of "product data management
+    companies" — Ember's specific vertical. Random tech news doesn't
+    make it through. Mentions of competitors, suppliers, regulatory
+    posture, and supply-chain disruptions do.
+
+    **Daily reliability.** It runs on a 9 AM schedule and has for
+    months. The end of every run is a successfully delivered SMS — not
+    a "successfully invoked the SMS API" — because if the message
+    doesn't arrive, the agent failed.
+
+    ## Under the hood
+
+    Daily-scheduled workflow. Loads prior-day memory, fans out five
+    parallel news searches, synthesizes with Claude and Gemini Deep
+    Research, generates the brief in two formats, sends SMS, posts to
+    Slack, then writes the new coverage back to memory before ending.
+    Two models share the work: Claude 3.7 Sonnet for synthesis and
+    writing, Gemini 2.5 Pro for the deep-research pass.
+
+- title: Market Sizing Pro
+  year: 2025
+  summary: Hand it a company. Out comes a defensible TAM/SAM/SOM analysis with executive summary, transparent methodology, and source attribution — pulled from live web research instead of a stale industry report.
+  tags:
+    - MindStudio
+    - Claude
+    - Google Search
+    - Web Scraping
+    - TAM SAM SOM
+    - Market Research
+    - Executive Summary
+  link: https://app.mindstudio.ai/agents/market-sizing-pro-6af52609
+  order: 80
+  draft: false
+  shot: market-sizing-pro.png
+  shots:
+    - file: market-sizing-main-flow.png
+      caption: Main Flow — collect, scrape, analyze, calculate TAM/SAM/SOM, write summary
+    - file: market-sizing-sub-flow.png
+      caption: Main 1.flow sub-flow — parallel web research and source extraction
+  body: |
+    ## End of run
+
+    A full market-sizing deliverable: TAM, SAM, and SOM numbers with
+    the methodology that produced each, the search queries that
+    sourced the data, an executive summary in board-ready prose, and
+    a transparent trail back to the underlying citations. Input is
+    just a company; output is what you'd otherwise commission from a
+    research firm.
+
+    $1.68 a report, ~6 minutes per run. 56 runs to date.
+
+    ## Challenges it solves
+
+    **Real numbers, not vibes.** The agent doesn't ask Claude what the
+    market size is. It scrapes the company's website to understand
+    the actual product, generates a battery of targeted search queries
+    that surface real industry sources, extracts and simplifies the
+    relevant data, then runs the TAM/SAM/SOM calculations against
+    that. The number ladders up from sourced inputs.
+
+    **Methodology you can defend.** Every output passes through a
+    `Calculate TAM/SAM/SOM` step that exposes the formula and the
+    inputs, then a `Create Executive Summary` step that puts the
+    answer in language a board can read. Both come out together, so
+    the reader can move from headline to math without leaving the
+    artifact.
+
+    **Avoid generic search slop.** Rather than one Google query, the
+    agent first analyzes the company, then `Generate Search Queries`
+    composes multiple angled searches (industry sizing reports,
+    comparable competitor revenue, government statistics where
+    relevant) — broader coverage, less noise.
+
+    ## Under the hood
+
+    `Start Market Sizing → Collect Company Info → Scrape Website →
+    Analyze Company → Generate Search Queries → Run Main Sub-flow →
+    Simplify → Extract Sources → User Context → Calculate TAM/SAM/SOM
+    → Create Executive Summary → Generate Text → End`. The Main
+    sub-flow handles the parallel search-and-scrape; the outer flow
+    handles the structured analysis and the writing.
+
+- title: Website Hell's Kitchen
+  year: 2025
+  summary: Feed it a URL. It crawls the homepage and subpages, then comes back with a Gordon Ramsay–grade roast of the site — brutally honest, properly funny, but also the kind of critique you'd actually act on.
+  tags:
+    - MindStudio
+    - Claude
+    - Web Scraping
+    - Voice / Persona
+    - Creative
+  link: https://app.mindstudio.ai/agents/website-hells-kitchen-49434ea0
+  order: 90
+  draft: false
+  shot: website-hells-kitchen.png
+  body: |
+    ## End of run
+
+    A roast of the site that's mean, accurate, and useful in that
+    order. Critique that actually sticks because it's funny — the
+    kind a designer screenshots and pins above their monitor instead
+    of skimming and ignoring like every other "audit report."
+
+    74 seconds per roast, 8 cents a serve.
+
+    ## Challenges it solves
+
+    **Generic audits get tuned out.** The whole point of the persona
+    is that the feedback lands. Wrapping real UX/copy/IA critique in
+    a strong voice gets read where a polite bullet-list doesn't.
+
+    **One page isn't the site.** Most "AI website analyzers" judge a
+    homepage in isolation. This one extracts internal links and
+    scrapes the subpages too, so the roast can point at where the
+    nav lies, where the pricing page contradicts the homepage promise,
+    where the about page tells a different story than the product
+    page.
+
+    **Hold the voice.** The hard part of any persona agent is keeping
+    the voice tight without sacrificing accuracy. Claude is given the
+    room to be brutal and theatrical, but every claim has to map back
+    to something actually present on the scraped pages.
+
+    ## Under the hood
+
+    `Start → Collect Website Details → Scrape Homepage → Extract
+    Internal Links → Process Internal Links → Scrape Subpages →
+    Analyze Website → Generate Roast → Display Roast → End`. Single
+    model (Claude 3.7 Sonnet) for the analysis and voice; the
+    scraping and link-processing happen in deterministic nodes around
+    it.
+
+- title: Yoodlize Blog Poster
+  year: 2025
+  summary: Yoodlize's SEO blog engine — every scheduled run picks a city, researches local rental trends, generates a fully on-brand blog post with hero imagery and internal links, and publishes it. Never repeats a city it covered too recently, never breaks voice.
+  tags:
+    - MindStudio
+    - Claude
+    - Claude Opus
+    - Gemini Image
+    - Google Sheets
+    - SEO
+    - Scheduled Automation
+    - Multi-model
+    - Image Generation
+  link: https://app.mindstudio.ai/agents/copy-of-yoodlize-blog-poster-2-f83c783a
+  order: 100
+  draft: false
+  shot: yoodlize-blog-poster.png
+  shots:
+    - file: yoodlize-blog-poster-main-flow.png
+      caption: Main Flow — schedule, city selection, anti-duplication, dispatch to BuildPost
+    - file: yoodlize-blog-poster-build-post-flow.png
+      caption: BuildPost Flow — the full generation pipeline (filtering, listing block, hero image, internal links, brand voice)
+    - file: yoodlize-blog-poster-scrape-flow.png
+      caption: Scrape Flow — fetches and cleans page content for the research step
+  body: |
+    ## End of run
+
+    A complete, on-brand, city-specific Yoodlize blog post is live —
+    headline, hero image, embedded listing block, internal SEO links,
+    body copy in the right brand voice. The publish job logs which
+    city was used and when, so the next run picks a city the agent
+    hasn't touched recently.
+
+    22 published versions, $0.50 a post, 4 minutes per run. Five
+    models doing five different jobs.
+
+    ## Challenges it solves
+
+    **Don't write the same post twice.** Before generation, the
+    agent's `Make Anti-Prompt` step pulls the running list of recently
+    covered cities from a Google Sheet and turns it into negative
+    constraints — the writing model sees "don't repeat these angles
+    for these cities." The publish step writes the new city + date
+    back to the sheet so the constraint set keeps growing.
+
+    **Stay on brand at length.** Long-form blog generation tends to
+    drift toward generic SaaS-speak by paragraph three. A dedicated
+    "Step on Brand" pass enforces Yoodlize's voice across the whole
+    draft, and a `PromptCleaner` step strips any accidental
+    meta-language before the post is finalized.
+
+    **Hero + listing visuals, not stock photos.** Gemini 3.1 Flash
+    Image generates the hero image and any inline imagery against the
+    post's actual angle — no stock photo libraries, no generic city
+    skylines. Image generation runs in the same flow as the writing,
+    so the visuals match the body copy.
+
+    **Real internal linking, not LLM-guessed links.** The
+    `GenerateInternalLinks` step queries Yoodlize's existing post
+    catalog from Google Sheets, then has the LLM weave only real,
+    extant URLs into the body — never fabricates an SEO anchor.
+
+    **Right model for each job.** Claude 4.6 Opus handles the
+    long-form writing where quality matters most. Claude 3.5 Haiku
+    runs the cheap filter/classify steps. Gemini handles images.
+    Sonnet picks up the medium-complexity reasoning in between. The
+    blended cost lands at $0.50 a post instead of $2+.
+
+    ## Under the hood
+
+    Four workflows. `Main.flow` orchestrates the scheduled run:
+    `Scheduled Run → HTTP Request → Categorize Recent Blogs by City
+    → Fetch Google Sheet → Select City → Make Anti-Prompt → Update
+    CSV Date → Update Google Sheet → Jump (BuildPost.flow) → End`.
+    `BuildPost.flow` is the generation pipeline — ~30 nodes covering
+    research, listing block assembly, hero image generation, internal
+    link weaving, brand-voice enforcement, and final formatting.
+    `Scrape.flow` is a small utility for fetching and cleaning page
+    content. `HTTP TEST.flow` is a dev probe.
