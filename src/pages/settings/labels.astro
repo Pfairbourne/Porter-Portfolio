@@ -1,0 +1,241 @@
+---
+import WindowLayout from '../../layouts/WindowLayout.astro';
+import { getIconLabels, isKvConfigured } from '../../lib/kv';
+
+export const prerender = false;
+
+interface IconRow {
+  id: string;
+  defaultLabel: string;
+  note?: string;
+}
+
+const dockIcons: IconRow[] = [
+  { id: 'photos',   defaultLabel: 'Photos' },
+  { id: 'notepad',  defaultLabel: 'Writing', note: 'Notepad app' },
+  { id: 'reader',   defaultLabel: 'Reading' },
+  { id: 'music',    defaultLabel: 'Music' },
+  { id: 'calendar', defaultLabel: 'Calendar' },
+  { id: 'mail',     defaultLabel: 'Mail' },
+  { id: 'settings', defaultLabel: 'Settings' },
+];
+
+const desktopIcons: IconRow[] = [
+  { id: 'selected-work',     defaultLabel: 'selected-work',     note: 'Case studies folder' },
+  { id: 'ember',             defaultLabel: 'ember.mdx' },
+  { id: 'yoodlize',          defaultLabel: 'yoodlize.mdx' },
+  { id: 'fun-projects',      defaultLabel: 'fun-projects' },
+  { id: 'mindstudio-agents', defaultLabel: 'mindstudio-agents' },
+  { id: 'writing',           defaultLabel: 'writing' },
+  { id: 'about',             defaultLabel: 'about.md' },
+  { id: 'now',               defaultLabel: 'now.txt' },
+  { id: 'stack',             defaultLabel: 'stack.md',          note: 'This site\'s stack' },
+  { id: 'resume',            defaultLabel: 'résumé.pdf' },
+  { id: 'style-guide',       defaultLabel: 'style-guide.html' },
+];
+
+const overrides = await getIconLabels();
+const configured = isKvConfigured();
+
+function currentValue(row: IconRow): string {
+  return overrides[row.id]?.trim() || '';
+}
+---
+<WindowLayout
+  title="Labels — Settings"
+  description="Rename desktop and dock icons."
+  windowTitle="labels.toml"
+  parent={{ href: '/settings', label: 'settings.app' }}
+  narrow
+>
+  <header style="margin-bottom: var(--s-6);">
+    <h1 class="t-h1">Icon labels<span class="accent">.</span></h1>
+    <p class="t-italic-serif" style="margin-top: var(--s-3);">
+      Rename anything on the desktop or dock. Leave blank to reset to the default. Changes save
+      instantly — no rebuild.
+    </p>
+  </header>
+
+  {!configured && (
+    <p class="labels-warning" role="alert">
+      Upstash isn't configured for this environment — edits will appear to save but won't persist.
+    </p>
+  )}
+
+  <section style="margin-bottom: var(--s-8);">
+    <div class="section-label">Desktop (files + folders)</div>
+    <ul class="labels-list">
+      {desktopIcons.map((row) => (
+        <li class="labels-row" data-row-id={row.id}>
+          <div class="labels-meta">
+            <span class="labels-default">{row.defaultLabel}</span>
+            {row.note && <span class="labels-note">{row.note}</span>}
+          </div>
+          <div class="labels-input-wrap">
+            <input
+              type="text"
+              class="labels-input"
+              data-icon-id={row.id}
+              data-default={row.defaultLabel}
+              value={currentValue(row)}
+              placeholder={row.defaultLabel}
+              maxlength="40"
+              spellcheck="false"
+            />
+            <span class="labels-status" aria-live="polite"></span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section>
+    <div class="section-label">Dock (apps)</div>
+    <ul class="labels-list">
+      {dockIcons.map((row) => (
+        <li class="labels-row" data-row-id={row.id}>
+          <div class="labels-meta">
+            <span class="labels-default">{row.defaultLabel}</span>
+            {row.note && <span class="labels-note">{row.note}</span>}
+          </div>
+          <div class="labels-input-wrap">
+            <input
+              type="text"
+              class="labels-input"
+              data-icon-id={row.id}
+              data-default={row.defaultLabel}
+              value={currentValue(row)}
+              placeholder={row.defaultLabel}
+              maxlength="40"
+              spellcheck="false"
+            />
+            <span class="labels-status" aria-live="polite"></span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <script is:inline>
+    (function () {
+      function debounce(fn, wait) {
+        var t = null;
+        return function () {
+          var args = arguments;
+          if (t) clearTimeout(t);
+          t = setTimeout(function () { fn.apply(null, args); }, wait);
+        };
+      }
+
+      async function save(input) {
+        var id = input.getAttribute('data-icon-id');
+        if (!id) return;
+        var status = input.parentNode.querySelector('.labels-status');
+        status.textContent = 'saving…';
+        status.dataset.state = 'pending';
+        try {
+          var res = await fetch('/api/admin/labels', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: id, label: input.value }),
+          });
+          if (res.ok) {
+            status.textContent = input.value.trim() ? 'saved' : 'reset';
+            status.dataset.state = 'ok';
+            setTimeout(function () { status.textContent = ''; }, 1400);
+          } else {
+            status.textContent = 'failed';
+            status.dataset.state = 'err';
+          }
+        } catch (_) {
+          status.textContent = 'failed';
+          status.dataset.state = 'err';
+        }
+      }
+
+      var inputs = document.querySelectorAll('.labels-input');
+      inputs.forEach(function (input) {
+        var saveDebounced = debounce(function () { save(input); }, 500);
+        input.addEventListener('input', saveDebounced);
+        input.addEventListener('blur', function () { save(input); });
+      });
+    })();
+  </script>
+</WindowLayout>
+
+<style>
+  .labels-warning {
+    margin-bottom: var(--s-5);
+    padding: var(--s-3) var(--s-4);
+    background: var(--accent-soft);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+    color: var(--ink);
+    font-size: 13px;
+  }
+  .labels-list { list-style: none; padding: 0; margin: 0; display: grid; }
+  .labels-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--s-4);
+    align-items: center;
+    padding: var(--s-3) 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .labels-row:last-child { border-bottom: 0; }
+  .labels-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .labels-default {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink);
+    letter-spacing: 0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .labels-note {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+  .labels-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+  }
+  .labels-input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+    background: var(--bg-elev);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+  }
+  .labels-input:focus {
+    outline: none;
+    border-color: var(--ink-2);
+  }
+  .labels-status {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--muted);
+    min-width: 44px;
+    text-align: right;
+  }
+  .labels-status[data-state="ok"]      { color: var(--accent); }
+  .labels-status[data-state="err"]     { color: var(--accent); }
+  .labels-status[data-state="pending"] { color: var(--muted); }
+
+  @media (max-width: 600px) {
+    .labels-row { grid-template-columns: 1fr; gap: var(--s-2); }
+  }
+</style>

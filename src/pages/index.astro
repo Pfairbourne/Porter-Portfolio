@@ -3,18 +3,21 @@ import DesktopLayout from '../layouts/DesktopLayout.astro';
 import MenuBar from '../components/MenuBar.astro';
 import DesktopIcon from '../components/DesktopIcon.astro';
 import Dock from '../components/Dock.astro';
-import { getVisibility, getMenubarStatus } from '../lib/kv';
+import { getVisibility, getMenubarStatus, getIconLabels } from '../lib/kv';
 
-// Server-render so the dock + desktop icon visibility and the menubar status
-// read fresh from KV at request time (lets admin toggles take effect without
-// a redeploy). Cold-start cost on Vercel free tier is acceptable.
+// Server-render so the dock + desktop icon visibility, label overrides, and
+// menubar status read fresh from KV at request time (lets admin edits take
+// effect without a redeploy). Cold-start cost on Vercel free tier is acceptable.
 export const prerender = false;
 
-const [dockVisibility, desktopVisibility, menubarStatus] = await Promise.all([
+const [dockVisibility, desktopVisibility, menubarStatus, iconLabels] = await Promise.all([
   getVisibility('dock'),
   getVisibility('desktop'),
   getMenubarStatus(),
+  getIconLabels(),
 ]);
+
+const labelFor = (id: string, fallback: string) => iconLabels[id]?.trim() || fallback;
 
 // Halftone full-body figure (transparent PNG). The lower body intentionally
 // extends below the viewport; the name + tagline overlay the white sign in the
@@ -45,6 +48,7 @@ const leftIcons: IconConfig[] = [
 const rightIcons: IconConfig[] = [
   { id: 'about', href: '/about', label: 'about.md', ext: 'md', variant: 'file' },
   { id: 'now', href: '/now', label: 'now.txt', ext: 'txt', variant: 'file' },
+  { id: 'stack', href: '/stack', label: 'stack.md', ext: 'md', variant: 'file' },
   { id: 'resume', href: '/resume', label: 'résumé.pdf', ext: 'pdf', variant: 'file' },
   { id: 'style-guide', href: '/style-guide', label: 'style-guide.html', ext: 'html', variant: 'file' },
 ];
@@ -88,7 +92,7 @@ const rightIcons: IconConfig[] = [
           <DesktopIcon
             id={icon.id}
             href={icon.href}
-            label={icon.label}
+            label={labelFor(icon.id, icon.label)}
             ext={icon.ext}
             variant={icon.variant}
           />
@@ -101,7 +105,7 @@ const rightIcons: IconConfig[] = [
           <DesktopIcon
             id={icon.id}
             href={icon.href}
-            label={icon.label}
+            label={labelFor(icon.id, icon.label)}
             ext={icon.ext}
             variant={icon.variant}
             external={icon.external}
@@ -112,7 +116,7 @@ const rightIcons: IconConfig[] = [
     </div>
   </div>
 
-  <Dock visibility={dockVisibility} />
+  <Dock visibility={dockVisibility} labels={iconLabels} />
 
   <!-- Floating window — opens when a file/folder is clicked -->
   <div class="desktop-window" id="desktop-window" role="dialog" aria-modal="true" aria-labelledby="desktop-window-title" hidden>
@@ -142,7 +146,7 @@ const rightIcons: IconConfig[] = [
       if (!modal || !titleEl || !bodyEl) return;
 
       var WINDOWED_PREFIXES = [
-        '/about', '/now', '/resume', '/fun', '/writing', '/projects',
+        '/about', '/now', '/stack', '/resume', '/fun', '/writing', '/projects',
         '/agents', '/style-guide', '/photos', '/notepad', '/books', '/music', '/calendar'
       ];
       var ORIGINAL_TITLE = document.title;

@@ -21,9 +21,11 @@ function getClient(): Redis | null {
 
 export type VisibilityScope = 'dock' | 'desktop';
 export type VisibilityMap = Record<string, boolean>;
+export type IconLabelMap = Record<string, string>;
 
 const VISIBILITY_KEY = (scope: VisibilityScope) => `${scope}:visibility`;
 const MENUBAR_STATUS_KEY = 'menubar:status';
+const ICON_LABELS_KEY = 'icon:labels';
 
 const DEFAULT_VISIBILITY: VisibilityMap = {
   // Dock apps
@@ -43,6 +45,7 @@ const DEFAULT_VISIBILITY: VisibilityMap = {
   writing: true,
   about: true,
   now: true,
+  stack: true,
   resume: true,
   'style-guide': true,
 };
@@ -87,6 +90,31 @@ export async function setMenubarStatus(value: string): Promise<void> {
   const c = getClient();
   if (!c) return;
   await c.set(MENUBAR_STATUS_KEY, value);
+}
+
+/** Read every icon-label override (icon id → custom label). Empty when unset. */
+export async function getIconLabels(): Promise<IconLabelMap> {
+  const c = getClient();
+  if (!c) return {};
+  try {
+    const stored = await c.get<IconLabelMap>(ICON_LABELS_KEY);
+    return stored ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/** Set or clear (label === '') a single icon's display label. */
+export async function setIconLabel(id: string, label: string): Promise<void> {
+  const c = getClient();
+  if (!c) return;
+  const current = (await c.get<IconLabelMap>(ICON_LABELS_KEY)) ?? {};
+  if (label === '') {
+    delete current[id];
+  } else {
+    current[id] = label;
+  }
+  await c.set(ICON_LABELS_KEY, current);
 }
 
 export function isKvConfigured(): boolean {

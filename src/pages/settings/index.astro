@@ -1,10 +1,30 @@
 ---
 import WindowLayout from '../../layouts/WindowLayout.astro';
 import { getNotes } from '../../lib/kv';
+import { getCollection } from 'astro:content';
+import { FORM_DEFINITIONS, type CollectionId } from '../../lib/content-form-config';
 
 export const prerender = false;
 
 const noteCount = (await getNotes()).length;
+
+async function countCollection(id: CollectionId): Promise<{ total: number; drafts: number }> {
+  try {
+    const entries = await getCollection(id as any);
+    const drafts = entries.filter((e: any) => Boolean(e.data?.draft)).length;
+    return { total: entries.length, drafts };
+  } catch {
+    return { total: 0, drafts: 0 };
+  }
+}
+
+const COLLECTION_ORDER: CollectionId[] = [
+  'projects', 'fun', 'agents', 'writing', 'books', 'tracks', 'headshots',
+];
+
+const collectionCounts = await Promise.all(
+  COLLECTION_ORDER.map(async (id) => ({ id, def: FORM_DEFINITIONS[id], ...(await countCollection(id)) })),
+);
 ---
 <WindowLayout
   title="Settings — Porter Fairbourne"
@@ -22,8 +42,8 @@ const noteCount = (await getNotes()).length;
   </header>
 
   <p class="t-italic-serif" style="max-width: var(--max-w-read); margin-bottom: var(--s-8);">
-    Edit live surfaces without redeploying. The toggle-y stuff (visibility, status) takes effect
-    instantly; content edits land in Phase 4b.
+    Edit the whole site without redeploying. Toggles are instant; content edits commit to GitHub and
+    Vercel rebuilds (~60s).
   </p>
 
   <section>
@@ -48,7 +68,7 @@ const noteCount = (await getNotes()).length;
           <span class="settings-card__instant">instant</span>
         </div>
         <h2 class="settings-card__title">Icon visibility</h2>
-        <p class="settings-card__desc">Show or hide any icon on the dock or desktop. Hide things while they're in progress.</p>
+        <p class="settings-card__desc">Show or hide any icon on the dock or desktop.</p>
       </a>
 
       <a class="settings-card" href="/settings/menubar">
@@ -59,24 +79,66 @@ const noteCount = (await getNotes()).length;
         <h2 class="settings-card__title">Menu bar status</h2>
         <p class="settings-card__desc">Edit the "Busy Building" line next to your name.</p>
       </a>
+
+      <a class="settings-card" href="/settings/labels">
+        <div class="settings-card__head">
+          <span class="settings-card__label">labels.toml</span>
+          <span class="settings-card__instant">instant</span>
+        </div>
+        <h2 class="settings-card__title">Icon labels</h2>
+        <p class="settings-card__desc">Rename anything on the desktop or dock — "selected-work" → whatever you want.</p>
+      </a>
     </div>
   </section>
 
   <section style="margin-top: var(--s-8);">
-    <div class="section-label">Coming soon</div>
-    <ul class="settings-list">
-      <li><span class="settings-list__title">Case studies</span> — add / edit / delete <code>projects/*.md</code></li>
-      <li><span class="settings-list__title">Fun projects</span> — <code>fun/*.md</code></li>
-      <li><span class="settings-list__title">MindStudio agents</span> — <code>agents/*.md</code></li>
-      <li><span class="settings-list__title">Writing</span> — <code>writing/*.md</code></li>
-      <li><span class="settings-list__title">Reading list</span> — <code>books/*.md</code></li>
-      <li><span class="settings-list__title">Tracks</span> — top 5 study tunes</li>
-      <li><span class="settings-list__title">Headshots</span> — upload new portraits</li>
-      <li><span class="settings-list__title">About / Now</span> — page bodies</li>
-    </ul>
-    <p class="t-small" style="color: var(--muted); margin-top: var(--s-4);">
-      These need GitHub API commits to persist. Land in Phase 4b once the repo is wired in Vercel.
-    </p>
+    <div class="section-label">Content</div>
+    <div class="settings-grid">
+      {collectionCounts.map(({ id, def, total, drafts }) => (
+        <a class="settings-card" href={`/settings/${id}`}>
+          <div class="settings-card__head">
+            <span class="settings-card__label">{id}/</span>
+            <span class="settings-card__count">
+              {total} {total === 1 ? 'entry' : 'entries'}
+              {drafts > 0 && <span class="settings-card__drafts"> · {drafts} draft</span>}
+            </span>
+          </div>
+          <h2 class="settings-card__title">{def.label}</h2>
+          <p class="settings-card__desc">{def.description}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <section style="margin-top: var(--s-8);">
+    <div class="section-label">Pages</div>
+    <div class="settings-grid">
+      <a class="settings-card" href="/settings/pages/about">
+        <div class="settings-card__head">
+          <span class="settings-card__label">pages/about.md</span>
+          <span class="settings-card__count">page body</span>
+        </div>
+        <h2 class="settings-card__title">About</h2>
+        <p class="settings-card__desc">The body of <code>/about</code> — the longer-form prose.</p>
+      </a>
+      <a class="settings-card" href="/settings/pages/now">
+        <div class="settings-card__head">
+          <span class="settings-card__label">pages/now.md</span>
+          <span class="settings-card__count">page body</span>
+        </div>
+        <h2 class="settings-card__title">Now</h2>
+        <p class="settings-card__desc">The body of <code>/now</code> — what you're up to.</p>
+      </a>
+
+      <a class="settings-card" href="/settings/pages/stack">
+        <div class="settings-card__head">
+          <span class="settings-card__label">pages/stack.md</span>
+          <span class="settings-card__count">page body</span>
+        </div>
+        <h2 class="settings-card__title">Stack</h2>
+        <p class="settings-card__desc">The body of <code>/stack</code> — how this site is built.</p>
+      </a>
+    </div>
   </section>
 </WindowLayout>
 
@@ -117,6 +179,7 @@ const noteCount = (await getNotes()).length;
     justify-content: space-between;
     align-items: center;
     margin-bottom: var(--s-3);
+    gap: var(--s-3);
   }
   .settings-card__label {
     font-family: var(--font-mono);
@@ -134,6 +197,15 @@ const noteCount = (await getNotes()).length;
     padding: 2px 8px;
     border-radius: var(--radius-pill);
   }
+  .settings-card__count {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--ink-2);
+    letter-spacing: 0.03em;
+  }
+  .settings-card__drafts {
+    color: var(--muted);
+  }
   .settings-card__title {
     font-family: var(--font-serif);
     font-size: 22px;
@@ -145,21 +217,5 @@ const noteCount = (await getNotes()).length;
     font-size: 13.5px;
     color: var(--ink-2);
     line-height: 1.5;
-  }
-
-  .settings-list {
-    list-style: none;
-    padding: 0;
-    display: grid;
-    gap: var(--s-2);
-    margin: 0;
-  }
-  .settings-list li {
-    color: var(--ink-2);
-    font-size: 14px;
-  }
-  .settings-list__title {
-    color: var(--ink);
-    font-weight: 500;
   }
 </style>

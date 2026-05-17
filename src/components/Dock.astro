@@ -7,14 +7,16 @@ import MusicGlyph from './dock-glyphs/MusicGlyph.astro';
 import CalendarGlyph from './dock-glyphs/CalendarGlyph.astro';
 import MailGlyph from './dock-glyphs/MailGlyph.astro';
 import SettingsGlyph from './dock-glyphs/SettingsGlyph.astro';
-import type { VisibilityMap } from '../lib/kv';
+import type { VisibilityMap, IconLabelMap } from '../lib/kv';
 
 interface Props {
   visibility?: VisibilityMap;
+  labels?: IconLabelMap;
 }
 
-const { visibility = {} } = Astro.props;
+const { visibility = {}, labels = {} } = Astro.props;
 const showIf = (id: string) => visibility[id] !== false;
+const labelFor = (id: string, fallback: string) => labels[id]?.trim() || fallback;
 
 // Mail uses the visitor's own email client. Adjust the address in the
 // `mailto:` href if your contact email changes.
@@ -39,7 +41,7 @@ const apps: DockApp[] = [
 ---
 <nav class="dock" aria-label="Apps">
   {apps.filter((a) => showIf(a.id)).map(({ id, href, label, Glyph }) => (
-    <DockIcon id={id} href={href} label={label}>
+    <DockIcon id={id} href={href} label={labelFor(id, label)}>
       <Glyph />
     </DockIcon>
   ))}
