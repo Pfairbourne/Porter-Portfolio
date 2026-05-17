@@ -47,10 +47,14 @@ export const POST: APIRoute = async (context) => {
   const ok = password.length > 0 && (await verifyPassword(password));
   if (!ok) {
     if (isForm) {
-      const back = new URL('/settings/login', context.url);
-      back.searchParams.set('error', '1');
-      if (next !== '/settings') back.searchParams.set('next', next);
-      return Response.redirect(back, 303);
+      // Path-relative redirect — context.url is unreliable on Vercel SSR
+      // (often shows the internal hostname like "localhost").
+      const params = new URLSearchParams({ error: '1' });
+      if (next !== '/settings') params.set('next', next);
+      return new Response(null, {
+        status: 303,
+        headers: { Location: `/settings/login?${params.toString()}` },
+      });
     }
     return new Response(
       JSON.stringify({ ok: false, error: 'invalid_password' }),
@@ -65,7 +69,10 @@ export const POST: APIRoute = async (context) => {
   await session.save();
 
   if (isForm) {
-    return Response.redirect(new URL(next, context.url), 303);
+    return new Response(null, {
+      status: 303,
+      headers: { Location: next },
+    });
   }
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,

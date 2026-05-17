@@ -20,5 +20,8 @@ export const POST: APIRoute = async (context) => {
       headers: { 'content-type': 'application/json' },
     });
   }
-  return Response.redirect(new URL('/', context.url), 303);
+  return new Response(null, {
+    status: 303,
+    headers: { Location: '/' },
+  });
 };

@@ -34,9 +34,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
         headers: { 'content-type': 'application/json' },
       });
     }
-    const redirectTo = new URL(AUTH_PAGE, url);
-    redirectTo.searchParams.set('next', path);
-    return Response.redirect(redirectTo, 302);
+    // Path-relative redirect — building an absolute URL from context.url
+    // breaks on Vercel SSR, where the adapter exposes an internal hostname
+    // (often "localhost") rather than the public one the browser hit.
+    const location = `${AUTH_PAGE}?next=${encodeURIComponent(path)}`;
+    return new Response(null, {
+      status: 302,
+      headers: { Location: location },
+    });
   }
 
   // Sliding-window refresh — only on protected hits, so anonymous traffic
