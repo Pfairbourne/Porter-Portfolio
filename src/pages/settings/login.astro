@@ -13,11 +13,7 @@ const next = Astro.url.searchParams.get('next') ?? '/settings';
   narrow
 >
   <div class="login">
-    <div class="t-label" style="margin-bottom: var(--s-4);">Sign in</div>
-    <h1 class="t-h1">Welcome back<span class="accent">.</span></h1>
-    <p class="t-italic-serif" style="margin-top: var(--s-3); margin-bottom: var(--s-6);">
-      Admin access for editing the portfolio.
-    </p>
+    <p class="login__lede">Admin login for editing the portfolio content.</p>
 
     <form action="/api/admin/login" method="POST" class="login__form">
       <input type="hidden" name="next" value={next} />
@@ -44,11 +40,18 @@ const next = Astro.url.searchParams.get('next') ?? '/settings';
 
 <style>
   .login { max-width: 420px; }
+  .login__lede {
+    margin: 0 0 var(--s-5);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-2);
+    letter-spacing: 0.01em;
+  }
   .login__form {
     display: flex;
     flex-direction: column;
     gap: var(--s-4);
-    margin-top: var(--s-5);
+    margin-top: 0;
   }
   .login__label {
     display: flex;
