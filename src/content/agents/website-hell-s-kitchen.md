@@ -1,5 +1,5 @@
 ---
-title: Website Hell's Kitchen
+title: Website Roaster
 year: 2025
 summary: >-
   Feed it a URL. It crawls the homepage and subpages, then comes back with a Gordon Ramsay–grade
