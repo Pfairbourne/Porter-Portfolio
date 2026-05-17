@@ -1,0 +1,145 @@
+---
+interface Props {
+  name: string;
+  value?: string[];
+  id?: string;
+  placeholder?: string;
+}
+
+const { name, value = [], id, placeholder = 'Type and press Enter' } = Astro.props;
+const inputId = id ?? `tag-input-${name.replace(/[^a-z0-9]/gi, '-')}`;
+const initialJson = JSON.stringify(value ?? []);
+---
+<div class="tag-input" data-tag-input data-name={name}>
+  <ul class="tag-input__chips" aria-label="Selected tags"></ul>
+  <input
+    type="text"
+    id={inputId}
+    class="tag-input__input"
+    placeholder={placeholder}
+    autocomplete="off"
+    inputmode="text"
+  />
+  <input type="hidden" name={name} value={initialJson} data-tag-input-hidden />
+</div>
+
+<script>
+  class TagInputController {
+    constructor(root: HTMLElement) {
+      const hidden = root.querySelector<HTMLInputElement>('[data-tag-input-hidden]');
+      const chips = root.querySelector<HTMLUListElement>('.tag-input__chips');
+      const input = root.querySelector<HTMLInputElement>('.tag-input__input');
+      if (!hidden || !chips || !input) return;
+
+      let tags: string[] = [];
+      try { tags = JSON.parse(hidden.value) || []; } catch { tags = []; }
+      if (!Array.isArray(tags)) tags = [];
+
+      const sync = () => {
+        chips.innerHTML = '';
+        for (const tag of tags) {
+          const li = document.createElement('li');
+          li.className = 'tag-input__chip';
+          li.textContent = tag;
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.className = 'tag-input__remove';
+          remove.setAttribute('aria-label', `Remove ${tag}`);
+          remove.textContent = '×';
+          remove.addEventListener('click', () => {
+            tags = tags.filter((t) => t !== tag);
+            sync();
+          });
+          li.appendChild(remove);
+          chips.appendChild(li);
+        }
+        hidden.value = JSON.stringify(tags);
+      };
+
+      const commit = (raw: string) => {
+        const value = raw.trim().replace(/^,+|,+$/g, '');
+        if (!value) return;
+        for (const part of value.split(',').map((p) => p.trim()).filter(Boolean)) {
+          if (!tags.includes(part)) tags.push(part);
+        }
+        input.value = '';
+        sync();
+      };
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ',') {
+          e.preventDefault();
+          commit(input.value);
+        } else if (e.key === 'Backspace' && input.value === '' && tags.length > 0) {
+          tags.pop();
+          sync();
+        }
+      });
+
+      input.addEventListener('blur', () => {
+        if (input.value.trim()) commit(input.value);
+      });
+
+      sync();
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-tag-input]').forEach((el) => new TagInputController(el));
+</script>
+
+<style>
+  .tag-input {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+    background: var(--bg-elev);
+    transition: border-color 160ms ease;
+  }
+  .tag-input:focus-within {
+    border-color: var(--ink-2);
+  }
+  .tag-input__chips {
+    display: contents;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .tag-input__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--accent-soft);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 3px 4px 3px 9px;
+    border-radius: var(--radius-pill);
+  }
+  .tag-input__remove {
+    background: transparent;
+    border: 0;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--ink-2);
+    padding: 0 4px;
+    border-radius: 50%;
+    transition: color 160ms ease;
+  }
+  .tag-input__remove:hover { color: var(--accent); }
+  .tag-input__input {
+    flex: 1 1 120px;
+    min-width: 120px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    padding: 2px 0;
+  }
+</style>

@@ -1,0 +1,56 @@
+---
+import WindowLayout from '../../../layouts/WindowLayout.astro';
+import ContentForm from '../../../components/ContentForm.astro';
+import { getCollection } from 'astro:content';
+import { isCollectionId, getDefinition, type CollectionId } from '../../../lib/content-form-config';
+
+export const prerender = false;
+
+const param = Astro.params.collection;
+const slug = Astro.params.slug;
+
+if (!isCollectionId(param) || typeof slug !== 'string' || !slug) {
+  return Astro.redirect('/settings');
+}
+
+const collection = param as CollectionId;
+const def = getDefinition(collection);
+
+if (collection === 'pages') {
+  // Pages are edited under /settings/pages/[slug] — see that dedicated route.
+  return Astro.redirect(`/settings/pages/${slug}`);
+}
+
+const entries = await getCollection(collection as any);
+const entry = entries.find((e: any) => e.id === slug);
+
+if (!entry) {
+  return new Response(`Entry not found: ${collection}/${slug}`, { status: 404 });
+}
+
+// `body` is the raw markdown source for .md entries; undefined for .json.
+const bodySource = (entry as any).body ?? '';
+---
+<WindowLayout
+  title={`${(entry as any).data?.title ?? slug} — Settings`}
+  description={`Edit ${slug} in ${def.label}.`}
+  windowTitle={`${collection}/${slug}.${def.extension}`}
+  parent={{ href: `/settings/${collection}`, label: `${collection}/` }}
+>
+  <header style="margin-bottom: var(--s-6);">
+    <div class="t-label" style="margin-bottom: var(--s-3);">{collection}/{slug}.{def.extension}</div>
+    <h1 class="t-h1" style="font-size: clamp(28px, 4vw, 38px); line-height: 1.1;">
+      {(entry as any).data?.title ?? (entry as any).data?.label ?? slug}<span class="accent">.</span>
+    </h1>
+    <p class="t-italic-serif" style="margin-top: var(--s-3); max-width: 50ch; color: var(--ink-2);">
+      Editing an existing entry. Save commits to GitHub; the change goes live after the next Vercel
+      build (~60s). The slug stays fixed — to rename, delete and recreate.
+    </p>
+  </header>
+
+  <ContentForm
+    collection={collection}
+    slug={slug}
+    entry={{ data: (entry as any).data ?? {}, body: bodySource }}
+  />
+</WindowLayout>

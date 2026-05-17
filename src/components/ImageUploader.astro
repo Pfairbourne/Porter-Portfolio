@@ -1,0 +1,217 @@
+---
+interface Props {
+  /** Form field name. Stores the resulting image URL. */
+  name: string;
+  /** Subdir under public/images/ where uploads land. */
+  dir: string;
+  /** Existing value (for edit mode). */
+  value?: string;
+  /** Optional hint passed to the upload API for filename basing. */
+  slugHint?: string;
+  /** When true, fires a global 'image-uploaded' event with the URL instead of
+   * (or in addition to) updating its own field. Used by the markdown editor. */
+  insertMode?: boolean;
+  id?: string;
+}
+
+const { name, dir, value = '', slugHint = '', insertMode = false, id } = Astro.props;
+const inputId = id ?? `img-${name.replace(/[^a-z0-9]/gi, '-')}`;
+---
+<div class="image-uploader" data-image-uploader data-dir={dir} data-slug-hint={slugHint} data-insert-mode={insertMode ? 'true' : 'false'}>
+  <input type="hidden" name={name} value={value} data-image-value />
+  <div class="image-uploader__row">
+    <label class="image-uploader__pick" for={inputId}>
+      Choose image
+      <input type="file" id={inputId} accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml" hidden />
+    </label>
+    <input
+      type="text"
+      class="image-uploader__url"
+      placeholder="/images/dir/filename.jpg"
+      value={value}
+      data-image-url-text
+    />
+    <button type="button" class="image-uploader__clear" data-image-clear aria-label="Clear">×</button>
+  </div>
+  <p class="image-uploader__status" data-image-status aria-live="polite"></p>
+  <div class="image-uploader__preview" data-image-preview hidden>
+    <img alt="" data-image-preview-img />
+  </div>
+</div>
+
+<script>
+  class ImageUploaderController {
+    constructor(root: HTMLElement) {
+      const hiddenInput = root.querySelector<HTMLInputElement>('[data-image-value]');
+      const urlText = root.querySelector<HTMLInputElement>('[data-image-url-text]');
+      const fileInput = root.querySelector<HTMLInputElement>('input[type="file"]');
+      const status = root.querySelector<HTMLElement>('[data-image-status]');
+      const previewWrap = root.querySelector<HTMLElement>('[data-image-preview]');
+      const previewImg = root.querySelector<HTMLImageElement>('[data-image-preview-img]');
+      const clearBtn = root.querySelector<HTMLButtonElement>('[data-image-clear]');
+      if (!hiddenInput || !urlText || !fileInput || !status || !previewWrap || !previewImg || !clearBtn) return;
+
+      const dir = root.dataset.dir || '';
+      const slugHint = root.dataset.slugHint || '';
+      const insertMode = root.dataset.insertMode === 'true';
+
+      const setValue = (url: string) => {
+        hiddenInput.value = url;
+        urlText.value = url;
+        if (url) {
+          previewImg.src = url;
+          previewWrap.removeAttribute('hidden');
+        } else {
+          previewWrap.setAttribute('hidden', '');
+          previewImg.removeAttribute('src');
+        }
+      };
+
+      setValue(hiddenInput.value);
+
+      const upload = async (file: File) => {
+        if (file.size > 4 * 1024 * 1024) {
+          status.textContent = 'Too large (max 4 MB).';
+          return;
+        }
+        if (!file.type.startsWith('image/')) {
+          status.textContent = 'That is not an image.';
+          return;
+        }
+        status.textContent = 'Uploading…';
+        const form = new FormData();
+        form.set('file', file);
+        form.set('dir', dir);
+        if (slugHint) form.set('name', slugHint);
+        try {
+          const res = await fetch('/api/admin/upload-image', { method: 'POST', body: form });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) {
+            status.textContent = `Upload failed: ${data?.error ?? res.statusText}`;
+            return;
+          }
+          status.textContent = 'Uploaded. Live after the next build (~60s).';
+          setValue(data.url);
+          if (insertMode) {
+            document.dispatchEvent(new CustomEvent('image-uploaded', { detail: { url: data.url, filename: data.filename } }));
+          }
+        } catch (err) {
+          status.textContent = 'Upload failed (network).';
+        }
+      };
+
+      fileInput.addEventListener('change', () => {
+        const f = fileInput.files?.[0];
+        if (f) {
+          upload(f);
+          fileInput.value = ''; // allow re-selecting the same file
+        }
+      });
+
+      urlText.addEventListener('input', () => {
+        hiddenInput.value = urlText.value;
+        previewImg.src = urlText.value;
+        if (urlText.value) previewWrap.removeAttribute('hidden');
+        else previewWrap.setAttribute('hidden', '');
+      });
+
+      clearBtn.addEventListener('click', () => {
+        setValue('');
+        status.textContent = '';
+      });
+
+      // Drag-and-drop support
+      root.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        root.classList.add('image-uploader--drag');
+      });
+      root.addEventListener('dragleave', () => root.classList.remove('image-uploader--drag'));
+      root.addEventListener('drop', (e) => {
+        e.preventDefault();
+        root.classList.remove('image-uploader--drag');
+        const f = e.dataTransfer?.files?.[0];
+        if (f) upload(f);
+      });
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-image-uploader]').forEach((el) => new ImageUploaderController(el));
+</script>
+
+<style>
+  .image-uploader {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    border: 1px dashed var(--rule);
+    border-radius: var(--radius-card);
+    background: var(--bg-elev);
+    transition: border-color 160ms ease, background 160ms ease;
+  }
+  .image-uploader--drag {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .image-uploader__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .image-uploader__pick {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 160ms ease, border-color 160ms ease;
+  }
+  .image-uploader__pick:hover { color: var(--accent); border-color: var(--accent); }
+  .image-uploader__url {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+  }
+  .image-uploader__url:focus { outline: none; border-color: var(--ink-2); }
+  .image-uploader__clear {
+    background: transparent;
+    border: 0;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--muted);
+    padding: 0 6px;
+    transition: color 160ms ease;
+  }
+  .image-uploader__clear:hover { color: var(--accent); }
+  .image-uploader__status {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--muted);
+    min-height: 14px;
+  }
+  .image-uploader__preview {
+    margin-top: 4px;
+    max-width: 240px;
+  }
+  .image-uploader__preview img {
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    display: block;
+  }
+</style>

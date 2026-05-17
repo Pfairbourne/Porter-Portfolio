@@ -1,0 +1,547 @@
+---
+/**
+ * Schema-driven editor for an existing content collection entry.
+ * Renders fields per FORM_DEFINITIONS, submits updates to /api/admin/content/save.
+ * Edit-only — new entries are created in code by dropping files into
+ * src/content/<collection>/.
+ */
+import MarkdownEditor from './MarkdownEditor.astro';
+import ImageUploader from './ImageUploader.astro';
+import TagInput from './TagInput.astro';
+import {
+  getDefinition,
+  getByPath,
+  type CollectionId,
+  type FieldDefinition,
+} from '../lib/content-form-config';
+
+interface Props {
+  collection: CollectionId;
+  /** Slug of the existing entry being edited. */
+  slug: string;
+  /** Existing frontmatter values + raw body. */
+  entry: { data: Record<string, unknown>; body?: string };
+  /** Where to redirect after a successful delete. Defaults to /settings/<collection>. */
+  redirectTo?: string;
+}
+
+const { collection, slug, entry, redirectTo } = Astro.props;
+const def = getDefinition(collection);
+const data: Record<string, unknown> = entry.data ?? {};
+const body: string = entry.body ?? '';
+const redirectAfter = redirectTo ?? `/settings/${collection}`;
+
+function fieldValue(field: FieldDefinition): unknown {
+  const raw = getByPath(data, field.name);
+  if (raw === undefined || raw === null) {
+    if (field.default !== undefined) return field.default;
+    if (field.type === 'checkbox') return false;
+    if (field.type === 'tags') return [];
+    return '';
+  }
+  return raw;
+}
+
+function dateAsInput(value: unknown): string {
+  if (!value) return '';
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === 'string') {
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+  return '';
+}
+
+function tagsArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string');
+  return [];
+}
+---
+<form
+  class="content-form"
+  data-content-form
+  data-collection={collection}
+  data-slug={slug}
+  data-redirect={redirectAfter}
+  data-has-body={def.body ? 'true' : 'false'}
+>
+  <div class="content-form__status" data-form-status role="status" aria-live="polite"></div>
+
+  <div class="content-form__fields">
+    {def.fields.map((field) => {
+      const value = fieldValue(field);
+      const errId = `err-${field.name.replace(/[^a-z0-9]/gi, '-')}`;
+      return (
+        <div class="content-form__field" data-field-row data-field-name={field.name} data-field-type={field.type}>
+          <label class="content-form__label" for={`f-${field.name.replace(/\./g, '-')}`}>
+            {field.label}
+            {field.required && <span class="content-form__req" aria-hidden="true">*</span>}
+          </label>
+
+          {field.type === 'text' && (
+            <input
+              type="text"
+              id={`f-${field.name.replace(/\./g, '-')}`}
+              data-field-input
+              data-field-name={field.name}
+              value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
+              class="content-form__input"
+            />
+          )}
+
+          {field.type === 'url' && (
+            <input
+              type="url"
+              id={`f-${field.name.replace(/\./g, '-')}`}
+              data-field-input
+              data-field-name={field.name}
+              value={typeof value === 'string' ? value : ''}
+              placeholder="https://"
+              class="content-form__input"
+            />
+          )}
+
+          {field.type === 'number' && (
+            <input
+              type="number"
+              id={`f-${field.name.replace(/\./g, '-')}`}
+              data-field-input
+              data-field-name={field.name}
+              value={typeof value === 'number' ? String(value) : (typeof value === 'string' ? value : '')}
+              class="content-form__input content-form__input--narrow"
+            />
+          )}
+
+          {field.type === 'date' && (
+            <input
+              type="date"
+              id={`f-${field.name.replace(/\./g, '-')}`}
+              data-field-input
+              data-field-name={field.name}
+              value={dateAsInput(value)}
+              class="content-form__input content-form__input--narrow"
+            />
+          )}
+
+          {field.type === 'textarea' && (
+            <textarea
+              id={`f-${field.name.replace(/\./g, '-')}`}
+              data-field-input
+              data-field-name={field.name}
+              maxlength={field.maxLength}
+              rows={3}
+              class="content-form__textarea"
+            >{typeof value === 'string' ? value : ''}</textarea>
+          )}
+
+          {field.type === 'select' && (
+            <select
+              id={`f-${field.name.replace(/\./g, '-')}`}
+              data-field-input
+              data-field-name={field.name}
+              class="content-form__select"
+            >
+              {!field.required && <option value=""></option>}
+              {(field.options ?? []).map((opt) => (
+                <option value={opt} selected={value === opt}>{opt}</option>
+              ))}
+            </select>
+          )}
+
+          {field.type === 'checkbox' && (
+            <label class="content-form__checkbox">
+              <input
+                type="checkbox"
+                id={`f-${field.name.replace(/\./g, '-')}`}
+                data-field-input
+                data-field-name={field.name}
+                checked={value === true}
+              />
+              <span>{field.help ?? `Toggle ${field.label.toLowerCase()}`}</span>
+            </label>
+          )}
+
+          {field.type === 'tags' && (
+            <TagInput name={field.name} value={tagsArray(value)} />
+          )}
+
+          {field.type === 'image' && (
+            <ImageUploader
+              name={field.name}
+              dir={field.dir ?? 'pages'}
+              value={typeof value === 'string' ? value : ''}
+              slugHint={typeof data[def.slugFrom] === 'string' ? (data[def.slugFrom] as string) : ''}
+            />
+          )}
+
+          {field.type !== 'checkbox' && field.help && (
+            <p class="content-form__help">{field.help}</p>
+          )}
+          <p class="content-form__err" id={errId} data-field-err data-for-field={field.name}></p>
+        </div>
+      );
+    })}
+  </div>
+
+  {def.body && (
+    <div class="content-form__body-section">
+      <label class="content-form__label">Body</label>
+      <MarkdownEditor
+        name="body"
+        value={body}
+        imageDir={collection === 'writing' ? 'writing' : collection === 'projects' ? 'projects' : collection === 'fun' ? 'fun' : collection === 'agents' ? 'agents' : collection === 'books' ? 'books' : 'pages'}
+        slugHint={typeof data[def.slugFrom] === 'string' ? (data[def.slugFrom] as string) : ''}
+        draftKey={`cms-draft:${collection}:${slug ?? 'new'}`}
+      />
+    </div>
+  )}
+
+  <footer class="content-form__actions">
+    <button type="submit" class="content-form__save" data-form-save>Save changes</button>
+    <button type="button" class="content-form__delete" data-form-delete>Delete</button>
+    <a href={`/settings/${collection}`} class="content-form__cancel">Cancel</a>
+  </footer>
+</form>
+
+<script>
+  import { FORM_DEFINITIONS, setByPath, type CollectionId } from '../lib/content-form-config';
+
+  function pickValueFromInput(input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, type: string): unknown {
+    if (type === 'checkbox') return (input as HTMLInputElement).checked;
+    const raw = input.value;
+    if (type === 'number') {
+      if (raw === '') return undefined;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : raw;
+    }
+    if (type === 'date') {
+      return raw || undefined;
+    }
+    if (raw === '') return undefined;
+    return raw;
+  }
+
+  function setStatus(form: HTMLFormElement, message: string, kind: 'info' | 'error' | 'success' = 'info') {
+    const status = form.querySelector<HTMLElement>('[data-form-status]');
+    if (!status) return;
+    status.textContent = message;
+    status.dataset.kind = kind;
+  }
+
+  function clearFieldErrors(form: HTMLFormElement) {
+    form.querySelectorAll<HTMLElement>('[data-field-err]').forEach((el) => { el.textContent = ''; });
+    form.querySelectorAll<HTMLElement>('[data-field-row]').forEach((el) => el.classList.remove('content-form__field--error'));
+  }
+
+  function showFieldError(form: HTMLFormElement, name: string, message: string) {
+    const err = form.querySelector<HTMLElement>(`[data-field-err][data-for-field="${name}"]`);
+    if (err) err.textContent = message;
+    const row = form.querySelector<HTMLElement>(`[data-field-row][data-field-name="${name}"]`);
+    if (row) row.classList.add('content-form__field--error');
+  }
+
+  const ERROR_LABELS: Record<string, string> = {
+    required: 'Required.',
+    invalid_url: 'Not a valid URL.',
+    invalid_number: 'Must be a number.',
+  };
+
+  class ContentFormController {
+    private form: HTMLFormElement;
+    private collection: CollectionId;
+    private slug: string;
+    private redirectTo: string;
+    private hasBody: boolean;
+
+    constructor(form: HTMLFormElement) {
+      this.form = form;
+      this.collection = form.dataset.collection as CollectionId;
+      this.slug = form.dataset.slug || '';
+      this.redirectTo = form.dataset.redirect || `/settings/${this.collection}`;
+      this.hasBody = form.dataset.hasBody === 'true';
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.save();
+      });
+
+      const deleteBtn = form.querySelector<HTMLButtonElement>('[data-form-delete]');
+      deleteBtn?.addEventListener('click', () => this.delete());
+    }
+
+    private collectFrontmatter(): Record<string, unknown> {
+      const def = FORM_DEFINITIONS[this.collection];
+      const out: Record<string, unknown> = {};
+
+      for (const field of def.fields) {
+        let value: unknown;
+
+        if (field.type === 'tags') {
+          const hidden = this.form.querySelector<HTMLInputElement>(`input[type="hidden"][name="${field.name}"]`);
+          try { value = hidden ? JSON.parse(hidden.value) : []; } catch { value = []; }
+        } else if (field.type === 'image') {
+          const hidden = this.form.querySelector<HTMLInputElement>(`input[type="hidden"][name="${field.name}"]`);
+          value = hidden?.value || undefined;
+        } else {
+          const input = this.form.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+            `[data-field-input][data-field-name="${field.name}"]`,
+          );
+          if (!input) continue;
+          value = pickValueFromInput(input, field.type);
+        }
+
+        if (field.type === 'checkbox') {
+          setByPath(out, field.name, value === true);
+          continue;
+        }
+        if (value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+          continue;
+        }
+        setByPath(out, field.name, value);
+      }
+      return out;
+    }
+
+    private async save() {
+      clearFieldErrors(this.form);
+      setStatus(this.form, 'Saving…');
+      const saveBtn = this.form.querySelector<HTMLButtonElement>('[data-form-save]');
+      if (saveBtn) saveBtn.disabled = true;
+
+      const frontmatter = this.collectFrontmatter();
+      const bodyEl = this.hasBody
+        ? this.form.querySelector<HTMLTextAreaElement>('textarea[name="body"]')
+        : null;
+
+      const payload: Record<string, unknown> = {
+        collection: this.collection,
+        slug: this.slug,
+        frontmatter,
+      };
+      if (this.hasBody) payload.body = bodyEl?.value ?? '';
+
+      try {
+        const res = await fetch('/api/admin/content/save', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.ok) {
+          if (data?.error === 'validation_failed' && data.fields) {
+            setStatus(this.form, 'Fix the errors below and try again.', 'error');
+            for (const [name, code] of Object.entries(data.fields)) {
+              showFieldError(this.form, name, ERROR_LABELS[code as string] ?? String(code));
+            }
+          } else if (data?.error === 'not_found') {
+            setStatus(this.form, 'Entry no longer exists on GitHub. Was it deleted in another tab?', 'error');
+          } else if (data?.error === 'rate_limited') {
+            setStatus(this.form, 'Too many saves in a row. Wait a minute and try again.', 'error');
+          } else if (data?.error === 'github_not_configured') {
+            setStatus(this.form, 'GitHub isn\'t configured in this environment — saves are disabled.', 'error');
+          } else {
+            setStatus(this.form, `Save failed: ${data?.error ?? res.statusText}`, 'error');
+          }
+          if (saveBtn) saveBtn.disabled = false;
+          return;
+        }
+
+        // Clear the localStorage draft for this editor (if any)
+        this.form.dispatchEvent(new CustomEvent('md-editor-clear-draft', { bubbles: true }));
+
+        setStatus(this.form, 'Saved. Vercel will rebuild — change goes live in ~60s.', 'success');
+        if (saveBtn) saveBtn.disabled = false;
+      } catch (err) {
+        setStatus(this.form, 'Save failed (network).', 'error');
+        if (saveBtn) saveBtn.disabled = false;
+      }
+    }
+
+    private async delete() {
+      if (!this.slug) return;
+      const confirmed = confirm(
+        `Delete "${this.slug}" permanently? This commits a delete to GitHub and the entry disappears on the next build.`,
+      );
+      if (!confirmed) return;
+
+      setStatus(this.form, 'Deleting…');
+      try {
+        const res = await fetch('/api/admin/content/delete', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ collection: this.collection, slug: this.slug }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          setStatus(this.form, `Delete failed: ${data?.error ?? res.statusText}`, 'error');
+          return;
+        }
+        setStatus(this.form, 'Deleted. Redirecting…', 'success');
+        setTimeout(() => { window.location.href = this.redirectTo; }, 500);
+      } catch (err) {
+        setStatus(this.form, 'Delete failed (network).', 'error');
+      }
+    }
+  }
+
+  document.querySelectorAll<HTMLFormElement>('[data-content-form]').forEach((form) => new ContentFormController(form));
+</script>
+
+<style>
+  .content-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-5);
+  }
+  .content-form__status {
+    min-height: 18px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .content-form__status[data-kind="error"] { color: var(--accent); }
+  .content-form__status[data-kind="success"] { color: var(--ink); }
+  .content-form__fields {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--s-4);
+  }
+  @media (min-width: 720px) {
+    .content-form__fields { grid-template-columns: 1fr 1fr; gap: var(--s-4) var(--s-5); }
+    .content-form__field[data-field-type="textarea"],
+    .content-form__field[data-field-type="image"],
+    .content-form__field[data-field-type="tags"] { grid-column: span 2; }
+  }
+  .content-form__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  .content-form__label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-2);
+  }
+  .content-form__req {
+    color: var(--accent);
+    margin-left: 4px;
+  }
+  .content-form__input,
+  .content-form__select,
+  .content-form__textarea {
+    padding: 8px 10px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+    background: var(--bg-elev);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    width: 100%;
+  }
+  .content-form__input:focus,
+  .content-form__select:focus,
+  .content-form__textarea:focus {
+    outline: none;
+    border-color: var(--ink-2);
+  }
+  .content-form__input--narrow { max-width: 220px; }
+  .content-form__textarea {
+    min-height: 76px;
+    resize: vertical;
+    font-family: var(--font-serif);
+    line-height: 1.5;
+  }
+  .content-form__select {
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+                      linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+    background-position: calc(100% - 14px) 50%, calc(100% - 10px) 50%;
+    background-size: 4px 4px;
+    background-repeat: no-repeat;
+    padding-right: 28px;
+  }
+  .content-form__checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .content-form__checkbox input { accent-color: var(--accent); }
+  .content-form__help {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+  .content-form__err {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    min-height: 14px;
+  }
+  .content-form__err:empty { min-height: 0; }
+  .content-form__field--error .content-form__input,
+  .content-form__field--error .content-form__select,
+  .content-form__field--error .content-form__textarea {
+    border-color: var(--accent);
+  }
+
+  .content-form__body-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .content-form__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    padding-top: var(--s-4);
+    border-top: 1px solid var(--rule);
+    flex-wrap: wrap;
+  }
+  .content-form__save {
+    background: var(--ink);
+    color: var(--bg);
+    border: 1px solid var(--ink);
+    border-radius: var(--radius-pill);
+    padding: 7px 18px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 160ms ease;
+  }
+  .content-form__save:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
+  .content-form__save:disabled { opacity: 0.55; cursor: default; }
+  .content-form__delete {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-pill);
+    padding: 6px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease;
+  }
+  .content-form__delete:hover { color: var(--accent); border-color: var(--accent); }
+  .content-form__cancel {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 6px 10px;
+    transition: color 160ms ease;
+  }
+  .content-form__cancel:hover { color: var(--ink); }
+</style>

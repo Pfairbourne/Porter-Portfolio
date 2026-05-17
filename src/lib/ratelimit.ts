@@ -45,6 +45,20 @@ function getNotepadLimiter(): Ratelimit | null {
   return notepadLimiter;
 }
 
+let contentSaveLimiter: Ratelimit | null = null;
+function getContentSaveLimiter(): Ratelimit | null {
+  if (contentSaveLimiter) return contentSaveLimiter;
+  const r = getRedis();
+  if (!r) return null;
+  contentSaveLimiter = new Ratelimit({
+    redis: r,
+    limiter: Ratelimit.slidingWindow(30, '1 h'),
+    analytics: false,
+    prefix: 'porter:rl:content',
+  });
+  return contentSaveLimiter;
+}
+
 export function clientIp(request: Request): string {
   const fwd = request.headers.get('x-forwarded-for');
   if (fwd) return fwd.split(',')[0].trim();
@@ -67,6 +81,17 @@ export async function checkNotepadRateLimit(request: Request): Promise<{
   remaining: number;
 }> {
   const limiter = getNotepadLimiter();
+  if (!limiter) return { success: true, remaining: 999 };
+  const ip = clientIp(request);
+  const { success, remaining } = await limiter.limit(ip);
+  return { success, remaining };
+}
+
+export async function checkContentSaveRateLimit(request: Request): Promise<{
+  success: boolean;
+  remaining: number;
+}> {
+  const limiter = getContentSaveLimiter();
   if (!limiter) return { success: true, remaining: 999 };
   const ip = clientIp(request);
   const { success, remaining } = await limiter.limit(ip);

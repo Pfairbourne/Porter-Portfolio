@@ -1,0 +1,298 @@
+---
+interface Props {
+  /** Form field name for the markdown body. */
+  name: string;
+  /** Initial value. */
+  value?: string;
+  /** Subdir under public/images/ for inline image uploads. */
+  imageDir?: string;
+  /** Slug hint for filename generation when uploading inline images. */
+  slugHint?: string;
+  /** localStorage key (defaults to window pathname). */
+  draftKey?: string;
+}
+
+const {
+  name,
+  value = '',
+  imageDir = 'pages',
+  slugHint = '',
+  draftKey,
+} = Astro.props;
+---
+<div class="md-editor" data-md-editor data-image-dir={imageDir} data-slug-hint={slugHint} data-draft-key={draftKey ?? ''}>
+  <div class="md-editor__toolbar" role="toolbar" aria-label="Formatting">
+    <button type="button" data-md-action="bold" title="Bold (Cmd+B)"><strong>B</strong></button>
+    <button type="button" data-md-action="italic" title="Italic (Cmd+I)"><em>I</em></button>
+    <button type="button" data-md-action="h2" title="Heading 2">H2</button>
+    <button type="button" data-md-action="h3" title="Heading 3">H3</button>
+    <button type="button" data-md-action="link" title="Link">↗</button>
+    <button type="button" data-md-action="image" title="Image">🖼</button>
+    <button type="button" data-md-action="code" title="Code">{`<>`}</button>
+    <button type="button" data-md-action="list" title="Bullet list">•</button>
+    <button type="button" data-md-action="quote" title="Quote">"</button>
+    <span class="md-editor__spacer"></span>
+    <button type="button" data-md-toggle-preview title="Toggle preview" class="md-editor__toggle">Preview</button>
+  </div>
+
+  <div class="md-editor__panes">
+    <textarea
+      class="md-editor__textarea"
+      name={name}
+      data-md-textarea
+      spellcheck="true"
+      placeholder="Write in markdown…"
+    >{value}</textarea>
+    <div class="md-editor__preview prose" data-md-preview aria-live="off"></div>
+  </div>
+
+  <p class="md-editor__hint" data-md-hint>
+    Drafts auto-save locally as you type. Click Save (top of form) to commit.
+  </p>
+</div>
+
+<script>
+  import { marked } from 'marked';
+
+  marked.setOptions({ breaks: true, gfm: true });
+
+  function debounce<T extends (...args: any[]) => void>(fn: T, wait: number) {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    return (...args: Parameters<T>) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), wait);
+    };
+  }
+
+  class MarkdownEditorController {
+    constructor(root: HTMLElement) {
+      const textarea = root.querySelector<HTMLTextAreaElement>('[data-md-textarea]');
+      const preview = root.querySelector<HTMLElement>('[data-md-preview]');
+      const hint = root.querySelector<HTMLElement>('[data-md-hint]');
+      const toggleBtn = root.querySelector<HTMLButtonElement>('[data-md-toggle-preview]');
+      if (!textarea || !preview || !hint) return;
+
+      const draftKey = root.dataset.draftKey || `md-draft:${window.location.pathname}`;
+      const imageDir = root.dataset.imageDir || 'pages';
+      const slugHint = root.dataset.slugHint || '';
+
+      // Restore draft if present and newer than form value.
+      const saved = (() => {
+        try { return localStorage.getItem(draftKey); } catch { return null; }
+      })();
+      if (saved !== null && saved !== textarea.value) {
+        const useDraft = confirm('You have unsaved local edits for this entry. Restore them?');
+        if (useDraft) textarea.value = saved;
+        else try { localStorage.removeItem(draftKey); } catch {}
+      }
+
+      const renderPreview = () => {
+        const html = marked.parse(textarea.value) as string;
+        preview.innerHTML = html;
+      };
+      renderPreview();
+
+      const saveDraft = debounce(() => {
+        try {
+          localStorage.setItem(draftKey, textarea.value);
+          hint.textContent = `Draft saved locally at ${new Date().toLocaleTimeString()}.`;
+        } catch {}
+      }, 800);
+
+      textarea.addEventListener('input', () => {
+        renderPreview();
+        saveDraft();
+      });
+
+      // Tab inserts two spaces, never breaks focus.
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          textarea.value = textarea.value.slice(0, start) + '  ' + textarea.value.slice(end);
+          textarea.selectionStart = textarea.selectionEnd = start + 2;
+          textarea.dispatchEvent(new Event('input'));
+        }
+      });
+
+      // Toolbar actions
+      const wrap = (before: string, after: string) => {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const selected = textarea.value.slice(start, end);
+        const next = textarea.value.slice(0, start) + before + selected + after + textarea.value.slice(end);
+        textarea.value = next;
+        textarea.focus();
+        textarea.selectionStart = start + before.length;
+        textarea.selectionEnd = end + before.length;
+        textarea.dispatchEvent(new Event('input'));
+      };
+      const insertAtLineStart = (prefix: string) => {
+        const start = textarea.selectionStart;
+        const lineStart = textarea.value.lastIndexOf('\n', start - 1) + 1;
+        const next = textarea.value.slice(0, lineStart) + prefix + textarea.value.slice(lineStart);
+        textarea.value = next;
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + prefix.length;
+        textarea.dispatchEvent(new Event('input'));
+      };
+
+      root.querySelectorAll<HTMLButtonElement>('[data-md-action]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const action = btn.dataset.mdAction;
+          switch (action) {
+            case 'bold': wrap('**', '**'); break;
+            case 'italic': wrap('_', '_'); break;
+            case 'h2': insertAtLineStart('## '); break;
+            case 'h3': insertAtLineStart('### '); break;
+            case 'code': wrap('`', '`'); break;
+            case 'list': insertAtLineStart('- '); break;
+            case 'quote': insertAtLineStart('> '); break;
+            case 'link': {
+              const url = prompt('Link URL?');
+              if (url) wrap('[', `](${url})`);
+              break;
+            }
+            case 'image': triggerImageUpload(); break;
+          }
+        });
+      });
+
+      // Keyboard shortcuts
+      textarea.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+          e.preventDefault(); wrap('**', '**');
+        } else if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
+          e.preventDefault(); wrap('_', '_');
+        }
+      });
+
+      // Inline image upload — share the same /api/admin/upload-image endpoint.
+      const triggerImageUpload = () => {
+        const picker = document.createElement('input');
+        picker.type = 'file';
+        picker.accept = 'image/*';
+        picker.addEventListener('change', async () => {
+          const file = picker.files?.[0];
+          if (!file) return;
+          hint.textContent = 'Uploading image…';
+          const form = new FormData();
+          form.set('file', file);
+          form.set('dir', imageDir);
+          if (slugHint) form.set('name', slugHint);
+          try {
+            const res = await fetch('/api/admin/upload-image', { method: 'POST', body: form });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.ok) {
+              hint.textContent = `Upload failed: ${data?.error ?? res.statusText}`;
+              return;
+            }
+            const alt = file.name.replace(/\.[^.]+$/, '');
+            const md = `![${alt}](${data.url})`;
+            wrap(md, '');
+            hint.textContent = 'Image inserted. Live after the next build.';
+          } catch {
+            hint.textContent = 'Upload failed (network).';
+          }
+        });
+        picker.click();
+      };
+
+      // Toggle preview pane on small screens
+      toggleBtn?.addEventListener('click', () => {
+        root.classList.toggle('md-editor--preview-only');
+        toggleBtn.textContent = root.classList.contains('md-editor--preview-only') ? 'Edit' : 'Preview';
+      });
+
+      // Clear the draft when the form successfully submits
+      const form = root.closest('form');
+      form?.addEventListener('md-editor-clear-draft', () => {
+        try { localStorage.removeItem(draftKey); } catch {}
+      });
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-md-editor]').forEach((el) => new MarkdownEditorController(el));
+</script>
+
+<style>
+  .md-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+    background: var(--bg-elev);
+    overflow: hidden;
+  }
+  .md-editor__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--bg);
+    flex-wrap: wrap;
+  }
+  .md-editor__toolbar button {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    color: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    transition: background 160ms ease, color 160ms ease;
+  }
+  .md-editor__toolbar button:hover {
+    background: var(--accent-soft);
+    color: var(--ink);
+  }
+  .md-editor__spacer { flex: 1; }
+  .md-editor__toggle { display: none; }
+
+  .md-editor__panes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 360px;
+  }
+  .md-editor__textarea {
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    line-height: 1.55;
+    padding: 14px;
+    resize: vertical;
+    min-height: 360px;
+    border-right: 1px solid var(--rule);
+  }
+  .md-editor__preview {
+    padding: 14px 18px;
+    background: var(--bg);
+    overflow-y: auto;
+    min-height: 360px;
+  }
+  .md-editor__preview > *:first-child { margin-top: 0; }
+  .md-editor__hint {
+    margin: 0;
+    padding: 6px 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    border-top: 1px solid var(--rule);
+    background: var(--bg);
+  }
+
+  @media (max-width: 720px) {
+    .md-editor__toggle { display: inline-block; }
+    .md-editor__panes { grid-template-columns: 1fr; }
+    .md-editor__textarea { border-right: 0; border-bottom: 1px solid var(--rule); }
+    .md-editor--preview-only .md-editor__textarea { display: none; }
+    .md-editor:not(.md-editor--preview-only) .md-editor__preview { display: none; }
+  }
+</style>
