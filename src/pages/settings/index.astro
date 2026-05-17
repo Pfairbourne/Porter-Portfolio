@@ -41,10 +41,21 @@ const collectionCounts = await Promise.all(
     </form>
   </header>
 
-  <p class="t-italic-serif" style="max-width: var(--max-w-read); margin-bottom: var(--s-8);">
+  <p class="t-italic-serif" style="max-width: var(--max-w-read); margin-bottom: var(--s-6);">
     Edit the whole site without redeploying. Toggles are instant; content edits commit to GitHub and
     Vercel rebuilds (~60s).
   </p>
+
+  {import.meta.env.DEV && (
+    <div class="dev-sync" role="region" aria-label="Localhost sync">
+      <div class="dev-sync__text">
+        <span class="dev-sync__label">Localhost</span>
+        <span class="dev-sync__hint">CMS edits commit to <code>main</code> but localhost reads from disk. Pull when you want the local files to catch up.</span>
+      </div>
+      <button type="button" class="dev-sync__btn" data-sync-btn>Pull from main</button>
+      <span class="dev-sync__status" data-sync-status aria-live="polite"></span>
+    </div>
+  )}
 
   <section>
     <div class="section-label">Live now</div>
@@ -140,6 +151,37 @@ const collectionCounts = await Promise.all(
       </a>
     </div>
   </section>
+  <script is:inline>
+    (function () {
+      var btn = document.querySelector('[data-sync-btn]');
+      if (!btn) return;
+      var status = document.querySelector('[data-sync-status]');
+
+      btn.addEventListener('click', async function () {
+        btn.disabled = true;
+        if (status) { status.textContent = 'pulling…'; status.dataset.state = 'busy'; }
+        try {
+          var res = await fetch('/api/admin/sync', { method: 'POST' });
+          var data = await res.json().catch(function () { return {}; });
+          if (res.ok && data.ok) {
+            if (status) {
+              status.textContent = data.summary || 'pulled';
+              status.dataset.state = 'ok';
+            }
+          } else {
+            if (status) {
+              status.textContent = data.error ? 'failed: ' + data.error : 'failed';
+              status.dataset.state = 'err';
+            }
+          }
+        } catch (_) {
+          if (status) { status.textContent = 'failed (network)'; status.dataset.state = 'err'; }
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    })();
+  </script>
 </WindowLayout>
 
 <style>
@@ -157,6 +199,71 @@ const collectionCounts = await Promise.all(
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: var(--s-4);
   }
+
+  .dev-sync {
+    display: flex;
+    align-items: center;
+    gap: var(--s-4);
+    padding: var(--s-3) var(--s-4);
+    background: var(--bg-elev);
+    border: 1px dashed var(--rule);
+    border-radius: var(--radius-card);
+    margin-bottom: var(--s-6);
+    flex-wrap: wrap;
+  }
+  .dev-sync__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 280px;
+    min-width: 0;
+  }
+  .dev-sync__label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+  }
+  .dev-sync__hint {
+    font-size: 12.5px;
+    color: var(--ink-2);
+    line-height: 1.45;
+  }
+  .dev-sync__hint code {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    background: var(--bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .dev-sync__btn {
+    background: transparent;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-pill);
+    padding: 6px 14px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+  }
+  .dev-sync__btn:hover:not(:disabled) {
+    color: var(--bg);
+    background: var(--ink);
+    border-color: var(--ink);
+  }
+  .dev-sync__btn:disabled { opacity: 0.55; cursor: default; }
+  .dev-sync__status {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 60px;
+  }
+  .dev-sync__status[data-state="ok"]   { color: var(--ink); }
+  .dev-sync__status[data-state="err"]  { color: var(--accent); }
+  .dev-sync__status[data-state="busy"] { color: var(--muted); }
 
   .settings-card {
     display: flex;
