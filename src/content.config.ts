@@ -106,4 +106,12 @@ const headshots = defineCollection({
   }),
 });
 
-export const collections = { projects, fun, writing, agents, books, tracks, headshots };
+const pages = defineCollection({
+  loader: glob({ pattern: '**/*.md', base: './src/content/pages' }),
+  schema: z.object({
+    title: z.string(),
+    updated: z.coerce.date().optional(),
+  }),
+});
+
+export const collections = { projects, fun, writing, agents, books, tracks, headshots, pages };

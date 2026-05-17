@@ -2,9 +2,9 @@
 import WindowLayout from '../layouts/WindowLayout.astro';
 import { getEntry, render } from 'astro:content';
 
-const entry = await getEntry('pages', 'now');
+const entry = await getEntry('pages', 'stack');
 if (!entry) {
-  return new Response('Now page missing', { status: 500 });
+  return new Response('Stack page missing', { status: 500 });
 }
 const { Content } = await render(entry);
 const updatedAt = entry.data.updated;
@@ -13,13 +13,13 @@ const updatedLabel = updatedAt
   : null;
 ---
 <WindowLayout
-  title="Now — Porter Fairbourne"
-  description="What I'm focused on right now."
-  windowTitle="now.txt"
+  title={`${entry.data.title} — Porter Fairbourne`}
+  description="The tech stack and architecture behind this site."
+  windowTitle="stack.md"
   narrow
 >
     <header style="margin-bottom: var(--s-8);">
-      <div class="t-label" style="margin-bottom: var(--s-4);">Now</div>
+      <div class="t-label" style="margin-bottom: var(--s-4);">Colophon</div>
       <h1 class="t-h1">{entry.data.title}<span class="accent">.</span></h1>
       {updatedLabel && <p class="t-caption" style="margin-top: var(--s-4);">Last updated · {updatedLabel}</p>}
     </header>

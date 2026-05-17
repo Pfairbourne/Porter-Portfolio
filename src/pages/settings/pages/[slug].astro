@@ -1,0 +1,44 @@
+---
+import WindowLayout from '../../../layouts/WindowLayout.astro';
+import ContentForm from '../../../components/ContentForm.astro';
+import { getEntry } from 'astro:content';
+
+export const prerender = false;
+
+const VALID = new Set(['about', 'now', 'stack']);
+const slug = Astro.params.slug;
+if (typeof slug !== 'string' || !VALID.has(slug)) {
+  return Astro.redirect('/settings');
+}
+
+const entry = await getEntry('pages', slug);
+if (!entry) {
+  return new Response(`Page not found: ${slug}`, { status: 404 });
+}
+
+const data = entry.data as { title: string; updated?: Date };
+const body = (entry as any).body ?? '';
+const publicHref = `/${slug}`;
+---
+<WindowLayout
+  title={`Edit ${data.title} — Settings`}
+  description={`Edit the ${slug} page body.`}
+  windowTitle={`pages/${slug}.md`}
+  parent={{ href: '/settings', label: 'settings.app' }}
+>
+  <header style="margin-bottom: var(--s-6);">
+    <div class="t-label" style="margin-bottom: var(--s-3);">pages/{slug}.md</div>
+    <h1 class="t-h1">Edit {slug}<span class="accent">.</span></h1>
+    <p class="t-italic-serif" style="margin-top: var(--s-3); max-width: 50ch; color: var(--ink-2);">
+      The body markdown for <a class="link-subtle" href={publicHref}>{publicHref}</a>. Save commits
+      to GitHub and the change is live after the next build.
+    </p>
+  </header>
+
+  <ContentForm
+    collection="pages"
+    slug={slug}
+    entry={{ data, body }}
+    redirectTo="/settings"
+  />
+</WindowLayout>
