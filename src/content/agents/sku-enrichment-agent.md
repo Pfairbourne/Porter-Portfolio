@@ -3,7 +3,7 @@ title: SKU Enrichment Agent
 year: 2026
 summary: >-
   Enriches a single product SKU into a structured JSON record with merged attributes, weighted
-  confidence scores, and a full evidence trail — designed to run in parallel across an entire
+  confidence scores, and a full evidence trail, designed to run in parallel across an entire
   catalog.
 tags:
   - MindStudio
@@ -16,6 +16,7 @@ tags:
   - API / Webhook
 link: https://app.mindstudio.ai/agents/sku-enrichment-agent-0bacfd03
 hero: /images/agents/sku-enrichment-agent.png
+heroCaption: "Main flow — discovery, scraping, extraction, weighted merge. Runs in parallel for every SKU."
 order: 10
 draft: false
 ---
@@ -45,7 +46,7 @@ Handle) resolved end-to-end in 89 seconds for $0.03.
 
 ## Challenges it solves
 
-**LLM hallucination on URLs.** Discovery is deterministic — Google
+**LLM hallucination on URLs.** Discovery is deterministic. Google
 Search finds real vendor PDPs, retailer pages, and spec PDFs. LLMs
 only classify which of the returned results is which type. They
 never guess a URL.
@@ -58,38 +59,25 @@ candidate source.
 **Conflicting sources.** Vendor PDPs, retailer listings, and PDF
 spec sheets disagree constantly on basic facts. A weighted merge
 resolves conflicts by source authority and per-attribute
-confidence — the highest-weighted confident value wins, and the
+confidence, the highest-weighted confident value wins, and the
 losing values are kept in the evidence log.
 
 **Cost at catalog scale.** Heavy lifting (HTML cleaning, content
 assembly, output formatting) runs in JavaScript. LLMs only do the
-work LLMs are good at — classification and structured extraction.
+work LLMs are good at: classification and structured extraction.
 Net cost: $0.03 per SKU.
 
 **Catalog-scale orchestration.** No internal loops. Each invocation
-processes exactly one SKU, so the agent is trivially parallel — fan
+processes exactly one SKU, so the agent is trivially parallel. Fan
 it out from Make.com, Zapier, the MindStudio NPM package, or a raw
 webhook POST.
 
 ## Under the hood
 
-Two workflows — `Entry Flow.flow` flattens incoming product data and
-hands off to `Main.flow`, which runs the four phases: discovery
-(primary + three fallback Google queries), scraping (up to three
-sources), per-source attribute extraction, and weighted merge into
-the final assembly.
+`Main.flow` runs four phases: discovery (primary + three fallback
+Google queries), scraping (up to three sources), per-source
+attribute extraction, and weighted merge into the final assembly.
 
 Four models, picked per job: GPT-4o Mini classifies search results,
 Gemini 2.5 Pro reads PDFs, Claude 4.5 Haiku handles cleaning, Claude
 4.6 Sonnet does the structured extraction.
-
-
-## Workflows
-
-![Entry Flow — flattens incoming product data and hands off to Main](/images/agents/sku-enrichment-agent/sku-enrichment-entry-flow.png)
-
-*Entry Flow — flattens incoming product data and hands off to Main*
-
-![Main Flow — discovery, scraping, extraction, weighted merge](/images/agents/sku-enrichment-agent/sku-enrichment-main-flow.png)
-
-*Main Flow — discovery, scraping, extraction, weighted merge*

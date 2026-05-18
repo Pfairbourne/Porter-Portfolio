@@ -3,7 +3,7 @@ title: Website Roaster
 year: 2025
 summary: >-
   Feed it a URL. It crawls the homepage and subpages, then comes back with a Gordon Ramsay–grade
-  roast of the site — brutally honest, properly funny, but also the kind of critique you'd actually
+  roast of the site: brutally honest, properly funny, but also the kind of critique you'd actually
   act on.
 tags:
   - MindStudio
@@ -20,7 +20,7 @@ draft: false
 ## End of run
 
 A roast of the site that's mean, accurate, and useful in that
-order. Critique that actually sticks because it's funny — the
+order. Critique that actually sticks because it's funny, the
 kind a designer screenshots and pins above their monitor instead
 of skimming and ignoring like every other "audit report."
 

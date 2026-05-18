@@ -3,7 +3,7 @@ title: Product Image Compliance Editor
 year: 2025
 summary: >-
   Takes a messy supplier product photo plus a retailer's image specs and returns a fully
-  retailer-compliant image — background swapped, dimensions fixed, lifestyle context generated,
+  retailer-compliant image: background swapped, dimensions fixed, lifestyle context generated,
   compliance checklist verified.
 tags:
   - MindStudio
@@ -20,8 +20,8 @@ draft: false
 
 ## End of run
 
-A product image that actually passes the retailer's intake review
-— correct background (pure white or generated lifestyle scene),
+A product image that actually passes the retailer's intake review:
+correct background (pure white or generated lifestyle scene),
 correct dimensions, correct format, free of low-resolution flags
 and demographic-rule violations, with the original product
 untouched in the center of the frame. Ready to upload to the
@@ -39,7 +39,7 @@ specific demographic. Specific aspect ratio. Specific format. The
 agent collects requirements as input and routes through a
 `Validation Router` that catches contradictions, conflicting
 requirements, and demographic-rule violations before generation
-even starts — so you don't pay for a render that was always going
+even starts, so you don't pay for a render that was always going
 to fail QA.
 
 **Source images are not retailer-grade.** Vendor product photos

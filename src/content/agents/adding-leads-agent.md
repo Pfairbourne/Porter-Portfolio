@@ -3,7 +3,7 @@ title: Adding Leads Agent
 year: 2026
 summary: >-
   Run-on-demand prospector that turns an ICP into a fresh batch of qualified, deduped leads pulled
-  live from Apollo, cross-checked against the CRM, and reasoned over by Claude Opus — ready to drop
+  live from Apollo, cross-checked against the CRM, and reasoned over by Claude Opus, ready to drop
   straight into outbound.
 tags:
   - MindStudio
@@ -15,15 +15,16 @@ tags:
   - ICP Matching
 link: https://app.mindstudio.ai/agents/adding-leads-agent-0270d253
 hero: /images/agents/adding-leads-agent.png
+heroCaption: "Main flow — blocklist, ICP routing, Apollo search, CRM dedupe, Opus qualification."
 order: 40
 draft: false
 ---
 
 ## End of run
 
-A payload of fresh, ICP-matched B2B leads — never previously
+A payload of fresh, ICP-matched B2B leads, never previously
 contacted, filtered against the live CRM, scored and rationalized
-by Claude Opus — handed back to the caller in ~45 seconds, ready
+by Claude Opus, handed back to the caller in ~45 seconds, ready
 to drop straight into the outbound queue.
 
 The run names from history tell the story of how it actually gets
@@ -32,7 +33,7 @@ Distribution Leaders US Canada Search," "Plumbing HVAC Leaders
 Search," "Electrical Distribution Leaders." One agent, many
 verticals, one ICP at a time.
 
-332 runs in production at $0.82 each — Opus isn't cheap, but Opus
+332 runs in production at $0.82 each. Opus isn't cheap, but Opus
 is what makes the qualification reasoning hold up.
 
 ## Challenges it solves
@@ -45,11 +46,11 @@ customer-profile definition before anything ships back.
 **Never re-contact a lead.** Before search, the agent fetches the
 blocklist of already-contacted prospects and queries the SQL
 database of existing CRM records. Apollo results get filtered
-against both — by the time Claude scores anything, the duplicates
+against both, so by the time Claude scores anything, the duplicates
 are already gone.
 
 **Handle empty searches gracefully.** Run history is dotted with
-"Search Returned Zero" and "Search Returned Empty" results — the
+"Search Returned Zero" and "Search Returned Empty" results. The
 agent doesn't error out when Apollo has no matches; it returns a
 clean "no new leads for this ICP" response so the caller can
 rotate to the next vertical.
