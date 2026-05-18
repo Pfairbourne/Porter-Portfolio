@@ -15,7 +15,6 @@ tags:
   - Scheduled Automation
 link: https://app.mindstudio.ai/agents/the-email-campain-sender-and-marker-offical-0b36faa9
 hero: /images/agents/cold-email-agent.png
-heroCaption: "Main flow: fetch leads, categorize by owner, bucket per sender, dispatch BuildEmail + SendEmail subflows, write status back."
 order: 20
 draft: false
 ---
@@ -47,7 +46,7 @@ held up.
 **Two senders, one pipeline.** Leads are owned by one of two
 senders. Each run categorizes leads by owner, fetches the
 matching OAuth token, and sends from that identity, same
-playbook, two voices, zero crossed wires.
+playbook, two voices, zero crossed wires. This can scale up to over 100+ senders. 
 
 **Per-lead personalization without a research analyst.**
 `BuildEmail.flow` extracts the company from each lead, runs a
