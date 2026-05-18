@@ -359,6 +359,191 @@ pre code {
 }
 
 /* ──────────────────────────────────────────
+   AGENT DETAIL PAGES
+   Workflow screenshots run edge-to-edge of the window card on the
+   /agents/<slug> detail pages. Text in the prose body keeps its
+   720px reading column; only image-wrapping paragraphs break out.
+   These styles live in the global stylesheet because the desktop
+   modal injects only `.window__content.innerHTML`, dropping any
+   page-scoped `<style is:global>` blocks.
+   ────────────────────────────────────────── */
+.agent-page__media,
+.agent-page__prose > p:has(> img),
+.agent-page__prose > p:has(> em:only-child) {
+  width: calc(100% + var(--s-7) * 2);
+  margin-left: calc(var(--s-7) * -1);
+  margin-right: calc(var(--s-7) * -1);
+  max-width: none;
+}
+.agent-page__prose {
+  max-width: none;
+  font-size: 17px;
+  line-height: 1.65;
+}
+.agent-page__prose > p,
+.agent-page__prose > h2,
+.agent-page__prose > h3,
+.agent-page__prose > ul,
+.agent-page__prose > ol,
+.agent-page__prose > blockquote,
+.agent-page__prose > hr {
+  max-width: none;
+}
+.agent-page__prose > p:has(> img),
+.agent-page__prose > p:has(> em:only-child) { max-width: none; }
+.agent-page__prose > p > img {
+  width: 100%;
+  display: block;
+  margin: 0;
+}
+.agent-page__media .img-frame,
+.agent-page__prose img {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+}
+/* Agent workflow heroes are wide flow diagrams; let them render at their
+   natural aspect ratio so the sides don't get cropped by ImgFrame's
+   default 16/10 cover crop. */
+.agent-page__media .img-frame {
+  aspect-ratio: auto;
+  height: auto;
+  display: block;
+}
+.agent-page__media .img-frame img {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+.agent-page__media { margin-top: 0; margin-bottom: 0; }
+.agent-page__caption,
+.agent-page__prose > p > em:only-child {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--ink);
+  text-align: center;
+  margin: var(--s-6) 0 var(--s-3);
+  padding: 0 var(--s-5);
+  max-width: none;
+  letter-spacing: 0.01em;
+}
+@media (max-width: 720px) {
+  .agent-page__media,
+  .agent-page__prose > p:has(> img) {
+    width: calc(100% + var(--s-4) * 2);
+    margin-left: calc(var(--s-4) * -1);
+    margin-right: calc(var(--s-4) * -1);
+  }
+}
+
+/* ──────────────────────────────────────────
+   LINK PREVIEW CARD
+   Rendered by src/components/LinkPreview.astro. Lives here (not in the
+   component) because the desktop modal injects only `.window__content.innerHTML`
+   and drops any page <head> styles, including Astro's component-scoped ones.
+   ────────────────────────────────────────── */
+.link-preview {
+  display: flex;
+  flex-direction: row;
+  gap: var(--s-5);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-card);
+  background: var(--bg-elev);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
+}
+.link-preview:hover {
+  border-color: var(--ink-2);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 12px -4px rgba(22, 21, 19, 0.08);
+}
+/* Static variant: no URL, render as plain card without hover affordance. */
+.link-preview--static { cursor: default; }
+.link-preview--static:hover {
+  border-color: var(--rule);
+  transform: none;
+  box-shadow: none;
+}
+.link-preview__media {
+  flex: 0 0 38%;
+  max-width: 320px;
+  aspect-ratio: 16 / 10;
+  background: var(--bg);
+  border-right: 1px solid var(--rule);
+  overflow: hidden;
+}
+.link-preview__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.link-preview__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: var(--s-5);
+  min-width: 0;
+}
+.link-preview__kicker {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+.link-preview__title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  line-height: 1.22;
+  color: var(--ink);
+  margin: 0;
+}
+.link-preview__desc {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.link-preview__cite {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.link-preview__arrow {
+  color: var(--muted);
+  transition: color 200ms ease, transform 200ms ease;
+}
+.link-preview:hover .link-preview__arrow {
+  color: var(--accent);
+  transform: translate(2px, -2px);
+}
+@media (max-width: 600px) {
+  .link-preview { flex-direction: column; }
+  .link-preview__media {
+    flex: none;
+    max-width: none;
+    width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+}
+
+/* ──────────────────────────────────────────
    UTILITIES
    ────────────────────────────────────────── */
 .stack-1 > * + * { margin-top: var(--s-1); }

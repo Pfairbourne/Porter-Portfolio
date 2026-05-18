@@ -1,0 +1,56 @@
+---
+/**
+ * Link-preview card — used on agent detail pages to surface a real
+ * artifact the agent produced (e.g. a live blog post or an SMS). Renders
+ * title + description + cite, with an optional screenshot thumbnail.
+ *
+ * If `url` is provided, the whole card is a link to that URL. If not,
+ * the card renders as a static <div> — useful for outputs that aren't
+ * public (SMS, Slack, internal). The `kicker` line still shows in either
+ * case to label the artifact.
+ */
+interface Props {
+  url?: string;
+  title: string;
+  description?: string;
+  image?: string;
+  kicker?: string;
+}
+
+const { url, title, description, image, kicker } = Astro.props;
+
+const cite = (() => {
+  if (!url) return null;
+  try {
+    return new URL(url).host.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+})();
+
+const Tag = url ? 'a' : 'div';
+const tagProps = url
+  ? { href: url, target: '_blank', rel: 'noopener noreferrer' }
+  : {};
+---
+<Tag class:list={['link-preview', !url && 'link-preview--static']} {...tagProps}>
+  {image && (
+    <div class="link-preview__media">
+      <img src={image} alt="" loading="lazy" />
+    </div>
+  )}
+  <div class="link-preview__body">
+    {kicker && <div class="link-preview__kicker">{kicker}</div>}
+    <div class="link-preview__title">{title}</div>
+    {description && <p class="link-preview__desc">{description}</p>}
+    {cite && (
+      <div class="link-preview__cite">
+        <span class="link-preview__host">{cite}</span>
+        <span class="link-preview__arrow" aria-hidden="true">↗</span>
+      </div>
+    )}
+  </div>
+</Tag>
+
+<!-- Styles live in src/styles/global.css under "LINK PREVIEW CARD" so they
+     survive injection into the desktop modal, which strips the page <head>. -->

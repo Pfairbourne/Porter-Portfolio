@@ -62,6 +62,21 @@ const agents = defineCollection({
     tags: z.array(z.string()).default([]),
     link: z.string().url().optional(),
     hero: z.string().optional(),
+    /** One-line caption rendered under the hero image on the detail page. */
+    heroCaption: z.string().optional(),
+    /** Optional preview card for a real artifact the agent produced. */
+    exampleOutput: z
+      .object({
+        /** Optional URL — omit for outputs that aren't public (SMS, Slack, etc.). */
+        url: z.string().url().optional(),
+        title: z.string(),
+        description: z.string().optional(),
+        /** Optional screenshot path (e.g. /images/agents/<slug>/example.png). */
+        image: z.string().optional(),
+        /** Short label rendered above the card (e.g. "live yoodlize.com post"). */
+        kicker: z.string().optional(),
+      })
+      .optional(),
     order: z.number().default(0),
     draft: z.boolean().default(false),
   }),
