@@ -1,0 +1,48 @@
+---
+import WindowLayout from '../layouts/WindowLayout.astro';
+import { getCollection } from 'astro:content';
+
+const movies = (await getCollection('movies', ({ data }) => !data.draft))
+  .map((m) => m.data)
+  .sort((a, b) => a.order - b.order);
+
+const metaLine = (m: { director?: string; year?: number }) =>
+  [m.director, m.year].filter(Boolean).join(' · ');
+---
+<WindowLayout
+  title="Movies — Porter Fairbourne"
+  description="A few films I keep coming back to, and what I take from each."
+  windowTitle="movies.app"
+>
+  <section style="margin-bottom: var(--s-6);">
+    <div class="t-label" style="margin-bottom: var(--s-3);">Off the clock</div>
+    <h1 class="t-h1">Movies I love<span class="accent">.</span></h1>
+    <p class="t-italic-serif" style="margin-top: var(--s-4); max-width: var(--max-w-read);">
+      A handful of films I keep coming back to.
+    </p>
+  </section>
+
+  {movies.length === 0 ? (
+    <p class="t-small" style="color: var(--muted); padding: var(--s-5) 0;">
+      No movies yet. Add markdown files to <code>src/content/movies/</code> — each needs a
+      <code>title</code> and a <code>reaction</code> (your short take). Optional:
+      <code>director</code>, <code>year</code>, <code>poster</code>, and a <code>quote</code>.
+    </p>
+  ) : (
+    <div class="fav-list">
+      {movies.map((m) => (
+        <article class="fav">
+          {m.poster && (
+            <img class="fav__cover" src={m.poster} alt={`Poster for ${m.title}`} loading="lazy" />
+          )}
+          <div class="fav__body">
+            <h3 class="fav__title">{m.title}</h3>
+            {metaLine(m) && <p class="fav__author">{metaLine(m)}</p>}
+            {m.reaction && <p class="fav__reason">{m.reaction}</p>}
+            {m.quote && <p class="fav__quote">{m.quote}</p>}
+          </div>
+        </article>
+      ))}
+    </div>
+  )}
+</WindowLayout>

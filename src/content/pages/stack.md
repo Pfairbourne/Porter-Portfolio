@@ -34,7 +34,7 @@ The exception is `/settings/*` — that's a real app, navigated normally, not st
 
 ## Content collections
 
-All the structured content lives in `src/content/<collection>/<slug>.md` (or `.json` for tracks and headshots). The collections are defined in `src/content.config.ts` with [Zod](https://zod.dev) schemas — adding a new field means updating one Zod object and the matching form definition in `src/lib/content-form-config.ts`.
+All the structured content lives in `src/content/<collection>/<slug>.md` (or `.json` for headshots). The collections are defined in `src/content.config.ts` with [Zod](https://zod.dev) schemas — adding a new field means updating one Zod object and the matching form definition in `src/lib/content-form-config.ts`.
 
 The eight collections today:
 
@@ -43,7 +43,7 @@ The eight collections today:
 - `agents/` — MindStudio agents and automations
 - `writing/` — posts and notes
 - `books/` — reading list
-- `tracks/` — top Spotify tracks shown on the Music app
+- `movies/` — favorite films shown on the Movies app
 - `headshots/` — portraits used on the Photos app
 - `pages/` — long-form bodies for About, Now, and this Stack page
 
@@ -57,7 +57,6 @@ The admin surfaces split cleanly into "instant" and "rebuild required":
 - Show/hide any icon on the desktop or dock
 - Rename any icon ("selected-work" → "Case Studies")
 - Edit the "Busy Building" status next to my name in the menu bar
-- Browse and delete notes left via the Notepad
 
 These hit Redis directly, take effect on the next request, and don't trigger a build.
 

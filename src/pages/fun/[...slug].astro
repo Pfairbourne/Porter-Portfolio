@@ -1,0 +1,92 @@
+---
+import { getCollection, render } from 'astro:content';
+import WindowLayout from '../../layouts/WindowLayout.astro';
+import Tag from '../../components/Tag.astro';
+import ImgFrame from '../../components/ImgFrame.astro';
+
+export async function getStaticPaths() {
+  const tools = (await getCollection('fun', ({ data }) => !data.draft))
+    .sort((a, b) => {
+      const yearDiff = b.data.year - a.data.year;
+      if (yearDiff !== 0) return yearDiff;
+      return (a.data.order ?? 0) - (b.data.order ?? 0);
+    });
+
+  return tools.map((entry, i) => ({
+    params: { slug: entry.id },
+    props: {
+      entry,
+      prev: i > 0 ? { slug: tools[i - 1].id, title: tools[i - 1].data.title } : null,
+      next: i < tools.length - 1
+        ? { slug: tools[i + 1].id, title: tools[i + 1].data.title }
+        : null,
+    },
+  }));
+}
+
+const { entry, prev, next } = Astro.props;
+const { Content } = await render(entry);
+const data = entry.data;
+---
+<WindowLayout
+  title={`${data.title} — Porter Fairbourne`}
+  description={data.summary}
+  windowTitle={`${entry.id}.md`}
+  parent={{ href: '/fun', label: 'internal-tools' }}
+>
+  <div class="agent-page">
+    <header class="stack-5" style="margin-bottom: var(--s-8);">
+      <div class="t-label">{data.title.toUpperCase()}</div>
+      <h1 class="t-h1">{data.title}<span class="accent">.</span></h1>
+      <p class="t-italic-serif" style="max-width: var(--max-w-read);">{data.summary}</p>
+      <div class="meta-row">
+        <span>{data.year}</span>
+        <span>Built with Claude Code</span>
+      </div>
+      {data.tags.length > 0 && (
+        <div class="project-tags">
+          {data.tags.map((t) => <Tag label={t} />)}
+        </div>
+      )}
+    </header>
+
+    {data.hero && (
+      <figure class="agent-page__media">
+        <ImgFrame src={data.hero} alt={`${data.title} hero`} placeholder={`${data.title} · screenshot`} />
+      </figure>
+    )}
+
+    <div class="prose agent-page__prose" style={data.hero ? 'margin-top: var(--s-8);' : ''}>
+      <Content />
+    </div>
+
+    {data.link && (
+      <div style="margin-top: var(--s-8); display: flex; gap: var(--s-3); flex-wrap: wrap;">
+        <a class="btn btn-solid" href={data.link} target="_blank" rel="noopener noreferrer">
+          View source →
+        </a>
+      </div>
+    )}
+
+    {(prev || next) && (
+      <nav class="case-nav" aria-label="Tool navigation">
+        <div class="case-nav__cell">
+          {prev && (
+            <>
+              <span class="t-label">← Previous</span>
+              <a href={`/fun/${prev.slug}`}>{prev.title}</a>
+            </>
+          )}
+        </div>
+        <div class="case-nav__cell case-nav__cell--end">
+          {next && (
+            <>
+              <span class="t-label">Next →</span>
+              <a href={`/fun/${next.slug}`}>{next.title}</a>
+            </>
+          )}
+        </div>
+      </nav>
+    )}
+  </div>
+</WindowLayout>

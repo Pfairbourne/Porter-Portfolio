@@ -1,10 +1,7 @@
 ---
 title: Daily Intelligence Brief
 year: 2026
-summary: >-
-  Every morning at 9am, my phone buzzes with an SMS digest of the prior day's competitor moves, M&A
-  activity, market shifts, and policy news, filtered to what actually matters for a target vertical,
-  with memory so it never repeats yesterday's brief.
+summary: "A 9am SMS with yesterday's market/competitor moves, be informed on what actually matters for your business."
 tags:
   - MindStudio
   - Claude
@@ -16,6 +13,7 @@ tags:
   - Stateful Memory
 link: https://app.mindstudio.ai/agents/ember-intelligence-brief-569989af
 hero: /images/agents/daily-intelligence-brief.png
+icon: bell
 heroCaption: "Daily flow: load memory, fan out five parallel news searches, deep-research, generate brief, send SMS, post to Slack, write back."
 order: 70
 draft: false

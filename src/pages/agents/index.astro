@@ -2,6 +2,7 @@
 import WindowLayout from '../../layouts/WindowLayout.astro';
 import SectionLabel from '../../components/SectionLabel.astro';
 import Tag from '../../components/Tag.astro';
+import AgentGlyph from '../../components/AgentGlyph.astro';
 import { getCollection } from 'astro:content';
 
 // Newest first (by year); within a year, lower `order` wins. Year is used for
@@ -14,15 +15,15 @@ const agents = (await getCollection('agents', ({ data }) => !data.draft))
   });
 ---
 <WindowLayout
-  title="MindStudio Agents — Porter Fairbourne"
+  title="AI Agents — Porter Fairbourne"
   description="Agents and automations Porter Fairbourne has built with MindStudio."
-  windowTitle="mindstudio-agents"
+  windowTitle="ai-agents"
 >
   <section class="hero">
-    <div class="t-label" style="margin-bottom: var(--s-4);">MindStudio Agents</div>
+    <div class="t-label" style="margin-bottom: var(--s-4);">AI Agents</div>
     <h1 class="t-h1">Agents I've built<span class="accent">.</span></h1>
     <p class="ethos">
-      Multi-agent systems, orchestrations, and tooling shipped with MindStudio — for Ember, for clients, and for fun.
+      Multi-agent systems, orchestrations, and tooling.
     </p>
   </section>
 
@@ -35,8 +36,18 @@ const agents = (await getCollection('agents', ({ data }) => !data.draft))
         </p>
       ) : (
         agents.map((a) => (
-          <a class="project-card" href={`/agents/${a.id}`}>
-            <div class="project-card-row" style="grid-template-columns: 1fr auto;">
+          <a
+            class:list={[
+              'project-card',
+              'project-card--agent',
+              a.data.icon && 'project-card--with-glyph',
+            ]}
+            href={`/agents/${a.id}`}
+          >
+            <div class="project-card-row">
+              {a.data.icon && (
+                <AgentGlyph icon={a.data.icon} uid={a.id} class="agent-glyph" />
+              )}
               <div class="project-body">
                 <div class="project-title">{a.data.title}</div>
                 <div class="project-desc">{a.data.summary}</div>

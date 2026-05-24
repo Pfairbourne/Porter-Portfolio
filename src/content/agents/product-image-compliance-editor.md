@@ -1,10 +1,7 @@
 ---
 title: Product Image Compliance Editor
 year: 2025
-summary: >-
-  Takes a messy supplier product photo plus a retailer's image specs and returns a fully
-  retailer-compliant image: background swapped, dimensions fixed, lifestyle context generated,
-  compliance checklist verified.
+summary: "Turns a messy supplier photo into a retailer-compliant product image."
 tags:
   - MindStudio
   - Claude
@@ -14,6 +11,7 @@ tags:
   - E-commerce
 link: https://app.mindstudio.ai/agents/product-image-compliance-editor-2ba8fc4b
 hero: /images/agents/product-image-compliance-editor.png
+icon: frame
 order: 100
 draft: false
 ---

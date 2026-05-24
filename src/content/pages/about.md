@@ -1,13 +1,17 @@
 ---
 title: About
-updated: 2026-05-16
+updated: 2026-05-23
 ---
+
+## What I'm looking for next
+
+*More to come.*
 
 ## What I do
 
 I lead product at **Ember**, an AI-native PIM platform automating SKU onboarding and chargeback prevention for industrial supply chains. The short version: distributors and manufacturers have product data scattered across spreadsheets, supplier portals, and customer-specific formats. We turn that mess into clean, customer-ready data — fast.
 
-Before Ember, I [REPLACE WITH PRIOR ROLES]. I've spent most of my career at the intersection of product, sales, and operations — usually somewhere small enough that the lines between those don't matter.
+I've spent most of my career at the intersection of product, sales, and operations — usually somewhere small enough that the lines between those don't matter.
 
 ## How I work
 
@@ -24,4 +28,4 @@ I'm allergic to process for its own sake. If a tool, ritual, or doc isn't earnin
 
 ## Outside of work
 
-[REPLACE WITH PERSONAL DETAILS — hobbies, interests, family, the Mac mini under your desk running 12 agents, etc.]
+*More to come.*

@@ -1,10 +1,7 @@
 ---
 title: Market Sizing Pro
 year: 2025
-summary: >-
-  Hand it a company. Out comes a defensible TAM/SAM/SOM analysis with executive summary, transparent
-  methodology, and source attribution, pulled from live web research instead of a stale industry
-  report.
+summary: "Hand it a company, get a defensible TAM/SAM/SOM with live sources."
 tags:
   - MindStudio
   - Claude
@@ -15,6 +12,7 @@ tags:
   - Executive Summary
 link: https://app.mindstudio.ai/agents/market-sizing-pro-6af52609
 hero: /images/agents/market-sizing-pro.png
+icon: bar-chart
 heroCaption: "Main flow: collect, scrape, analyze, generate search queries, find + scrape sources, calculate TAM/SAM/SOM, write summary."
 order: 80
 draft: false

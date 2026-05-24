@@ -1,10 +1,7 @@
 ---
 title: SKU Enrichment Agent
 year: 2026
-summary: >-
-  Enriches a single product SKU into a structured JSON record with merged attributes, weighted
-  confidence scores, and a full evidence trail, designed to run in parallel across an entire
-  catalog.
+summary: "Enriches one SKU into structured JSON with confidence scores and sources."
 tags:
   - MindStudio
   - Claude
@@ -16,6 +13,7 @@ tags:
   - API / Webhook
 link: https://app.mindstudio.ai/agents/sku-enrichment-agent-0bacfd03
 hero: /images/agents/sku-enrichment-agent.png
+icon: tag
 heroCaption: "Main flow — discovery, scraping, extraction, weighted merge. Runs in parallel for every SKU."
 order: 10
 draft: false

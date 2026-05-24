@@ -152,18 +152,22 @@ export const FORM_DEFINITIONS: Record<string, CollectionFormDefinition> = {
     ],
   },
 
-  tracks: {
-    label: 'Top tracks',
-    description: 'Spotify embeds shown on the Music app.',
+  movies: {
+    label: 'Favorite movies',
+    description: 'Films I love, shown on the Movies app.',
     body: false,
-    extension: 'json',
-    slugFrom: 'spotifyTrackId',
+    extension: 'md',
+    slugFrom: 'title',
+    hasDraftField: true,
     fields: [
-      { name: 'spotifyTrackId', label: 'Spotify track ID', type: 'text', required: true, help: 'The last segment of any Spotify track URL.' },
-      { name: 'title', label: 'Track title', type: 'text', required: true },
-      { name: 'artist', label: 'Artist', type: 'text', required: true },
-      { name: 'note', label: 'Note', type: 'textarea', help: 'Why this track? (optional)' },
-      { name: 'order', label: 'Order', type: 'number', default: 0 },
+      { name: 'title', label: 'Title', type: 'text', required: true },
+      { name: 'director', label: 'Director', type: 'text' },
+      { name: 'year', label: 'Year', type: 'number' },
+      { name: 'poster', label: 'Poster image', type: 'image', dir: 'movies' },
+      { name: 'reaction', label: 'Why I love it', type: 'textarea', help: 'Your short analysis — a sentence or three.' },
+      { name: 'quote', label: 'Favorite line', type: 'text', help: 'A memorable line, rendered as a pull-quote (optional).' },
+      { name: 'order', label: 'Order', type: 'number', default: 0, help: 'Lower numbers appear first.' },
+      { name: 'draft', label: 'Draft', type: 'checkbox', default: false },
     ],
   },
 

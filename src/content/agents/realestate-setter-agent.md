@@ -1,11 +1,7 @@
 ---
 title: Realestate Setter Agent
 year: 2026
-summary: >-
-  A Realtor that lives on Facebook Marketplace. Every scheduled run finds 5 new for-sale-by-owner
-  listings in a target market, sends each homeowner a personalized outreach message, and writes
-  the result back so future runs never double-message a seller. Powered by Skyvern under the
-  hood, same browser profile every time, no CAPTCHAs, no bans.
+summary: "Finds for-sale-by-owner listings on Facebook Marketplace and DMs the homeowners."
 tags:
   - MindStudio
   - Skyvern
@@ -17,6 +13,7 @@ tags:
   - Real Estate
 link: https://app.mindstudio.ai/agents/realestate_setter_agent-cb755f96
 hero: /images/agents/realestate-setter-agent.png
+icon: house
 heroCaption: "Main flow — read targets + history, build payload, dispatch Skyvern, poll, parse, write back."
 order: 30
 draft: false

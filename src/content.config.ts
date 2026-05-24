@@ -1,5 +1,6 @@
 import { defineCollection, z } from 'astro:content';
 import { glob } from 'astro/loaders';
+import { ICON_NAMES } from './lib/agent-icons';
 
 const projects = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/projects' }),
@@ -37,18 +38,9 @@ const fun = defineCollection({
     tags: z.array(z.string()).default([]),
     link: z.string().url().optional(),
     hero: z.string().optional(),
+    /** Optional icon name — renders a unique halftone glyph on the listing card. */
+    icon: z.enum(ICON_NAMES).optional(),
     order: z.number().default(0),
-    draft: z.boolean().default(false),
-  }),
-});
-
-const writing = defineCollection({
-  loader: glob({ pattern: '**/*.md', base: './src/content/writing' }),
-  schema: z.object({
-    title: z.string(),
-    date: z.coerce.date(),
-    excerpt: z.string(),
-    tags: z.array(z.string()).default([]),
     draft: z.boolean().default(false),
   }),
 });
@@ -77,6 +69,8 @@ const agents = defineCollection({
         kicker: z.string().optional(),
       })
       .optional(),
+    /** Optional icon name — renders a unique halftone glyph on the listing card. */
+    icon: z.enum(ICON_NAMES).optional(),
     order: z.number().default(0),
     draft: z.boolean().default(false),
   }),
@@ -93,6 +87,8 @@ const books = defineCollection({
     author: z.string(),
     cover: z.string().optional(),
     reaction: z.string().optional(),
+    /** Memorable closing line — rendered as an italic pull-quote under the reason. */
+    quote: z.string().optional(),
     section: z.enum(['currently-reading', 'shaped-me', 'recent']),
     finishedAt: z.coerce.date().optional(),
     order: z.number().default(0),
@@ -100,14 +96,19 @@ const books = defineCollection({
   }),
 });
 
-const tracks = defineCollection({
-  loader: glob({ pattern: ['**/*.json', '!**/_*.json'], base: './src/content/tracks' }),
+const movies = defineCollection({
+  loader: glob({ pattern: ['**/*.md', '!**/_*.md'], base: './src/content/movies' }),
   schema: z.object({
-    spotifyTrackId: z.string(),
     title: z.string(),
-    artist: z.string(),
-    note: z.string().optional(),
+    director: z.string().optional(),
+    year: z.number().optional(),
+    poster: z.string().optional(),
+    /** Why I love it — the short analysis rendered under the title. */
+    reaction: z.string().optional(),
+    /** A favorite line from the film, rendered as an italic pull-quote. */
+    quote: z.string().optional(),
     order: z.number().default(0),
+    draft: z.boolean().default(false),
   }),
 });
 
@@ -129,4 +130,4 @@ const pages = defineCollection({
   }),
 });
 
-export const collections = { projects, fun, writing, agents, books, tracks, headshots, pages };
+export const collections = { projects, fun, agents, books, movies, headshots, pages };

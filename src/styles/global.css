@@ -237,6 +237,101 @@ a.link-arrow:hover { color: var(--accent); gap: 10px; }
 .project-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .project-arrow { color: var(--muted); font-size: 18px; align-self: center; }
 
+/* Agent listing — base agent card layout (no year column). */
+.project-card--agent .project-card-row {
+  grid-template-columns: 1fr auto;
+}
+/* Agent listing — variant with a per-agent halftone glyph on the left. */
+.project-card--with-glyph .project-card-row {
+  grid-template-columns: 96px 1fr auto;
+  gap: var(--s-5);
+  align-items: start;
+}
+.project-card--with-glyph .agent-glyph {
+  width: 80px;
+  height: 80px;
+  align-self: start;
+  margin-top: 2px;
+}
+.project-card--with-glyph:hover .icon-dots circle { fill: var(--accent); }
+.project-card--with-glyph:hover .icon-outline { stroke: var(--accent); stroke-opacity: 1; }
+.project-card--with-glyph:hover .icon-seam { stroke: var(--accent); stroke-opacity: 0.85; }
+@media (max-width: 720px) {
+  .project-card--with-glyph .project-card-row {
+    grid-template-columns: 64px 1fr;
+    gap: var(--s-3);
+  }
+  .project-card--with-glyph .agent-glyph {
+    width: 56px;
+    height: 56px;
+  }
+}
+
+/* ──────────────────────────────────────────
+   PHOTOS GRID (headshots)
+   Global (not scoped to photos.astro) so the styles also apply inside the
+   desktop window modal, which injects page content without its scoped CSS.
+   ────────────────────────────────────────── */
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 200px));
+  gap: var(--s-5);
+}
+.photo { display: flex; flex-direction: column; gap: var(--s-3); }
+.photo__link {
+  position: relative;
+  display: block;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-card);
+  background: var(--bg-elev);
+  text-decoration: none;
+}
+.photo__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+  display: block;
+  transition: transform 200ms ease;
+}
+.photo__link:hover .photo__img,
+.photo__link:focus-visible .photo__img { transform: scale(1.02); }
+.photo__filename {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 2px 6px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.photo__link:hover .photo__filename,
+.photo__link:focus-visible .photo__filename { opacity: 1; }
+.photo__caption { display: flex; flex-direction: column; gap: 4px; }
+.photo__label {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+.photo__desc { font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.photo__download {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 160ms ease;
+  align-self: flex-start;
+}
+.photo__download:hover { color: var(--accent); }
+
 /* ──────────────────────────────────────────
    IMAGE FRAME
    ────────────────────────────────────────── */
@@ -610,6 +705,121 @@ pre code {
 .case-nav__cell a:hover { color: var(--accent); }
 
 /* ──────────────────────────────────────────
+   READING LIST (books.app)
+   Defined globally (not page-scoped) because the desktop modal injects only
+   `.window__content.innerHTML` and drops any page <head> styles.
+   ────────────────────────────────────────── */
+
+/* Favorites — editorial rows with a larger cover, the reason, and a pull-quote */
+.fav-list { display: grid; gap: var(--s-7); margin-top: var(--s-5); }
+.fav {
+  display: grid;
+  grid-template-columns: 116px 1fr;
+  gap: var(--s-5);
+  align-items: start;
+}
+.fav__cover {
+  width: 116px;
+  height: auto;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--bg-elev);
+  box-shadow: 0 6px 18px rgba(22, 21, 19, 0.14);
+}
+.fav__body { max-width: var(--max-w-read); }
+.fav__title {
+  font-family: var(--font-serif);
+  font-size: 27px;
+  line-height: 1.12;
+  color: var(--ink);
+  font-weight: 400;
+}
+.fav__author {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.fav__reason {
+  font-size: 15px;
+  line-height: 1.62;
+  color: var(--ink-2);
+  margin-top: var(--s-3);
+}
+.fav__quote {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 19px;
+  line-height: 1.3;
+  color: var(--ink);
+  margin-top: var(--s-4);
+  padding-left: var(--s-4);
+  border-left: 2px solid var(--accent);
+}
+@media (max-width: 560px) {
+  .fav { grid-template-columns: 92px 1fr; gap: var(--s-4); }
+  .fav__cover { width: 92px; }
+  .fav__title { font-size: 23px; }
+}
+
+/* Currently-reading callout + recent reads — compact rows */
+.book-callout {
+  margin-top: var(--s-5);
+  padding: var(--s-5);
+  background: var(--accent-soft);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--rule);
+}
+.book-callout__list { margin-top: var(--s-4); display: grid; gap: var(--s-4); }
+.book-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--s-5) var(--s-6);
+}
+.book {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--s-4);
+  align-items: start;
+}
+.book--callout { grid-template-columns: 72px 1fr; }
+.book__cover {
+  width: 64px;
+  height: auto;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--bg-elev);
+}
+.book--callout .book__cover { width: 72px; }
+.book__meta { display: flex; flex-direction: column; gap: 3px; }
+.book__title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--ink);
+  font-weight: 400;
+}
+.book__author {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+.book__reaction {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-2);
+  margin-top: 4px;
+}
+
+/* Movie rows reuse .fav; collapse the empty poster column when there's no poster. */
+.fav:not(:has(.fav__cover)) { grid-template-columns: 1fr; }
+
+/* ──────────────────────────────────────────
    DESKTOP INTERFACE (homepage)
    ────────────────────────────────────────── */
 .os {
@@ -720,15 +930,15 @@ pre code {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 0 rgba(180, 83, 9, 0.45);
+  background: var(--muted);
+  box-shadow: 0 0 0 0 rgba(138, 132, 125, 0.45);
   animation: menubar-pulse 2.2s ease-out infinite;
   flex-shrink: 0;
 }
 @keyframes menubar-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(180, 83, 9, 0.45); }
-  70%  { box-shadow: 0 0 0 10px rgba(180, 83, 9, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(180, 83, 9, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(138, 132, 125, 0.45); }
+  70%  { box-shadow: 0 0 0 10px rgba(138, 132, 125, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(138, 132, 125, 0); }
 }
 
 /* — Desktop surface — */
@@ -769,10 +979,20 @@ pre code {
 
 /* — Icon columns — */
 .icon-column {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-5);
+  display: grid;
+  grid-template-columns: repeat(3, 112px);
+  gap: var(--s-5) var(--s-6);
+  align-content: start;
   z-index: 1;
+}
+/* Right icon group hugs the far-right surface column (col 3 of auto 1fr auto)
+   in the natural layout only. Once os--free turns icons into absolute,
+   surface-relative coordinates, the nav must fill the surface from origin
+   (inset:0) — keeping grid-column here would offset its children's
+   containing block by a full column and push them off-screen. */
+.os:not(.os--free) .surface > .icon-column:last-of-type {
+  grid-column: 3;
+  justify-self: end;
 }
 
 .icon {
@@ -814,11 +1034,16 @@ pre code {
 }
 
 .icon__glyph {
-  width: 72px;
-  height: 72px;
+  width: 90px;
+  height: 90px;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+/* File icons render 15% smaller than folder icons. */
+.icon--file .icon__glyph {
+  width: 76.5px;
+  height: 76.5px;
 }
 
 /* SVG halftone icon internals — see src/components/FileGlyph.astro and FolderGlyph.astro */
@@ -835,10 +1060,10 @@ pre code {
 }
 .icon:hover .icon-label-band { fill: var(--accent); }
 .icon-label-text {
-  fill: var(--bg);
+  fill: var(--bg-elev);
   font-family: var(--font-mono);
-  font-size: 7.5px;
-  font-weight: 500;
+  font-size: 9.5px;
+  font-weight: 600;
   letter-spacing: 0.06em;
 }
 .icon-fold {
@@ -851,15 +1076,101 @@ pre code {
   fill: none;
   stroke: var(--ink);
   stroke-opacity: 0.65;
-  stroke-width: 1;
+  stroke-width: 1.2;
   transition: stroke 160ms ease, stroke-opacity 160ms ease;
 }
-.icon:hover .icon-outline { stroke: var(--accent); stroke-opacity: 1; }
+/* Files turn ember on hover; folders keep ink, just bump opacity. */
+.icon--file:hover .icon-outline { stroke: var(--accent); stroke-opacity: 1; }
+.icon--folder:hover .icon-outline { stroke: var(--ink); stroke-opacity: 0.85; }
 .icon-seam {
   fill: none;
   stroke: var(--ink);
   stroke-opacity: 0.5;
   stroke-width: 0.75;
+}
+
+/* Desktop icon halftone — unified lattice classes shared by FileGlyph
+   and FolderGlyph. Replaces the older "icon-dots" approach for desktop
+   icons; agent cards (AgentGlyph) still use icon-dots. */
+.icon-halftone-base circle {
+  fill: var(--ink);
+  fill-opacity: 0.78;
+}
+/* File glyph gradient halftone — denser, solid ink so the bottom band reads
+   dark enough for the white extension label. Dots don't recolor on hover
+   (only the file outline + label do). */
+.icon-file-halftone circle {
+  fill: var(--ink);
+  fill-opacity: 0.88;
+}
+/* Brand dots are sized below pitch/2 so they read as distinct halftone dots
+   rather than overlapping into a solid translucent silhouette. Higher opacity
+   compensates for the smaller area and gives the logo enough weight. */
+.brand-glyph circle {
+  fill: var(--ink);
+  fill-opacity: 0.92;
+}
+.brand-detail {
+  fill: none;
+  stroke: var(--ink);
+  stroke-opacity: 0.6;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.brand-accent {
+  fill: var(--ink);
+  fill-opacity: 0.7;
+}
+.brand-accent-stroke {
+  fill: none;
+  stroke: var(--ink);
+  stroke-opacity: 0.65;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Agent-listing glyph internals — the ember-accent layers and per-icon
+   stroke-weight bumps. Mirrors what AgentGlyph.astro's scoped <style>
+   block defines; placed in the global sheet so it applies reliably in
+   both dev (Vite injection) and production. Scoping to .agent-glyph-svg
+   keeps the desktop FileGlyph / FolderGlyph unaffected where it matters. */
+.icon-accent {
+  fill: var(--accent);
+  transition: fill 200ms ease;
+}
+.icon-accent-stroke {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 200ms ease;
+}
+.icon-detail-fill {
+  fill: var(--ink);
+  transition: fill 200ms ease;
+}
+.agent-glyph-svg .icon-outline {
+  stroke-width: 1.2;
+  stroke-opacity: 0.9;
+  stroke-linejoin: round;
+}
+.agent-glyph-svg .icon-seam {
+  stroke-width: 1.1;
+  stroke-opacity: 0.85;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.project-card--with-glyph:hover .icon-accent {
+  fill: color-mix(in oklab, var(--accent) 80%, var(--ink) 20%);
+}
+.project-card--with-glyph:hover .icon-accent-stroke {
+  stroke: color-mix(in oklab, var(--accent) 80%, var(--ink) 20%);
+}
+.project-card--with-glyph:hover .icon-detail-fill {
+  fill: var(--accent);
 }
 
 /* Portrait halftone SVG (used when no portrait image is supplied) */
@@ -913,9 +1224,9 @@ pre code {
 .hero-figure__stack {
   position: absolute;
   left: 50%;
-  top: 0;
+  top: -1.8vh; /* nudged up 1vh from -0.8vh */
   transform: translateX(-50%);
-  height: 110vh;
+  height: 105.8vh; /* 15% larger than the original 92vh */
   /* width auto via the natural image aspect ratio */
 }
 .hero-figure__img {
@@ -1148,7 +1459,8 @@ body.has-modal { overflow: hidden; }
   line-height: 1.35;
   letter-spacing: 0.01em;
   color: var(--ink);
-  word-break: break-word;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
   /* Soft halo in the page background so labels stay legible over the halftone wallpaper */
   text-shadow:
     0 0 4px var(--bg),
@@ -1218,30 +1530,58 @@ body.has-modal { overflow: hidden; }
   .case-nav { flex-direction: column; }
   .case-nav__cell--end { text-align: left; align-items: flex-start; }
 
-  /* Desktop interface — collapses to wallpaper + grid of icons */
+  /* Mobile (≤720px): desktop metaphor → linear list. Hide the portrait
+     and dock; render both icon columns as a single full-width stacked
+     list of clickable rows (glyph on left, readable label on right). */
   .menubar { padding: 8px var(--s-4); flex-wrap: wrap; gap: var(--s-3); }
   .menubar__link,
   .menubar__plain,
   .menubar__sep,
   .menubar__status,
   .menubar__clock { display: none; }
+  .hero-figure { display: none; }
+  .dock { display: none; }
   .surface {
-    grid-template-columns: 1fr;
-    padding: var(--s-5) var(--s-5) calc(var(--s-9) + var(--s-5));
-    gap: var(--s-6);
-  }
-  .icon-column {
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
+    display: flex;
+    flex-direction: column;
+    padding: var(--s-5);
     gap: var(--s-4);
   }
-  .wallpaper { order: -1; padding: var(--s-5) 0 0; }
-  .wallpaper__portrait { width: 220px; height: 220px; }
-  .wallpaper__name { font-size: 36px; }
-  .wallpaper__caption { font-size: 16px; }
-  .icon { width: 88px; }
-  .icon__glyph { width: 60px; height: 60px; }
+  .icon-column {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: var(--s-3);
+  }
+  .icon {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--s-4);
+    padding: var(--s-3) var(--s-4);
+    border-radius: 10px;
+    transition: background 160ms ease;
+  }
+  .icon:hover { background: rgba(22, 21, 19, 0.04); }
+  .icon__glyph {
+    width: 60px;
+    height: 60px;
+    flex-shrink: 0;
+  }
+  .icon--file .icon__glyph {
+    width: 51px;
+    height: 51px;
+  }
+  .icon__label {
+    flex: 1;
+    text-align: left;
+    word-break: normal;
+    overflow-wrap: normal;
+    font-size: 14px;
+    text-shadow: none;
+  }
 }
 
 /* ──────────────────────────────────────────
@@ -1251,7 +1591,8 @@ body.has-modal { overflow: hidden; }
 .dock {
   position: fixed;
   bottom: var(--s-5);
-  right: calc(var(--s-5) + 1.5vw);
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 80;
   display: flex;
   align-items: flex-end;
@@ -1324,10 +1665,6 @@ body.has-modal { overflow: hidden; }
   fill: var(--ink);
   transition: fill 160ms ease;
 }
-.dock-glyph .dg-fill-accent {
-  fill: var(--accent);
-  transition: fill 160ms ease;
-}
 .dock-glyph .dg-line {
   fill: none;
   stroke: var(--ink);
@@ -1343,9 +1680,7 @@ body.has-modal { overflow: hidden; }
   stroke: var(--accent);
 }
 .dock__icon:hover .dock-glyph .dg-fill,
-.dock__icon:focus-visible .dock-glyph .dg-fill,
-.dock__icon:hover .dock-glyph .dg-fill-accent,
-.dock__icon:focus-visible .dock-glyph .dg-fill-accent {
+.dock__icon:focus-visible .dock-glyph .dg-fill {
   fill: var(--accent);
 }
 
@@ -1411,4 +1746,125 @@ body.has-modal { overflow: hidden; }
   .dock__caption { display: block; }
   .dock__tile { width: 40px; height: 40px; }
   .dock-glyph { width: 22px; height: 22px; }
+}
+
+/* ──────────────────────────────────────────
+   FAVORITE QUOTE — paper-airplane → crumple → draggable quote cards
+   (src/components/FavoriteQuote.astro)
+   A halftone airplane flies to an empty desktop spot, crashes + crumples
+   into a ball via frame-by-frame art, then unrolls into a draggable flat
+   sheet bearing a quote. Non-modal: multiple cards coexist. GSAP drives the
+   inner .qcard__stage transform; the card's own left/top is the drag anchor.
+   ────────────────────────────────────────── */
+.quote-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 150;                 /* above dock (80), below the desktop-window modal (200) */
+  pointer-events: none;         /* click-through; only cards capture pointer events */
+}
+
+.qcard {
+  position: fixed;
+  width: var(--qcard-w, 242px);     /* trimmed sheet fills the card ~edge-to-edge, so card width ≈ visible paper width */
+  aspect-ratio: var(--qcard-aspect, 16 / 9);
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  will-change: left, top;
+}
+.qcard--dragging { cursor: grabbing; }
+.qcard:focus-visible { outline: none; }
+.qcard:focus-visible .qcard__stage { filter: drop-shadow(0 0 1.5px var(--accent)); }
+
+/* The stage carries the GSAP flight/crumple/fall transform. */
+.qcard__stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: transform;
+}
+.qcard__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;                   /* the stepper toggles exactly one frame visible */
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.qcard__frame { transform: scaleX(var(--face, -1)); }   /* mirror to face the travel direction (--face set per card) */
+
+/* The quote, centred in the flat sheet's blank middle. */
+.qcard__note {
+  position: absolute;
+  inset: 14% 15%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+  text-align: center;
+  pointer-events: none;         /* drag grabs the card, not the text */
+}
+.qcard__text {
+  margin: 0;
+  max-width: min(100%, 26ch);
+  font-family: var(--font-serif);
+  font-size: clamp(14px, 1.6vw, 19px);
+  line-height: 1.24;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  /* Instrument Serif ships at one weight (400). Thicken the strokes directly so
+     the quote reads darker/heavier without triggering clumsy faux-bold. */
+  -webkit-text-stroke: 0.4px currentColor;
+  text-wrap: balance;
+  opacity: 0;
+}
+.qcard__author {
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-size: clamp(10px, 1.3vw, 13px);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  opacity: 0;
+}
+/* Minimalist close: just a black × glyph (no button chrome) that turns orange
+   and glows on hover. The sheet now fills the card, so a normal corner inset. */
+.qcard__close {
+  position: absolute;
+  top: 6%;
+  right: 6%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  cursor: pointer;
+  opacity: 0;
+  transition: color 160ms ease, filter 160ms ease, transform 160ms ease;
+}
+.qcard__close:hover,
+.qcard__close:focus-visible {
+  outline: none;
+  color: var(--accent);
+  filter: drop-shadow(0 0 5px var(--accent));   /* orange glow */
+}
+
+@media (max-width: 720px) {
+  .qcard { --qcard-w: min(88vw, 242px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qcard, .qcard__stage { will-change: auto; }
 }

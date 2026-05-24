@@ -1,0 +1,458 @@
+---
+/**
+ * FavoriteQuote — paper-airplane that crashes, crumples, and unrolls into a
+ * draggable quote card (GSAP + frame-by-frame halftone art).
+ *
+ * Launched by the dock's quote icon (data-dock-icon-id="quote"). Per click:
+ *   1. flight   — the airplane (paper-airplane.png) flies in from off-screen
+ *                 left, shrinks toward an empty desktop slot, and "hits a wall."
+ *   2. crumple  — steps frames airplane → 1st crash → 2nd crash → 2nd-most →
+ *                 fully crumpled ball, rolling as it balls up.
+ *   3. unroll   — steps ball → 2nd-most → slightly curved → flat sheet, growing.
+ *   4. reveal   — the flat sheet (paper-flat.png) shows a random quote.
+ *   5. open     — the card is a DRAGGABLE, non-modal desktop object; the page
+ *                 stays interactive and MULTIPLE cards can coexist (new ones
+ *                 cascade off existing ones).
+ *   6. close    — X/Esc crumples it (flat → 2nd-most → ball) while rotating and
+ *                 falling off the bottom of the screen, then removes the card.
+ *
+ * GSAP animates the inner `.qcard__stage` transform; the card's own left/top is
+ * the drag anchor — the two never collide, so a card is grabbable mid-anim.
+ * Honours prefers-reduced-motion (skips flight/crumple; fades the sheet in).
+ * Quotes come from src/lib/quotes.ts. Layout/keyframes live in global.css.
+ */
+---
+<div class="quote-layer" id="quote-layer" aria-live="polite"></div>
+
+<template id="quote-card-template">
+  <div class="qcard" role="dialog" aria-modal="false" tabindex="0">
+    <div class="qcard__stage">
+      <img class="qcard__frame" data-frame="0" src="/assets/paper-airplane.png" alt="" draggable="false" />
+      <img class="qcard__frame" data-frame="1" src="/assets/crumple/1-first-crash.png" alt="" draggable="false" />
+      <img class="qcard__frame" data-frame="2" src="/assets/crumple/2-second-crash.png" alt="" draggable="false" />
+      <img class="qcard__frame" data-frame="3" src="/assets/crumple/3-most-crumpled.png" alt="" draggable="false" />
+      <img class="qcard__frame" data-frame="4" src="/assets/crumple/4-crumpled-ball.png" alt="" draggable="false" />
+      <img class="qcard__frame" data-frame="5" src="/assets/crumple/5-slightly-curved.png" alt="" draggable="false" />
+      <img class="qcard__frame" data-frame="6" src="/assets/paper-flat.png" alt="" draggable="false" />
+    </div>
+    <figure class="qcard__note">
+      <blockquote class="qcard__text"></blockquote>
+      <figcaption class="qcard__author"></figcaption>
+    </figure>
+    <button class="qcard__close" type="button" aria-label="Crumple and dismiss quote" data-quote-close>
+      <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+        <line x1="2.5" y1="2.5" x2="9.5" y2="9.5" />
+        <line x1="9.5" y1="2.5" x2="2.5" y2="9.5" />
+      </svg>
+    </button>
+  </div>
+</template>
+
+<script>
+  import gsap from 'gsap';
+  import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
+  import { QUOTES } from '../lib/quotes';
+
+  gsap.registerPlugin(MotionPathPlugin);
+
+  const layer = document.getElementById('quote-layer');
+  const tpl = document.getElementById('quote-card-template') as HTMLTemplateElement | null;
+  if (layer && tpl) {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // ---- Frame set (index order). Owner can relabel these in one place. ----
+    const SRCS = [
+      '/assets/paper-airplane.png',          // 0 — flight
+      '/assets/crumple/1-first-crash.png',   // 1
+      '/assets/crumple/2-second-crash.png',  // 2
+      '/assets/crumple/3-most-crumpled.png', // 3 — "2nd most crumpled"
+      '/assets/crumple/4-crumpled-ball.png', // 4 — fully crumpled (apex)
+      '/assets/crumple/5-slightly-curved.png', // 5
+      '/assets/paper-flat.png',              // 6 — flat sheet (quote)
+    ];
+    const CRUMPLE = [0, 1, 2, 3, 4];   // airplane → ball
+    const UNROLL = [4, 3, 5, 6];       // ball → flat sheet
+    const CLOSE = [6, 3, 4];           // flat → 2nd-most → ball
+
+    interface Card {
+      id: number; el: HTMLElement; stage: HTMLElement; frames: HTMLElement[];
+      note: HTMLElement; textEl: HTMLElement; authorEl: HTMLElement; closeBtn: HTMLElement;
+      state: 'flying' | 'crumpling' | 'unrolling' | 'revealing' | 'open' | 'closing';
+      tl: gsap.core.Timeline | gsap.core.Tween | null; frameTimer: number | null;
+      dir: 1 | -1;   // travel direction: +1 = enters left, flies right; −1 = enters right, flies left
+      mid: { x: number; y: number }[];   // flight-path waypoints (stage coords rel. to rest); last = crash point
+      spot: number;  // index into SPOTS this card occupies (locked until it closes)
+      quote: number; // index into QUOTES this card shows (never duplicated across open cards)
+    }
+
+    // Fixed landing spots — card CENTRE as a fraction of the viewport. A quote
+    // picks a random FREE 'blue' spot; 'red' spots are used only once every blue
+    // spot is taken. A spot is locked while a card occupies it (freed on close).
+    type Spot = { x: number; y: number; kind: 'blue' | 'red' };
+    const SPOTS: Spot[] = [
+      // LEFT band
+      { x: 0.11, y: 0.55, kind: 'blue' }, { x: 0.27, y: 0.56, kind: 'blue' },
+      { x: 0.11, y: 0.82, kind: 'blue' }, { x: 0.27, y: 0.81, kind: 'blue' },
+      // RIGHT band
+      { x: 0.72, y: 0.35, kind: 'blue' }, { x: 0.88, y: 0.34, kind: 'blue' },
+      { x: 0.72, y: 0.58, kind: 'blue' }, { x: 0.88, y: 0.58, kind: 'blue' },
+      { x: 0.72, y: 0.81, kind: 'blue' }, { x: 0.88, y: 0.81, kind: 'blue' },
+      // CENTRE / over the portrait — RED fallback only
+      { x: 0.38, y: 0.15, kind: 'red' }, { x: 0.62, y: 0.14, kind: 'red' },
+      { x: 0.40, y: 0.40, kind: 'red' }, { x: 0.59, y: 0.40, kind: 'red' },
+    ];
+    const occupied = new Set<number>();   // SPOTS indices currently in use
+    // Two mirrored flight paths (swoop: valley → peak → dive), chosen by dir.
+    const MID_RIGHT = [{ x: -620, y: 110 }, { x: -340, y: -310 }, { x: -110, y: -120 }];  // dir +1 (enters left)
+    const MID_LEFT  = [{ x: 620, y: 100 }, { x: 340, y: -315 }, { x: 110, y: -120 }];      // dir −1 (enters right)
+
+    function chooseSpot(): number {
+      const freeOf = (k: 'blue' | 'red') =>
+        SPOTS.reduce<number[]>((a, s, i) => { if (s.kind === k && !occupied.has(i)) a.push(i); return a; }, []);
+      let pool = freeOf('blue');
+      if (!pool.length) pool = freeOf('red');
+      if (!pool.length) pool = SPOTS.map((_, i) => i);   // everything taken → reuse a random spot
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    const cards = new Map<number, Card>();
+    const openOrder: number[] = [];
+    let nextId = 1;
+    let topZ = 150;
+    let lastQuote = -1;
+    let W = 340, H = 191;                 // remeasured from the first real card
+
+    // placement constants (keep cards clear of the menubar + viewport edges)
+    const MARGIN = 24, MENUBAR = 54;
+
+    // The card is sized to the small RESTING sheet (~242px). The plane + crumple
+    // ball fly/tumble larger than that, so every flight/crumple scale is multiplied
+    // by FLY (the shared size multiplier — keeps the crash continuous so the plane
+    // doesn't inflate on impact). Only the final unroll settles to scale 1 = the
+    // small sheet. Tuned by eye; set FLY = 1 to match the resting-sheet size.
+    const FLY = 1.55;
+
+    const done = (anim: any): Promise<void> =>
+      new Promise((res) => { anim.eventCallback('onComplete', res); anim.eventCallback('onReverseComplete', res); });
+
+    // ---- Preload all frames; gate the trigger until ready ----
+    let ready = false, queued = 0, loaded = 0;
+    SRCS.forEach((src) => {
+      const img = new Image();
+      const fin = () => { if (++loaded >= SRCS.length) { ready = true; while (queued > 0) { queued--; spawn(); } } };
+      img.onload = fin; img.onerror = fin; img.src = src;
+    });
+
+    // Pick a quote that ISN'T already on an open card (no duplicates on screen)
+    // and isn't the one just launched. Degrades gracefully when more cards are
+    // open than there are quotes: first drop the no-immediate-repeat rule, then,
+    // only if every quote is already showing, allow a repeat.
+    function pickQuote(): number {
+      const n = QUOTES.length;
+      if (n <= 1) return 0;
+      const onScreen = new Set<number>();
+      for (const card of cards.values()) onScreen.add(card.quote);
+      const all = QUOTES.map((_, i) => i);
+      let pool = all.filter((i) => !onScreen.has(i) && i !== lastQuote);
+      if (!pool.length) pool = all.filter((i) => !onScreen.has(i));
+      if (!pool.length) pool = all.filter((i) => i !== lastQuote);
+      if (!pool.length) pool = all;
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    function fillQuote(c: Card) {
+      const qi = pickQuote(); lastQuote = qi; c.quote = qi;
+      const q = QUOTES[qi] || { text: '' };
+      c.textEl.textContent = '“' + q.text + '”';
+      if (q.author) { c.authorEl.textContent = '— ' + q.author; c.authorEl.style.display = ''; }
+      else { c.authorEl.textContent = ''; c.authorEl.style.display = 'none'; }
+    }
+
+    function showFrame(c: Card, idx: number) {
+      for (let i = 0; i < c.frames.length; i++) c.frames[i].style.opacity = i === idx ? '1' : '0';
+    }
+    function stepFrames(c: Card, seq: number[], dwell: number): Promise<void> {
+      return new Promise((res) => {
+        let k = 0; showFrame(c, seq[0]);
+        const tick = () => {
+          k++;
+          if (k >= seq.length) { res(); return; }
+          showFrame(c, seq[k]);
+          c.frameTimer = window.setTimeout(tick, dwell);
+        };
+        c.frameTimer = window.setTimeout(tick, dwell);
+      });
+    }
+
+    function bringToFront(c: Card) { c.el.style.zIndex = String(++topZ); }
+
+    // ---- Drag (mirrors the desktop-icon pattern; viewport-clamped, no persist) ----
+    function wireDrag(c: Card) {
+      const el = c.el;
+      let sx = 0, sy = 0, ox = 0, oy = 0, moved = false;
+      el.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if ((e.target as Element).closest('[data-quote-close]')) return;
+        if (c.state === 'flying' || c.state === 'crumpling' || c.state === 'closing') return;
+        bringToFront(c);
+        sx = e.clientX; sy = e.clientY;
+        ox = parseFloat(el.style.left) || 0; oy = parseFloat(el.style.top) || 0;
+        moved = false;
+        try { el.setPointerCapture(e.pointerId); } catch (_) {}
+        el.classList.add('qcard--dragging');
+      });
+      el.addEventListener('pointermove', (e) => {
+        if (!el.hasPointerCapture || !el.hasPointerCapture(e.pointerId)) return;
+        const dx = e.clientX - sx, dy = e.clientY - sy;
+        if (!moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) moved = true;
+        if (!moved) return;
+        const w = el.offsetWidth, h = el.offsetHeight;
+        el.style.left = Math.max(MARGIN, Math.min(window.innerWidth - w - MARGIN, ox + dx)) + 'px';
+        el.style.top = Math.max(MENUBAR, Math.min(window.innerHeight - h - MARGIN, oy + dy)) + 'px';
+      });
+      const end = (e: PointerEvent) => {
+        el.classList.remove('qcard--dragging');
+        try { el.releasePointerCapture(e.pointerId); } catch (_) {}
+      };
+      el.addEventListener('pointerup', end);
+      el.addEventListener('pointercancel', end);
+      el.addEventListener('dragstart', (e) => e.preventDefault());
+    }
+
+    // ---- Spawn / animate / remove ----
+    function spawn() {
+      if (!ready) { queued++; return; }
+      const frag = tpl!.content.cloneNode(true) as DocumentFragment;
+      const el = frag.querySelector('.qcard') as HTMLElement;
+      const id = nextId++;
+      const spotIdx = chooseSpot();
+      occupied.add(spotIdx);
+      const spot = SPOTS[spotIdx];
+      const dir: 1 | -1 = spot.x < 0.5 ? -1 : 1;   // left spots approached from the right, and vice-versa
+      const c: Card = {
+        id, el,
+        stage: el.querySelector('.qcard__stage') as HTMLElement,
+        frames: Array.from(el.querySelectorAll('.qcard__frame')) as HTMLElement[],
+        note: el.querySelector('.qcard__note') as HTMLElement,
+        textEl: el.querySelector('.qcard__text') as HTMLElement,
+        authorEl: el.querySelector('.qcard__author') as HTMLElement,
+        closeBtn: el.querySelector('.qcard__close') as HTMLElement,
+        state: 'flying', tl: null, frameTimer: null, dir, mid: dir > 0 ? MID_RIGHT : MID_LEFT, spot: spotIdx,
+        quote: -1,   // assigned by fillQuote()
+      };
+      el.id = 'quote-card-' + id;
+      c.textEl.id = 'quote-text-' + id;
+      el.setAttribute('aria-labelledby', 'quote-text-' + id);
+      el.style.setProperty('--face', String(-dir));   // mirror the art to face the travel direction
+      fillQuote(c);
+
+      layer!.appendChild(el);
+      const r = el.getBoundingClientRect();
+      if (r.width) { W = Math.round(r.width); H = Math.round(r.height); }
+      // place the card centred on its spot, clamped to the viewport
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const left = Math.max(MARGIN, Math.min(vw - W - MARGIN, Math.round(spot.x * vw - W / 2)));
+      const top = Math.max(MENUBAR + MARGIN, Math.min(vh - H - MARGIN, Math.round(spot.y * vh - H / 2)));
+      el.style.left = left + 'px';
+      el.style.top = top + 'px';
+      el.style.zIndex = String(++topZ);
+
+      cards.set(id, c);
+      openOrder.push(id);
+      wireDrag(c);
+
+      gsap.set([c.textEl, c.authorEl], { autoAlpha: 0, y: 10 });
+      gsap.set(c.closeBtn, { autoAlpha: 0 });
+
+      if (reduce) placeInstantly(c); else runLaunch(c);
+    }
+
+    function onOpened(c: Card) { if (c.state !== 'closing') c.state = 'open'; }
+
+    function placeInstantly(c: Card) {
+      c.state = 'revealing';
+      showFrame(c, 6);
+      gsap.set(c.stage, { x: 0, y: 0, scale: 1, rotation: 0 });
+      gsap.to([c.textEl, c.authorEl, c.closeBtn], {
+        autoAlpha: 1, y: 0, duration: 0.25, stagger: 0.04, onComplete: () => onOpened(c),
+      });
+    }
+
+    async function runLaunch(c: Card) {
+      const dir = c.dir;
+      const left = parseFloat(c.el.style.left) || 0;
+      const vw = window.innerWidth;
+      const crash = c.mid[c.mid.length - 1];
+      const crashX = crash.x, crashY = crash.y;                  // crash = last waypoint (sits "behind" the rest)
+      const entryX = dir > 0 ? -(left) - 80 : (vw - left) + 80;  // off-screen on the approach side
+      const pathPoints = [{ x: entryX, y: -150 }, ...c.mid];     // flowing curve: entry → waypoints → crash
+      // Progress fraction of each waypoint along the path (straight-line approx),
+      // so we can time each segment by hand: valley = fr1, peak = fr2.
+      const segLen: number[] = [];
+      let total = 0;
+      for (let i = 1; i < pathPoints.length; i++) {
+        const d = Math.hypot(pathPoints[i].x - pathPoints[i - 1].x, pathPoints[i].y - pathPoints[i - 1].y);
+        segLen.push(d); total += d;
+      }
+      const fr1 = segLen[0] / total;                  // entry → valley (descending)
+      const fr2 = (segLen[0] + segLen[1]) / total;    // valley → peak (climbing)
+
+      showFrame(c, 0);
+      gsap.set(c.stage, { x: entryX, y: -150, scale: 1.3 * FLY, rotation: 0 });
+
+      // Phase 1 — GRAVITY FLIGHT along a long, smooth, banked path. The motion
+      // path is paused; we drive its progress in 3 segments so the speed reads as
+      // gravity — FAST + accelerating on descents, SLOW + decelerating on the
+      // climb to the peak (nearly stalling at the top). autoRotate banks the nose
+      // along the slope (offset 180° when the art faces left).
+      const mp = gsap.to(c.stage, {
+        motionPath: { path: pathPoints, curviness: 2, autoRotate: dir > 0 ? true : 180 },
+        ease: 'none', duration: 1, paused: true,
+      });
+      const driver = { p: 0 };
+      const upd = () => { mp.progress(driver.p); };
+      const flight = gsap.timeline();
+      flight
+        .to(driver, { p: fr1, duration: 0.7,  ease: 'power2.in',  onUpdate: upd }, 0)      // descend → valley: speed up
+        .to(driver, { p: fr2, duration: 1.45, ease: 'power2.out', onUpdate: upd }, 0.7)    // climb → peak: slow down
+        .to(driver, { p: 1,   duration: 0.6,  ease: 'power2.in',  onUpdate: upd }, 2.15)   // dive → crash: speed up
+        .to(c.stage, { scale: 0.85 * FLY, duration: 2.75, ease: 'power1.out' }, 0);
+      c.tl = flight;
+      await done(flight);
+      mp.kill();
+      if (c.state === 'closing') return;
+
+      // Phase 2 — IMPACT: smack the wall at the bottom of the dive. Snap to the
+      // first-crash frame, SQUASH + RECOIL off it. Keeps the banked (nose-down)
+      // angle the flight ended on — no separate nose-dip needed.
+      c.state = 'crumpling';
+      showFrame(c, 1);
+      const impact = gsap.timeline();
+      impact
+        .to(c.stage, { scaleX: 0.5 * FLY, scaleY: 1.06 * FLY, duration: 0.06, ease: 'power3.out' }, 0)              // squash on contact
+        .to(c.stage, { x: crashX - 12 * dir, scaleX: 0.92 * FLY, scaleY: 0.82 * FLY, duration: 0.13, ease: 'power2.out' }, 0.06) // recoil back off the wall
+        .to(c.stage, { scaleX: 0.84 * FLY, scaleY: 0.84 * FLY, duration: 0.16, ease: 'power2.out' }, 0.2);          // settle out of the squash (rotation stays 0 — faces forward)
+      c.tl = impact;
+      await done(impact);
+      if (c.state === 'closing') return;
+
+      // Phase 3 — roll into a BALL fast (frames + scale). Rotation stays where the
+      // banked dive left it (already nose-down); the roll completes in the leap-frog.
+      const crumple = gsap.to(c.stage, { x: crashX, scale: 0.5 * FLY, duration: 0.24, ease: 'power2.in' });
+      c.tl = crumple;
+      await Promise.all([stepFrames(c, CRUMPLE.slice(2), 55), done(crumple)]);  // frames 2 → 3 → 4, fast
+      if (c.state === 'closing') return;
+
+      // Phase 4 — LEAP-FROG: fall, then two forward bounces, unravelling into the
+      // sheet where the 2nd leap lands. The roll finishes UPRIGHT before frames
+      // 5 & 6 (which don't spin at all).
+      c.state = 'unrolling';
+      // The banked flight left the stage at angle R; roll to the nearest upright
+      // multiple of 360 (~2 turns ahead in the travel direction) so the flat
+      // sheet still lands perfectly level.
+      const R = Number(gsap.getProperty(c.stage, 'rotation')) || 0;
+      const spinTarget = dir > 0 ? (Math.floor(R / 360) + 2) * 360 : (Math.ceil(R / 360) - 2) * 360;
+      const land = gsap.timeline();
+      land
+        .to(c.stage, { rotation: spinTarget, duration: 1.28, ease: 'power1.inOut' }, 0)
+        // Y — fall, then two decreasing forward bounces (leap-frog), then settle.
+        .to(c.stage, { keyframes: [
+          { y: 6,   duration: 0.5,  ease: 'power2.in' },   // fall → 1st hit
+          { y: -52, duration: 0.24, ease: 'power2.out' },  // leap 1 up
+          { y: 5,   duration: 0.2,  ease: 'power2.in' },   // land
+          { y: -20, duration: 0.18, ease: 'power2.out' },  // leap 2 up (smaller)
+          { y: 3,   duration: 0.16, ease: 'power2.in' },   // 2nd leap lands
+          { y: 0,   duration: 0.2,  ease: 'power2.out' },  // settle
+        ] }, 0)
+        // X — carry FORWARD (in the travel direction) across the leap-frog → rest (0).
+        .to(c.stage, { keyframes: [
+          { x: -95 * dir, duration: 0.5,  ease: 'power1.out' },  // fall: mostly down, slight forward drift
+          { x: -45 * dir, duration: 0.44, ease: 'none' },        // leap 1 forward
+          { x: 0,         duration: 0.34, ease: 'power1.out' },  // leap 2 forward → rest
+        ] }, 0)
+        // UNRAVEL only where the 2nd leap lands (~1.28): grow + flatten (upright).
+        .to(c.stage, { scale: 1, duration: 0.55, ease: 'power2.out' }, 1.28)
+        .call(() => showFrame(c, UNROLL[1]), [], 1.14)   // 3 — last ball-ish frame on touchdown
+        .call(() => showFrame(c, UNROLL[2]), [], 1.36)   // 5 — slightly curved, upright
+        .call(() => showFrame(c, UNROLL[3]), [], 1.64);  // 6 — flat, upright
+      c.tl = land;
+      await done(land);
+      if (c.state === 'closing') return;
+      showFrame(c, 6);
+      gsap.set(c.stage, { x: 0, y: 0, rotation: 0, scale: 1 });
+
+      // Phase 5 — reveal the quote (no scale bounce — the landing is the bounce).
+      c.state = 'revealing';
+      const reveal = gsap.timeline({ onComplete: () => onOpened(c) });
+      reveal
+        .to([c.textEl, c.authorEl], { autoAlpha: 1, y: 0, duration: 0.5, ease: 'power2.out', stagger: 0.08 }, 0)
+        .to(c.closeBtn, { autoAlpha: 1, duration: 0.3 }, 0.1);
+      c.tl = reveal;
+    }
+
+    function dismiss(c: Card | undefined) {
+      if (!c || c.state === 'closing') return;
+      const hadFocus = c.el.contains(document.activeElement);
+      c.state = 'closing';
+      if (c.frameTimer) { clearTimeout(c.frameTimer); c.frameTimer = null; }
+      if (c.tl) { c.tl.kill(); c.tl = null; }
+
+      if (reduce) {
+        gsap.to(c.el, { autoAlpha: 0, duration: 0.2, onComplete: () => remove(c, hadFocus) });
+        return;
+      }
+      gsap.to([c.textEl, c.authorEl, c.closeBtn], { autoAlpha: 0, duration: 0.15 });
+      const top = parseFloat(c.el.style.top) || 0;
+      const fallY = window.innerHeight + 240 - top;
+      stepFrames(c, CLOSE, 90);
+      const closeTl = gsap.timeline({ onComplete: () => remove(c, hadFocus) });
+      closeTl
+        .to(c.stage, { rotation: 22, scale: 0.72, duration: 0.22, ease: 'power1.in' }, 0)
+        .to(c.stage, { y: fallY, rotation: 90, duration: 0.55, ease: 'power2.in' }, 0.22);
+      c.tl = closeTl;
+    }
+
+    function remove(c: Card, restoreFocus: boolean) {
+      if (c.frameTimer) { clearTimeout(c.frameTimer); c.frameTimer = null; }
+      if (c.tl) { c.tl.kill(); c.tl = null; }
+      occupied.delete(c.spot);   // free the landing spot for reuse
+      c.el.remove();
+      cards.delete(c.id);
+      const i = openOrder.indexOf(c.id); if (i >= 0) openOrder.splice(i, 1);
+      if (restoreFocus) {
+        const icon = document.querySelector('[data-dock-icon-id="quote"]') as HTMLElement | null;
+        if (icon) icon.focus({ preventScroll: true });
+      }
+    }
+
+    // ---- Re-clamp open cards on resize (skip animating ones) ----
+    let resizeT: number | null = null;
+    window.addEventListener('resize', () => {
+      if (resizeT) clearTimeout(resizeT);
+      resizeT = window.setTimeout(() => {
+        cards.forEach((c) => {
+          if (c.state !== 'open' && c.state !== 'revealing') return;
+          const w = c.el.offsetWidth, h = c.el.offsetHeight;
+          const x = Math.max(MARGIN, Math.min(window.innerWidth - w - MARGIN, parseFloat(c.el.style.left) || 0));
+          const y = Math.max(MENUBAR, Math.min(window.innerHeight - h - MARGIN, parseFloat(c.el.style.top) || 0));
+          c.el.style.left = x + 'px'; c.el.style.top = y + 'px';
+        });
+      }, 150);
+    });
+
+    // ---- Triggers ----
+    document.addEventListener('click', (e) => {
+      const target = e.target as Element;
+      const trigger = target.closest('[data-dock-icon-id="quote"], [data-action="favorite-quote"]');
+      if (trigger) { e.preventDefault(); spawn(); return; }
+      if (target.closest('[data-quote-close]')) {
+        const card = target.closest('.qcard') as HTMLElement | null;
+        if (card) { const id = Number(card.id.replace('quote-card-', '')); dismiss(cards.get(id)); }
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && openOrder.length) dismiss(cards.get(openOrder[openOrder.length - 1]));
+    });
+
+    if (import.meta.env.DEV) (window as any).__quoteCards = cards;
+  }
+</script>

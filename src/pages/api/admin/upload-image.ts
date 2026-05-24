@@ -8,7 +8,7 @@ export const prerender = false;
 
 const MAX_BYTES = 4 * 1024 * 1024; // 4 MB
 const ALLOWED_DIRS = new Set([
-  'projects', 'fun', 'agents', 'writing', 'books', 'photos', 'pages', 'about',
+  'projects', 'fun', 'agents', 'books', 'photos', 'pages', 'about',
 ]);
 const EXT_BY_TYPE: Record<string, string> = {
   'image/jpeg': 'jpg',

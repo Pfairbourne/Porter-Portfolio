@@ -1,6 +1,7 @@
 ---
 import FileGlyph from './FileGlyph.astro';
 import FolderGlyph from './FolderGlyph.astro';
+import type { BrandName } from '../lib/brand-glyphs';
 
 interface Props {
   /** Stable identifier used to persist drag positions in localStorage. */
@@ -15,6 +16,8 @@ interface Props {
   external?: boolean;
   /** Trigger a download instead of navigation. */
   download?: boolean;
+  /** Optional brand glyph rendered inside a folder (e.g. 'robot' for ai-agents). Ignored for files. */
+  brand?: BrandName;
 }
 
 const {
@@ -25,6 +28,7 @@ const {
   variant = 'file',
   external = false,
   download = false,
+  brand,
 } = Astro.props;
 
 const rel = external ? 'noopener noreferrer' : undefined;
@@ -42,8 +46,19 @@ const variantClass = variant === 'folder' ? 'icon--folder' : 'icon--file';
 >
   <div class="icon__glyph">
     {variant === 'folder'
-      ? <FolderGlyph uid={id} />
+      ? <FolderGlyph uid={id} brand={brand} />
       : <FileGlyph uid={id} ext={ext} />}
   </div>
   <span class="icon__label">{label}</span>
 </a>
+
+<script>
+  // Rasterise every desktop folder/file halftone (PNG) and drop it into the
+  // <image> placeholders the glyph components emit. Bundled once by Astro
+  // regardless of how many icons render. The folder/file bodies are already
+  // server-rendered, so this only paints the dot field a frame later.
+  import { fillHalftoneImages } from '../lib/halftone-raster';
+  const run = () => fillHalftoneImages();
+  if (document.readyState !== 'loading') run();
+  else document.addEventListener('DOMContentLoaded', run);
+</script>

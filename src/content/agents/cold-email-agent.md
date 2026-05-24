@@ -1,10 +1,7 @@
 ---
 title: Cold Email Agent
 year: 2025
-summary: >-
-  High-volume outreach engine that pulls leads from Google Sheets, researches each company live,
-  writes personalized cold email in the right voice, sends from the matching sender's inbox, and
-  logs status back to the sheet. Paced to look human, deduped to never double-send.
+summary: "Sends personalized cold email at scale, paced to look human, never double-sends."
 tags:
   - MindStudio
   - Claude
@@ -15,6 +12,7 @@ tags:
   - Scheduled Automation
 link: https://app.mindstudio.ai/agents/the-email-campain-sender-and-marker-offical-0b36faa9
 hero: /images/agents/cold-email-agent.png
+icon: envelope
 order: 20
 draft: false
 ---

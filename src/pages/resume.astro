@@ -6,6 +6,16 @@ import WindowLayout from '../layouts/WindowLayout.astro';
   description="Porter Fairbourne — co-founder at Ember, AI contractor, ex-University Growth Fund, ex-Vivint."
   windowTitle="résumé.pdf"
 >
+  <div style="display: flex; justify-content: flex-end; margin-bottom: var(--s-4);">
+    <a
+      class="btn btn-solid"
+      href="/porter_fairbourne_resume.pdf"
+      download
+      aria-label="Download Porter Fairbourne's résumé as a PDF"
+    >
+      Download PDF ↓
+    </a>
+  </div>
   <iframe
     class="resume-frame"
     src="/porter_fairbourne_resume.html"

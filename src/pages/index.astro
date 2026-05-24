@@ -3,7 +3,9 @@ import DesktopLayout from '../layouts/DesktopLayout.astro';
 import MenuBar from '../components/MenuBar.astro';
 import DesktopIcon from '../components/DesktopIcon.astro';
 import Dock from '../components/Dock.astro';
+import FavoriteQuote from '../components/FavoriteQuote.astro';
 import { getVisibility, getMenubarStatus, getIconLabels } from '../lib/kv';
+import type { BrandName } from '../lib/brand-glyphs';
 
 // Server-render so the dock + desktop icon visibility, label overrides, and
 // menubar status read fresh from KV at request time (lets admin edits take
@@ -34,22 +36,24 @@ type IconConfig = {
   variant: 'file' | 'folder';
   external?: boolean;
   download?: boolean;
+  /** Brand glyph for folder icons. Ignored when variant === 'file'. */
+  brand?: BrandName;
 };
 
+// Left group renders as a 3-column grid: row 1 = the three folders, row 2 =
+// two files. This is the "home" arrangement the Tidy-icons button resets to.
 const leftIcons: IconConfig[] = [
-  { id: 'selected-work', href: '/projects', label: 'selected-work', variant: 'folder' },
-  { id: 'ember', href: '/projects/ember', label: 'ember.mdx', ext: 'mdx', variant: 'file' },
-  { id: 'yoodlize', href: '/projects/yoodlize-fb-automation', label: 'yoodlize.mdx', ext: 'mdx', variant: 'file' },
-  { id: 'fun-projects', href: '/fun', label: 'fun-projects', variant: 'folder' },
-  { id: 'mindstudio-agents', href: '/agents', label: 'mindstudio-agents', variant: 'folder' },
-  { id: 'writing', href: '/writing', label: 'writing', variant: 'folder' },
+  { id: 'selected-work', href: '/projects', label: 'full-app-prototype', variant: 'folder', brand: 'prototype' },
+  { id: 'ai-agents', href: '/agents', label: 'ai-agents', variant: 'folder', brand: 'robot' },
+  { id: 'fun-projects', href: '/fun', label: 'internal-tools', variant: 'folder', brand: 'toolbox' },
+  { id: 'resume', href: '/resume', label: 'résumé.pdf', ext: 'pdf', variant: 'file' },
+  { id: 'about', href: '/about', label: 'about.md', ext: 'md', variant: 'file' },
 ];
 
+// Right group renders as a single row of three files.
 const rightIcons: IconConfig[] = [
-  { id: 'about', href: '/about', label: 'about.md', ext: 'md', variant: 'file' },
   { id: 'now', href: '/now', label: 'now.txt', ext: 'txt', variant: 'file' },
   { id: 'stack', href: '/stack', label: 'stack.md', ext: 'md', variant: 'file' },
-  { id: 'resume', href: '/resume', label: 'résumé.pdf', ext: 'pdf', variant: 'file' },
   { id: 'style-guide', href: '/style-guide', label: 'style-guide.html', ext: 'html', variant: 'file' },
 ];
 ---
@@ -95,6 +99,7 @@ const rightIcons: IconConfig[] = [
             label={labelFor(icon.id, icon.label)}
             ext={icon.ext}
             variant={icon.variant}
+            brand={icon.brand}
           />
         ))}
       </nav>
@@ -117,6 +122,9 @@ const rightIcons: IconConfig[] = [
   </div>
 
   <Dock visibility={dockVisibility} labels={iconLabels} />
+
+  <!-- Paper-airplane "Favorite quote" feature — launched by the dock's quote icon -->
+  <FavoriteQuote />
 
   <!-- Floating window — opens when a file/folder is clicked -->
   <div class="desktop-window" id="desktop-window" role="dialog" aria-modal="true" aria-labelledby="desktop-window-title" hidden>
@@ -146,8 +154,8 @@ const rightIcons: IconConfig[] = [
       if (!modal || !titleEl || !bodyEl) return;
 
       var WINDOWED_PREFIXES = [
-        '/about', '/now', '/stack', '/resume', '/fun', '/writing', '/projects',
-        '/agents', '/style-guide', '/photos', '/notepad', '/books', '/music', '/calendar'
+        '/about', '/now', '/stack', '/resume', '/fun', '/projects',
+        '/agents', '/style-guide', '/photos', '/books', '/movies', '/calendar'
       ];
       var ORIGINAL_TITLE = document.title;
       var cache = {};
@@ -183,6 +191,21 @@ const rightIcons: IconConfig[] = [
         }
       }
 
+      // Scripts inserted via innerHTML don't run. Re-create each as a fresh
+      // element so the browser executes it (the /calendar cal.com embed needs this).
+      function runScripts(container) {
+        var scripts = container.querySelectorAll('script');
+        for (var i = 0; i < scripts.length; i++) {
+          var old = scripts[i];
+          var fresh = document.createElement('script');
+          for (var a = 0; a < old.attributes.length; a++) {
+            fresh.setAttribute(old.attributes[a].name, old.attributes[a].value);
+          }
+          fresh.text = old.textContent;
+          old.parentNode.replaceChild(fresh, old);
+        }
+      }
+
       function openWindowAt(path, push, trigger) {
         if (trigger) triggerEl = trigger;
         setOpen(true);
@@ -200,7 +223,7 @@ const rightIcons: IconConfig[] = [
           var content = doc.querySelector('.window__content');
           var title = doc.querySelector('.window__title');
           var pageTitle = doc.querySelector('title');
-          if (content) bodyEl.innerHTML = content.innerHTML;
+          if (content) { bodyEl.innerHTML = content.innerHTML; runScripts(bodyEl); }
           else bodyEl.innerHTML = '<div class="modal-error">No content found.</div>';
           if (title) titleEl.innerHTML = title.innerHTML;
           if (pageTitle) document.title = pageTitle.textContent;
@@ -390,18 +413,29 @@ const rightIcons: IconConfig[] = [
         };
       }
 
+      // Logical (unclamped) position we want each icon at. The displayed
+      // position is this clamped to the current surface size. Keeping the
+      // logical position separate means a transient window shrink — e.g. macOS
+      // Split View opening when the Mail icon's mailto: link fires — tucks icons
+      // in to stay on-screen, then returns them home when the window grows back,
+      // instead of permanently stranding them at the edge.
+      var desired = {};
+
+      function place(icon) {
+        var d = desired[icon.getAttribute('data-icon-id')] || { x: 0, y: 0 };
+        var fixed = constrain(d.x, d.y, icon.offsetWidth || 104, icon.offsetHeight || 104);
+        icon.style.left = fixed.x + 'px';
+        icon.style.top = fixed.y + 'px';
+      }
+
       function init() {
         var natural = measureNatural();
         root.classList.add('os--free');
         for (var i = 0; i < icons.length; i++) {
           var icon = icons[i];
           var id = icon.getAttribute('data-icon-id');
-          var pos = saved[id] || natural[id] || { x: 0, y: 0 };
-          var w = icon.offsetWidth || 104;
-          var h = icon.offsetHeight || 104;
-          var fixed = constrain(pos.x, pos.y, w, h);
-          icon.style.left = fixed.x + 'px';
-          icon.style.top = fixed.y + 'px';
+          desired[id] = saved[id] || natural[id] || { x: 0, y: 0 };
+          place(icon);
         }
       }
 
@@ -454,10 +488,13 @@ const rightIcons: IconConfig[] = [
           icon.classList.remove('icon--dragging');
           try { icon.releasePointerCapture(e.pointerId); } catch (_) {}
           if (moved) {
-            saved[icon.getAttribute('data-icon-id')] = {
+            var dropped = {
               x: parseFloat(icon.style.left) || 0,
               y: parseFloat(icon.style.top) || 0
             };
+            var dropId = icon.getAttribute('data-icon-id');
+            desired[dropId] = dropped;
+            saved[dropId] = dropped;
             persist();
           }
           active = null;
@@ -492,19 +529,13 @@ const rightIcons: IconConfig[] = [
         }
       });
 
-      // Re-constrain on resize so icons don't get stranded offscreen
+      // Re-place icons on resize: clamp each one's logical position to the new
+      // surface size. Shrinking tucks them in; growing back returns them home.
       var resizeTimer = null;
       window.addEventListener('resize', function () {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(function () {
-          for (var i = 0; i < icons.length; i++) {
-            var icon = icons[i];
-            var x = parseFloat(icon.style.left) || 0;
-            var y = parseFloat(icon.style.top) || 0;
-            var next = constrain(x, y, icon.offsetWidth, icon.offsetHeight);
-            icon.style.left = next.x + 'px';
-            icon.style.top = next.y + 'px';
-          }
+          for (var i = 0; i < icons.length; i++) place(icons[i]);
         }, 150);
       });
     })();

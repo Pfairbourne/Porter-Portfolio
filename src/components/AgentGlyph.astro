@@ -1,0 +1,110 @@
+---
+/**
+ * AgentGlyph — halftone-rendered agent icon for the /agents listing cards.
+ *
+ * Layers (back → front), mirrors FolderGlyph but with an optional accent:
+ *   1. paper fill      (.icon-paper)
+ *   2. halftone dots   (.icon-dots, clipped to the silhouette)
+ *   3. detail strokes  (.icon-seam, inner lines and sub-frames)
+ *   4. ember accent    (.icon-accent, optional ember-filled solid)
+ *   5. outline         (.icon-outline)
+ *
+ * Cards render the icon at 56×56 (40×40 on mobile), so we use the
+ * NEWSPRINT_FINE halftone preset (denser lattice, smaller dots) — at this
+ * size the desktop-grade NEWSPRINT dots clumped together and ate the
+ * detail. The detail/outline strokes also pick up a small bump in weight
+ * and opacity inside this component (see scoped <style> below) so the
+ * interior lines read cleanly without dominating the dots.
+ */
+import { makeDots, NEWSPRINT_FINE } from '../lib/halftone';
+import { AGENT_ICONS, type IconName } from '../lib/agent-icons';
+
+interface Props {
+  /** Which icon to render. Resolved from `agents` collection's `icon` field. */
+  icon: IconName;
+  /** Stable identifier used to namespace the per-instance clipPath id. */
+  uid: string;
+  /** Optional extra class on the outer SVG (e.g. "agent-glyph" for sizing). */
+  class?: string;
+}
+
+const { icon, uid, class: className = '' } = Astro.props;
+const spec = AGENT_ICONS[icon];
+
+const W = 72;
+const H = 72;
+
+const dots = makeDots({
+  W,
+  H,
+  pitch: NEWSPRINT_FINE.pitch,
+  maxR: NEWSPRINT_FINE.maxR,
+  minR: NEWSPRINT_FINE.minR,
+  angleDeg: NEWSPRINT_FINE.angleDeg,
+  field: NEWSPRINT_FINE.field,
+});
+
+const clipId = `clip-agent-${uid}`;
+---
+<svg viewBox={`0 0 ${W} ${H}`} class:list={['halftone-icon', 'agent-glyph-svg', className]} aria-hidden="true">
+  <defs>
+    <clipPath id={clipId}>
+      <path d={spec.dotsClip ?? spec.silhouette} />
+    </clipPath>
+  </defs>
+  <path d={spec.silhouette} class="icon-paper" />
+  <g clip-path={`url(#${clipId})`} class="icon-dots">
+    {dots.map((d) => <circle cx={d.x.toFixed(2)} cy={d.y.toFixed(2)} r={d.r.toFixed(2)} />)}
+  </g>
+  {spec.detail && <path d={spec.detail} class="icon-seam" />}
+  {spec.detailFill && <path d={spec.detailFill} class="icon-detail-fill" />}
+  {spec.accent && <path d={spec.accent} class="icon-accent" />}
+  {spec.accentStroke && <path d={spec.accentStroke} class="icon-accent-stroke" />}
+  <path d={spec.silhouette} class="icon-outline" />
+</svg>
+
+<style>
+  /* Agent icons render small (56×56). Bump the detail + outline strokes a
+     bit and add the ember accent fill class. Scoped to .agent-glyph-svg so
+     the desktop FileGlyph / FolderGlyph styles are unaffected. */
+  .agent-glyph-svg :global(.icon-seam) {
+    stroke-width: 1.1;
+    stroke-opacity: 0.85;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .agent-glyph-svg :global(.icon-outline) {
+    stroke-width: 1.2;
+    stroke-opacity: 0.9;
+    stroke-linejoin: round;
+  }
+  .agent-glyph-svg :global(.icon-accent) {
+    fill: var(--accent);
+    transition: fill 200ms ease;
+  }
+  .agent-glyph-svg :global(.icon-detail-fill) {
+    fill: var(--ink);
+    transition: fill 200ms ease;
+  }
+  .agent-glyph-svg :global(.icon-accent-stroke) {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: stroke 200ms ease;
+  }
+  /* Hover state propagates from the card; mirrors the existing rules in
+     global.css that swap icon-dots / icon-outline / icon-seam to ember. */
+  :global(.project-card--with-glyph:hover) .agent-glyph-svg :global(.icon-accent) {
+    /* Already ember; deepen slightly so it doesn't disappear when the
+       surrounding ink also turns ember. */
+    fill: color-mix(in oklab, var(--accent) 80%, var(--ink) 20%);
+  }
+  :global(.project-card--with-glyph:hover) .agent-glyph-svg :global(.icon-detail-fill) {
+    fill: var(--accent);
+  }
+  :global(.project-card--with-glyph:hover) .agent-glyph-svg :global(.icon-accent-stroke) {
+    stroke: color-mix(in oklab, var(--accent) 80%, var(--ink) 20%);
+  }
+</style>

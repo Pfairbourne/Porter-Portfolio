@@ -1,43 +1,65 @@
 ---
 import WindowLayout from '../layouts/WindowLayout.astro';
-import ProjectCard from '../components/ProjectCard.astro';
 import SectionLabel from '../components/SectionLabel.astro';
+import Tag from '../components/Tag.astro';
+import AgentGlyph from '../components/AgentGlyph.astro';
 import { getCollection } from 'astro:content';
 
-const funProjects = (await getCollection('fun', ({ data }) => !data.draft))
-  .sort((a, b) => b.data.order - a.data.order || b.data.year - a.data.year);
+// Newest first (by year); within a year, lower `order` wins. Year is used for
+// sorting only — never shown in the listing UI.
+const tools = (await getCollection('fun', ({ data }) => !data.draft))
+  .sort((a, b) => {
+    const yearDiff = b.data.year - a.data.year;
+    if (yearDiff !== 0) return yearDiff;
+    return (a.data.order ?? 0) - (b.data.order ?? 0);
+  });
 ---
 <WindowLayout
-  title="Fun Projects — Porter Fairbourne"
-  description="Side projects, agents, automations, and small things built for fun."
-  windowTitle="fun-projects"
+  title="Internal Tools — Porter Fairbourne"
+  description="Internal AI tools and agents Porter Fairbourne built with Claude Code for himself and his company."
+  windowTitle="internal-tools"
 >
     <section class="hero">
-      <div class="t-label" style="margin-bottom: var(--s-4);">Fun Projects</div>
-      <h1 class="t-h1">Things I built for fun<span class="accent">.</span></h1>
+      <div class="t-label" style="margin-bottom: var(--s-4);">Internal Tools</div>
+      <h1 class="t-h1">Tools I built with Claude Code<span class="accent">.</span></h1>
       <p class="ethos">
-        No PRDs, no roadmaps, no stakeholders. Sometimes the best way to learn a new tool is to point it at a problem I have and see what falls out.
+        Not products, infrastructure for my own work. When a workflow is repetitive enough to hurt, I point Claude Code at it and ship the agent that removes it. These run for me and my company every day.
       </p>
     </section>
 
     <section>
-      <SectionLabel text="All Side Projects" />
+      <SectionLabel text="All Tools" />
       <div role="list">
-        {funProjects.length === 0 ? (
+        {tools.length === 0 ? (
           <p class="t-small" style="color: var(--muted); padding: var(--s-5) 0;">
-            More side projects coming soon.
+            More tools coming soon.
           </p>
         ) : (
-          funProjects.map((f) => (
-            <ProjectCard
-              href={f.data.link ?? '#'}
-              year={f.data.year}
-              title={f.data.title}
-              description={f.data.summary}
-              tags={f.data.tags}
-              external={!!f.data.link}
-              arrow={f.data.link ? '↗' : '→'}
-            />
+          tools.map((t) => (
+            <a
+              class:list={[
+                'project-card',
+                'project-card--agent',
+                t.data.icon && 'project-card--with-glyph',
+              ]}
+              href={`/fun/${t.id}`}
+            >
+              <div class="project-card-row">
+                {t.data.icon && (
+                  <AgentGlyph icon={t.data.icon} uid={t.id} class="agent-glyph" />
+                )}
+                <div class="project-body">
+                  <div class="project-title">{t.data.title}</div>
+                  <div class="project-desc">{t.data.summary}</div>
+                  {t.data.tags.length > 0 && (
+                    <div class="project-tags">
+                      {t.data.tags.slice(0, 3).map((tag) => <Tag label={tag} />)}
+                    </div>
+                  )}
+                </div>
+                <span class="project-arrow">↗</span>
+              </div>
+            </a>
           ))
         )}
       </div>

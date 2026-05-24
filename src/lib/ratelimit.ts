@@ -31,20 +31,6 @@ function getLoginLimiter(): Ratelimit | null {
   return loginLimiter;
 }
 
-let notepadLimiter: Ratelimit | null = null;
-function getNotepadLimiter(): Ratelimit | null {
-  if (notepadLimiter) return notepadLimiter;
-  const r = getRedis();
-  if (!r) return null;
-  notepadLimiter = new Ratelimit({
-    redis: r,
-    limiter: Ratelimit.slidingWindow(3, '1 h'),
-    analytics: false,
-    prefix: 'porter:rl:notepad',
-  });
-  return notepadLimiter;
-}
-
 let contentSaveLimiter: Ratelimit | null = null;
 function getContentSaveLimiter(): Ratelimit | null {
   if (contentSaveLimiter) return contentSaveLimiter;
@@ -70,17 +56,6 @@ export async function checkLoginRateLimit(request: Request): Promise<{
   remaining: number;
 }> {
   const limiter = getLoginLimiter();
-  if (!limiter) return { success: true, remaining: 999 };
-  const ip = clientIp(request);
-  const { success, remaining } = await limiter.limit(ip);
-  return { success, remaining };
-}
-
-export async function checkNotepadRateLimit(request: Request): Promise<{
-  success: boolean;
-  remaining: number;
-}> {
-  const limiter = getNotepadLimiter();
   if (!limiter) return { success: true, remaining: 999 };
   const ip = clientIp(request);
   const { success, remaining } = await limiter.limit(ip);

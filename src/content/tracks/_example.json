@@ -1,7 +1,0 @@
-{
-  "spotifyTrackId": "REPLACE_ME_WITH_REAL_TRACK_ID",
-  "title": "Example track",
-  "artist": "Replace this via /settings or by editing this file",
-  "note": "Spotify track ID is the last segment of any Spotify track URL (open.spotify.com/track/<id>).",
-  "order": 999
-}

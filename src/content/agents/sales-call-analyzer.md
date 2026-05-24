@@ -1,9 +1,7 @@
 ---
 title: Sales Call Analyzer
 year: 2025
-summary: >-
-  Drop in a sales call recording. Out comes a coaching report for the rep and a CRM-ready summary of
-  the call (transcript, sentiment, objections, next steps), built on GPT-5.
+summary: "Drop in a call recording, get a coaching report and a CRM-ready summary."
 tags:
   - MindStudio
   - GPT-5
@@ -12,6 +10,7 @@ tags:
   - CRM
 link: https://app.mindstudio.ai/agents/sales-call-analyzer-ca7e525e
 hero: /images/agents/sales-call-analyzer.png
+icon: waveform
 heroCaption: "Linear pipeline: upload audio, transcribe, analyze, generate coaching feedback + CRM summary, format output."
 order: 60
 draft: false

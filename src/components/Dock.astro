@@ -1,9 +1,9 @@
 ---
 import DockIcon from './DockIcon.astro';
 import PhotosGlyph from './dock-glyphs/PhotosGlyph.astro';
-import NotepadGlyph from './dock-glyphs/NotepadGlyph.astro';
+import AirplaneGlyph from './dock-glyphs/AirplaneGlyph.astro';
 import ReaderGlyph from './dock-glyphs/ReaderGlyph.astro';
-import MusicGlyph from './dock-glyphs/MusicGlyph.astro';
+import MoviesGlyph from './dock-glyphs/MoviesGlyph.astro';
 import CalendarGlyph from './dock-glyphs/CalendarGlyph.astro';
 import MailGlyph from './dock-glyphs/MailGlyph.astro';
 import SettingsGlyph from './dock-glyphs/SettingsGlyph.astro';
@@ -30,13 +30,13 @@ type DockApp = {
 };
 
 const apps: DockApp[] = [
-  { id: 'photos',   href: '/photos',   label: 'Photos',   Glyph: PhotosGlyph },
-  { id: 'notepad',  href: '/notepad',  label: 'Writing',  Glyph: NotepadGlyph },
-  { id: 'reader',   href: '/books',    label: 'Reading',  Glyph: ReaderGlyph },
-  { id: 'music',    href: '/music',    label: 'Music',    Glyph: MusicGlyph },
-  { id: 'calendar', href: '/calendar', label: 'Calendar', Glyph: CalendarGlyph },
-  { id: 'mail',     href: MAIL_TO,     label: 'Mail',     Glyph: MailGlyph },
-  { id: 'settings', href: '/settings', label: 'Settings', Glyph: SettingsGlyph },
+  { id: 'photos',   href: '/photos',   label: 'Photos',         Glyph: PhotosGlyph },
+  { id: 'quote',    href: '#',         label: 'Favorite quote', Glyph: AirplaneGlyph },
+  { id: 'reader',   href: '/books',    label: 'Reading',        Glyph: ReaderGlyph },
+  { id: 'movies',   href: '/movies',   label: 'Movies',         Glyph: MoviesGlyph },
+  { id: 'calendar', href: '/calendar', label: 'Calendar',       Glyph: CalendarGlyph },
+  { id: 'mail',     href: MAIL_TO,     label: 'Mail',           Glyph: MailGlyph },
+  { id: 'settings', href: '/settings', label: 'Settings',       Glyph: SettingsGlyph },
 ];
 ---
 <nav class="dock" aria-label="Apps">

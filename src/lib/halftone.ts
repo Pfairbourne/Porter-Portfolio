@@ -54,10 +54,56 @@ export function makeDots(opts: DotsOpts): Dot[] {
 }
 
 // "Newsprint" preset — heavy ink pool at bottom-left, fading up-right.
-// Recommended default for both file and folder glyphs.
+// Used by file and folder desktop glyphs (FileGlyph / FolderGlyph).
 export const NEWSPRINT = {
   pitch: 4.6,
   maxR: 2.1,
+  minR: 0,
+  angleDeg: 0,
+  field: ((x, y, W, H) => {
+    const t = 1 - y / H;
+    const u = 1 - x / W;
+    return Math.pow(Math.max(0, 1 - t * 0.7 - u * 0.2), 1.2);
+  }) satisfies Field,
+};
+
+// Folder desktop icons — fine print-halftone lattice, rasterised to a PNG
+// at runtime (src/lib/halftone-raster.ts) and embedded as one <image> per
+// icon. A tight pitch + small dots give a smooth newsprint feel: dark
+// (brand) areas overlap (2·brandR > pitch → near-solid), light areas get
+// sub-pixel dots so the base pattern recedes into the paper. `blur` softens
+// the brand field's edges; `contrast` sharpens the ramp to full density.
+export const FOLDER_HALFTONE = {
+  pitch: 1.15,
+  baseR: 0.18, // sparse sub-pixel dots where brand field = 0
+  brandR: 0.74, // dense overlapping dots where brand field = 1
+  blur: 0.55, // gaussian blur on the brand field → soft halftone falloff
+  contrast: 1.5, // power curve on sampled intensity → faster ramp to full
+};
+
+// Desktop FILE icons — coarse vertical-gradient halftone. Wider grid and
+// bigger dots than the folder lattice give files a chunky newsprint feel,
+// and the dense bottom band reads as the dark label area behind the white
+// extension text. Linear top→bottom ramp = the most even transition.
+export const FILE_HALFTONE = {
+  pitch: 2.8,
+  minR: 0.42, // small sparse dots at the top (light)
+  maxR: 1.75, // large overlapping dots at the bottom (2·maxR > pitch → solid)
+};
+
+// Fine-grain newsprint — same field as NEWSPRINT but with a denser lattice
+// and smaller dots. Used by AgentGlyph because agent cards render the icon
+// at 56×56 (40×40 on mobile) — at that size the desktop NEWSPRINT dots are
+// chunky and the silhouette dominates. NEWSPRINT_FINE keeps the icon
+// readable as detail (lines, accents) without the dots clumping together.
+//
+// Tuning:
+//   pitch 2.8 → roughly 2× the dot density of NEWSPRINT
+//   maxR  1.15 → ≈40% of pitch, leaves visible paper between dots
+//   cutoff stays at the default 0.18 so faint edges drop out cleanly
+export const NEWSPRINT_FINE = {
+  pitch: 2.8,
+  maxR: 1.15,
   minR: 0,
   angleDeg: 0,
   field: ((x, y, W, H) => {

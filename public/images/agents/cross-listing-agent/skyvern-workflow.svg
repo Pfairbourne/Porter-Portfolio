@@ -1,0 +1,179 @@
+<svg viewBox="0 0 920 780" xmlns="http://www.w3.org/2000/svg" role="img" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif">
+  <title>Skyvern browser workflow — Cross Listing Agent</title>
+  <desc>MindStudio hands one structured payload and a persistent browser_profile_id to Skyvern, which runs seven sequential blocks (navigate, initiate, upload + title + price, category + condition, description + contextual fields, next, publish) against a logged-in Facebook Marketplace session, with fail-fast paths on expired login and disabled Publish.</desc>
+
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b6b6b"/>
+    </marker>
+    <marker id="arr-fail" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b8845a"/>
+    </marker>
+  </defs>
+
+  <!-- Header subtitle -->
+  <text x="20" y="32" fill="#6b6b6b" font-size="12">Skyvern takes one structured payload + a persistent browser profile, then runs 7 sequential UI-action blocks against a logged-in Facebook Marketplace session.</text>
+
+  <!-- ============ Handoff row ============ -->
+  <g transform="translate(20, 60)">
+    <rect width="190" height="80" fill="#f7f7f5" stroke="#d8d6cf" stroke-width="1"/>
+    <text x="14" y="22" fill="#1a1a1a" font-size="13" font-weight="600">MindStudio HTTP Request</text>
+    <text x="14" y="40" fill="#6b6b6b" font-size="11">POST /tasks</text>
+    <rect x="14" y="50" width="86" height="20" fill="#efece4" stroke="#d8d6cf" stroke-width="1"/>
+    <text x="20" y="64" fill="#3a3a3a" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace" font-size="10">JWT bearer</text>
+  </g>
+  <path d="M210 100 L250 100" marker-end="url(#arr)" fill="none" stroke="#6b6b6b" stroke-width="1.4"/>
+
+  <g transform="translate(250, 60)">
+    <rect width="250" height="80" fill="#f7f7f5" stroke="#b8845a" stroke-width="1.5"/>
+    <text x="14" y="22" fill="#1a1a1a" font-size="13" font-weight="600">Skyvern Task</text>
+    <rect x="14" y="32" width="222" height="20" fill="#efece4" stroke="#d8d6cf" stroke-width="1"/>
+    <text x="20" y="46" fill="#3a3a3a" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace" font-size="10">browser_profile_id: bp_516…</text>
+    <text x="14" y="68" fill="#6b6b6b" font-size="10.5">session stays warm across runs</text>
+  </g>
+  <path d="M500 100 L540 100" marker-end="url(#arr)" fill="none" stroke="#6b6b6b" stroke-width="1.4"/>
+
+  <g transform="translate(540, 60)">
+    <rect width="200" height="80" fill="#f7f7f5" stroke="#d8d6cf" stroke-width="1"/>
+    <text x="14" y="22" fill="#1a1a1a" font-size="13" font-weight="600">Live Facebook session</text>
+    <text x="14" y="42" fill="#6b6b6b" font-size="10.5">pre-authenticated;</text>
+    <text x="14" y="58" fill="#6b6b6b" font-size="10.5">no re-login per run</text>
+  </g>
+
+  <!-- ============ Section label ============ -->
+  <text x="20" y="160" fill="#1a1a1a" font-size="13" font-weight="600">Sequential blocks (Skyvern Task spec)</text>
+
+  <!-- ============ Block 1: navigate_to_marketplace ============ -->
+  <g transform="translate(20, 174)">
+    <rect width="880" height="55" fill="#f7f7f5" stroke="#d8d6cf" stroke-width="1"/>
+    <circle cx="22" cy="28" r="14" fill="#efece4" stroke="#b8845a" stroke-width="1.5"/>
+    <text x="22" y="32" text-anchor="middle" fill="#b8845a" font-size="13" font-weight="600">1</text>
+    <text x="50" y="22" fill="#1a1a1a" font-size="13" font-weight="600" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace">navigate_to_marketplace</text>
+    <text x="50" y="42" fill="#3a3a3a" font-size="10.5">Open the Marketplace create-listing page. Dismiss popups.</text>
+    <text x="874" y="42" text-anchor="end" fill="#b8845a" font-size="10.5">↳ fail run with "login required" if session expired</text>
+  </g>
+  <path d="M42 229 L42 240" marker-end="url(#arr)" fill="none" stroke="#6b6b6b" stroke-width="1.4"/>
+
+  <!-- ============ Block 2: initiate_listing ============ -->
+  <g transform="translate(20, 241)">
+    <rect width="880" height="55" fill="#f7f7f5" stroke="#d8d6cf" stroke-width="1"/>
+    <circle cx="22" cy="28" r="14" fill="#efece4" stroke="#b8845a" stroke-width="1.5"/>
+    <text x="22" y="32" text-anchor="middle" fill="#b8845a" font-size="13" font-weight="600">2</text>
+    <text x="50" y="22" fill="#1a1a1a" font-size="13" font-weight="600" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace">initiate_listing</text>
+    <text x="50" y="42" fill="#3a3a3a" font-size="10.5">Click “Item for Sale” to open the new-listing flow.</text>
+  </g>
+  <path d="M42 296 L42 307" marker-end="url(#arr)" fill="none" stroke="#6b6b6b" stroke-width="1.4"/>
+
+  <!-- ============ Block 3: upload_photos_title_price ============ -->
+  <g transform="translate(20, 308)">
+    <rect width="880" height="55" fill="#f7f7f5" stroke="#d8d6cf" stroke-width="1"/>
+    <circle cx="22" cy="28" r="14" fill="#efece4" stroke="#b8845a" stroke-width="1.5"/>
+    <text x="22" y="32" text-anchor="middle" fill="#b8845a" font-size="13" font-weight="600">3</text>
+    <text x="50" y="22" fill="#1a1a1a" font-size="13" font-weight="600" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace">upload_photos_title_price</text>
+    <text x="50" y="42" fill="#3a3a3a" font-size="10.5">Upload image(s); fill title and price.</text>
+    <!-- pills: product_image_url, product_name, product_price -->
+    <g transform="translate(560, 18)">
+      <rect width="118" height="20" fill="#efece4" stroke="#d8d6cf" stroke-width="1"/>
+      <text x="8" y="14" fill="#3a3a3a" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace" font-size="10">product_image_url</text>
+    </g>
+    <g transform="translate(682, 18)">
+      <rect width="92" height="20" fill="#efece4" stroke="#d8d6cf" stroke-width="1"/>
+      <text x="8" y="14" fill="#3a3a3a" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace" font-size="10">product_name</text>
+    </g>
+    <g transform="translate(778, 18)">
+      <rect width="92" height="20" fill="#efece4" stroke="#d8d6cf" stroke-width="1"/>
+      <text x="8" y="14" fill="#3a3a3a" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace" font-size="10">product_price</text>
+    </g>
+  </g>
+  <path d="M42 363 L42 374" marker-end="url(#arr)" fill="none" stroke="#6b6b6b" stroke-width="1.4"/>
+
+  <!-- ============ Block 4: select_category_condition ============ -->
+  <g transform="translate(20, 375)">
+    <rect width="880" height="55" fill="#f7f7f5" stroke="#d8d6cf" stroke-width="1"/>
+    <circle cx="22" cy="28" r="14" fill="#efece4" stroke="#b8845a" stroke-width="1.5"/>
+    <text x="22" y="32" text-anchor="middle" fill="#b8845a" font-size="13" font-weight="600">4</text>
+    <text x="50" y="22" fill="#1a1a1a" font-size="13" font-weight="600" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace">select_category_condition</text>
+    <text x="50" y="42" fill="#3a3a3a" font-size="10.5">Type the category, accept matching suggestion (fuzzy fallback); set condition.</text>
+    <g transform="translate(648, 18)">
+      <rect width="110" height="20" fill="#efece4" stroke="#d8d6cf" stroke-width="1"/>
+      <text x="8" y="14" fill="#3a3a3a" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace" font-size="10">product_category</text>
+    </g>
+    <g transform="translate(762, 18)">
+      <rect width="108" height="20" fill="#efece4" stroke="#d8d6cf" stroke-width="1"/>
+      <text x="8" y="14" fill="#3a3a3a" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace" font-size="10">product_condition</text>
+    </g>
+  </g>
+  <path d="M42 430 L42 441" marker-end="url(#arr)" fill="none" stroke="#6b6b6b" stroke-width="1.4"/>
+
+  <!-- ============ Block 5: fill_description_contextual_fields ============ -->
+  <g transform="translate(20, 442)">
+    <rect width="880" height="55" fill="#f7f7f5" stroke="#d8d6cf" stroke-width="1"/>
+    <circle cx="22" cy="28" r="14" fill="#efece4" stroke="#b8845a" stroke-width="1.5"/>
+    <text x="22" y="32" text-anchor="middle" fill="#b8845a" font-size="13" font-weight="600">5</text>
+    <text x="50" y="22" fill="#1a1a1a" font-size="13" font-weight="600" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace">fill_description_contextual_fields</text>
+    <text x="50" y="42" fill="#3a3a3a" font-size="10.5">Fill description, location, delivery (“Local pickup only”); handle dynamic fields.</text>
+    <g transform="translate(520, 18)">
+      <rect width="128" height="20" fill="#efece4" stroke="#d8d6cf" stroke-width="1"/>
+      <text x="8" y="14" fill="#3a3a3a" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace" font-size="10">product_description</text>
+    </g>
+    <g transform="translate(652, 18)">
+      <rect width="106" height="20" fill="#efece4" stroke="#d8d6cf" stroke-width="1"/>
+      <text x="8" y="14" fill="#3a3a3a" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace" font-size="10">product_location</text>
+    </g>
+    <g transform="translate(762, 18)">
+      <rect width="108" height="20" fill="#efece4" stroke="#d8d6cf" stroke-width="1"/>
+      <text x="8" y="14" fill="#3a3a3a" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace" font-size="10">+ dynamic fields</text>
+    </g>
+  </g>
+  <path d="M42 497 L42 508" marker-end="url(#arr)" fill="none" stroke="#6b6b6b" stroke-width="1.4"/>
+
+  <!-- ============ Block 6: click_next_button ============ -->
+  <g transform="translate(20, 509)">
+    <rect width="880" height="55" fill="#f7f7f5" stroke="#d8d6cf" stroke-width="1"/>
+    <circle cx="22" cy="28" r="14" fill="#efece4" stroke="#b8845a" stroke-width="1.5"/>
+    <text x="22" y="32" text-anchor="middle" fill="#b8845a" font-size="13" font-weight="600">6</text>
+    <text x="50" y="22" fill="#1a1a1a" font-size="13" font-weight="600" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace">click_next_button</text>
+    <text x="50" y="42" fill="#3a3a3a" font-size="10.5">Click “Next” / “Proceed” to advance the wizard.</text>
+  </g>
+  <path d="M42 564 L42 575" marker-end="url(#arr)" fill="none" stroke="#6b6b6b" stroke-width="1.4"/>
+
+  <!-- ============ Block 7: post_listing ============ -->
+  <g transform="translate(20, 576)">
+    <rect width="880" height="55" fill="#f7f7f5" stroke="#d8d6cf" stroke-width="1"/>
+    <circle cx="22" cy="28" r="14" fill="#efece4" stroke="#b8845a" stroke-width="1.5"/>
+    <text x="22" y="32" text-anchor="middle" fill="#b8845a" font-size="13" font-weight="600">7</text>
+    <text x="50" y="22" fill="#1a1a1a" font-size="13" font-weight="600" font-family="ui-monospace, &quot;SF Mono&quot;, Menlo, monospace">post_listing</text>
+    <text x="50" y="42" fill="#3a3a3a" font-size="10.5">Click “Publish”; complete only when the browser redirects away from the create page.</text>
+    <text x="874" y="42" text-anchor="end" fill="#b8845a" font-size="10.5">↳ if Publish disabled, scroll up + surface error fields</text>
+  </g>
+
+  <!-- ============ What stands out ============ -->
+  <text x="20" y="660" fill="#1a1a1a" font-size="13" font-weight="600">What stands out</text>
+
+  <g transform="translate(20, 672)">
+    <rect width="280" height="100" fill="#f7f7f5" stroke="#b8845a" stroke-width="1.5"/>
+    <text x="14" y="22" fill="#1a1a1a" font-size="13" font-weight="600">Persistent browser profile</text>
+    <text x="14" y="42" fill="#3a3a3a" font-size="10.5">One human login lives in Skyvern</text>
+    <text x="14" y="56" fill="#3a3a3a" font-size="10.5">indefinitely. Rotated by editing a</text>
+    <text x="14" y="70" fill="#3a3a3a" font-size="10.5">spreadsheet cell, never by running</text>
+    <text x="14" y="84" fill="#3a3a3a" font-size="10.5">through a login flow.</text>
+  </g>
+
+  <g transform="translate(320, 672)">
+    <rect width="280" height="100" fill="#f7f7f5" stroke="#b8845a" stroke-width="1.5"/>
+    <text x="14" y="22" fill="#1a1a1a" font-size="13" font-weight="600">Resilient field selection</text>
+    <text x="14" y="42" fill="#3a3a3a" font-size="10.5">Fuzzy category fallback (block 4)</text>
+    <text x="14" y="56" fill="#3a3a3a" font-size="10.5">and dynamic-field detection</text>
+    <text x="14" y="70" fill="#3a3a3a" font-size="10.5">(block 5) tolerate Marketplace UI</text>
+    <text x="14" y="84" fill="#3a3a3a" font-size="10.5">variation without bailing.</text>
+  </g>
+
+  <g transform="translate(620, 672)">
+    <rect width="280" height="100" fill="#f7f7f5" stroke="#b8845a" stroke-width="1.5"/>
+    <text x="14" y="22" fill="#1a1a1a" font-size="13" font-weight="600">Completion = redirect, not click</text>
+    <text x="14" y="42" fill="#3a3a3a" font-size="10.5">Block 7 confirms the post landed</text>
+    <text x="14" y="56" fill="#3a3a3a" font-size="10.5">by waiting for the URL to leave</text>
+    <text x="14" y="70" fill="#3a3a3a" font-size="10.5">the create page — not by trusting</text>
+    <text x="14" y="84" fill="#3a3a3a" font-size="10.5">that the click fired.</text>
+  </g>
+</svg>

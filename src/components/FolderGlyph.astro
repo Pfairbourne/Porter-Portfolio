@@ -1,15 +1,37 @@
 ---
-import { makeDots, NEWSPRINT } from '../lib/halftone';
+/**
+ * FolderGlyph — desktop folder icon.
+ *
+ * Renders a manila-folder silhouette. The halftone dot field (with an optional
+ * brand logo baked in as a denser region) is rasterised CLIENT-SIDE to a PNG
+ * and dropped into the empty <image data-ht="folder"> placeholder below — see
+ * src/lib/halftone-raster.ts + the client script in DesktopIcon.astro. At
+ * pitch 1.15 a folder is ~2750 dots, so a single <image> replaces ~2750
+ * <circle> elements per icon.
+ *
+ * Server-rendered immediately: paper body, paper cutouts (if any), tab seam,
+ * crisp outline. The dot <image> fills in within a frame once JS runs.
+ */
+import {
+  BRAND_GLYPHS,
+  type BrandName,
+  type BrandLayer,
+  type BrandPart,
+} from '../lib/brand-glyphs';
 
 interface Props {
+  /** Per-instance clipPath id suffix (required — multiple folders share this component). */
   uid: string;
+  /** Optional brand glyph baked into the folder's halftone. */
+  brand?: BrandName;
 }
-const { uid } = Astro.props;
+
+const { uid, brand } = Astro.props;
 
 const W = 72;
 const H = 72;
 
-// Folder: 60×50 body at (6, 14) with 22×8 tab on top-left and a 4px ramp.
+// Folder body: 60×50 at (6, 14) with 22×8 tab on top-left and a 4px ramp.
 const x0 = 6;
 const y0 = 14;
 const w = 60;
@@ -21,27 +43,32 @@ const r = 3;
 const bodyPath = `M ${x0} ${y0 - tabH + r} Q ${x0} ${y0 - tabH}, ${x0 + r} ${y0 - tabH} L ${x0 + tabW - r} ${y0 - tabH} Q ${x0 + tabW} ${y0 - tabH}, ${x0 + tabW + 2} ${y0 - tabH + 4} L ${x0 + tabW + 6} ${y0} L ${x0 + w - r} ${y0} Q ${x0 + w} ${y0}, ${x0 + w} ${y0 + r} L ${x0 + w} ${y0 + h - r} Q ${x0 + w} ${y0 + h}, ${x0 + w - r} ${y0 + h} L ${x0 + r} ${y0 + h} Q ${x0} ${y0 + h}, ${x0} ${y0 + h - r} Z`;
 const seamPath = `M ${x0} ${y0 + 2} L ${x0 + w} ${y0 + 2}`;
 
-const dots = makeDots({
-  W,
-  H,
-  pitch: NEWSPRINT.pitch,
-  maxR: NEWSPRINT.maxR,
-  minR: NEWSPRINT.minR,
-  angleDeg: NEWSPRINT.angleDeg,
-  field: NEWSPRINT.field,
-});
+function asParts(layer: BrandLayer | undefined): BrandPart[] | null {
+  if (!layer) return null;
+  if (typeof layer === 'string') return [{ d: layer }];
+  return layer;
+}
 
-const clipId = `clip-folder-${uid}`;
+const spec = brand ? BRAND_GLYPHS[brand] : undefined;
+const paperCutoutParts = spec ? asParts(spec.paperCutouts) : null;
+
+const folderClipId = `clip-folder-${uid}`;
 ---
 <svg viewBox={`0 0 ${W} ${H}`} class="halftone-icon" aria-hidden="true">
   <defs>
-    <clipPath id={clipId}>
+    <clipPath id={folderClipId}>
       <path d={bodyPath} />
     </clipPath>
   </defs>
   <path d={bodyPath} class="icon-paper" />
-  <g clip-path={`url(#${clipId})`} class="icon-dots">
-    {dots.map((d) => <circle cx={d.x.toFixed(2)} cy={d.y.toFixed(2)} r={d.r.toFixed(2)} />)}
+  <g clip-path={`url(#${folderClipId})`}>
+    {/* Halftone PNG injected client-side; ~2750 dots → 1 element. */}
+    <image data-ht="folder" data-ht-brand={brand ?? ''} x="0" y="0" width={W} height={H} />
+    {/* Paper-colored cutouts drawn over the dots (clean planes). */}
+    {paperCutoutParts &&
+      paperCutoutParts.map((p) => (
+        <path d={p.d} transform={p.transform} class="icon-paper" />
+      ))}
   </g>
   <path d={seamPath} class="icon-seam" />
   <path d={bodyPath} class="icon-outline" />

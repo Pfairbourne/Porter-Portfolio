@@ -1,10 +1,7 @@
 ---
 title: Blog Poster Agent
 year: 2026
-summary: >-
-  An SEO blog engine for a rental marketplace, every scheduled run picks a city, researches
-  local rental trends, generates a fully on-brand blog post with hero imagery and internal links,
-  and publishes it. Never repeats a city it covered too recently, never breaks voice.
+summary: "Picks a city, writes the SEO blog post, publishes — never repeating."
 tags:
   - MindStudio
   - Claude Opus
@@ -16,6 +13,7 @@ tags:
   - Image Generation
 link: https://app.mindstudio.ai/agents/copy-of-yoodlize-blog-poster-2-f83c783a
 hero: /images/agents/yoodlize-blog-poster.png
+icon: document
 heroCaption: "Main flow — schedule, city selection, anti-duplication, dispatch to BuildPost"
 exampleOutput:
   url: https://www.yoodlize.com/blog/denver-rentals-party-supplies-camping-gear-yoodlize

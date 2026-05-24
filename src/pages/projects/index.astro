@@ -1,27 +1,29 @@
 ---
 import WindowLayout from '../../layouts/WindowLayout.astro';
-import ProjectCard from '../../components/ProjectCard.astro';
 import SectionLabel from '../../components/SectionLabel.astro';
+import Tag from '../../components/Tag.astro';
 import { getCollection } from 'astro:content';
 
+// Sort uses `order` (desc), then `year` (desc) as tiebreaker. Year is kept on
+// each entry for sorting only — never displayed on the listing.
 const projects = (await getCollection('projects', ({ data }) => !data.draft))
   .sort((a, b) => b.data.order - a.data.order || b.data.year - a.data.year);
 ---
 <WindowLayout
-  title="Selected Work — Porter Fairbourne"
-  description="Case studies and selected work from Porter Fairbourne."
-  windowTitle="selected-work"
+  title="Full App Prototype — Porter Fairbourne"
+  description="Breakdown of the Ember prototype across product data, validation, enrichment, publishing, workflow orchestration, and roadmap."
+  windowTitle="full-app-prototype"
 >
   <section class="hero">
-    <div class="t-label" style="margin-bottom: var(--s-4);">Selected Work</div>
+    <div class="t-label" style="margin-bottom: var(--s-4);">Full App Prototype</div>
     <h1 class="t-h1">Things I've built<span class="accent">.</span></h1>
     <p class="ethos">
-      Case studies showing the thinking, decisions, and outcomes — not just the screenshots.
+      Case studies showing the thinking, decisions, and outcomes, not just the screenshots.
     </p>
   </section>
 
   <section>
-    <SectionLabel text="Case Studies" />
+    <SectionLabel text="Surface-by-surface" />
     <div role="list">
       {projects.length === 0 ? (
         <p class="t-small" style="color: var(--muted); padding: var(--s-5) 0;">
@@ -29,14 +31,20 @@ const projects = (await getCollection('projects', ({ data }) => !data.draft))
         </p>
       ) : (
         projects.map((p) => (
-          <ProjectCard
-            href={`/projects/${p.id}`}
-            year={p.data.year}
-            title={p.data.title}
-            description={p.data.summary}
-            tags={p.data.tags}
-            arrow="↗"
-          />
+          <a class="project-card" href={`/projects/${p.id}`}>
+            <div class="project-card-row" style="grid-template-columns: 1fr auto;">
+              <div class="project-body">
+                <div class="project-title">{p.data.title}</div>
+                <div class="project-desc">{p.data.summary}</div>
+                {p.data.tags.length > 0 && (
+                  <div class="project-tags">
+                    {p.data.tags.slice(0, 3).map((t) => <Tag label={t} />)}
+                  </div>
+                )}
+              </div>
+              <span class="project-arrow">↗</span>
+            </div>
+          </a>
         ))
       )}
     </div>

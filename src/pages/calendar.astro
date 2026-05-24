@@ -1,20 +1,21 @@
 ---
 import WindowLayout from '../layouts/WindowLayout.astro';
 
-const CAL_USERNAME = import.meta.env.CAL_USERNAME ?? 'porterfairbourne';
-const CAL_EVENT_SLUG = import.meta.env.CAL_EVENT_SLUG ?? '20min';
+const CAL_USERNAME = import.meta.env.CAL_USERNAME ?? 'porter-fairbourne-mw9y9t';
+const CAL_EVENT_SLUG = import.meta.env.CAL_EVENT_SLUG ?? 'quick-chat';
 const calLink = `${CAL_USERNAME}/${CAL_EVENT_SLUG}`;
+const calNamespace = CAL_EVENT_SLUG;
 ---
 <WindowLayout
-  title="Book a chat — Porter Fairbourne"
-  description="Book a 20-minute chat with Porter — product, hiring, or your project."
+  title="Book a chat with Porter Fairbourne"
+  description="Book a quick chat with Porter: product, hiring, or your project."
   windowTitle="calendar.app"
 >
   <section style="margin-bottom: var(--s-6);">
     <div class="t-label" style="margin-bottom: var(--s-3);">Calendar</div>
     <h1 class="t-h1">Book a chat<span class="accent">.</span></h1>
     <p class="t-italic-serif" style="margin-top: var(--s-4); max-width: var(--max-w-read);">
-      Book a 20-minute chat — I'm happy to talk product, hiring, or your project.
+      Book a quick chat. I'm happy to talk product, hiring, or your project.
     </p>
   </section>
 
@@ -26,7 +27,7 @@ const calLink = `${CAL_USERNAME}/${CAL_EVENT_SLUG}`;
     </p>
   </noscript>
 
-  <script is:inline define:vars={{ calLink }}>
+  <script is:inline define:vars={{ calLink, calNamespace }}>
     // Cal.com inline embed loader — official snippet, lightly adapted so it
     // re-initializes when the page is reopened in the modal (same script tag
     // gets re-executed each time `.window__content` is replaced).
@@ -59,13 +60,13 @@ const calLink = `${CAL_USERNAME}/${CAL_EVENT_SLUG}`;
         };
     })(window, 'https://app.cal.com/embed/embed.js', 'init');
 
-    Cal('init', '20min', { origin: 'https://cal.com' });
-    Cal.ns['20min']('inline', {
+    Cal('init', calNamespace, { origin: 'https://cal.com' });
+    Cal.ns[calNamespace]('inline', {
       elementOrSelector: '#cal-embed',
       config: { layout: 'month_view' },
       calLink: calLink,
     });
-    Cal.ns['20min']('ui', {
+    Cal.ns[calNamespace]('ui', {
       hideEventTypeDetails: false,
       layout: 'month_view',
       cssVarsPerTheme: {

@@ -189,7 +189,7 @@ function tagsArray(value: unknown): string[] {
       <MarkdownEditor
         name="body"
         value={body}
-        imageDir={collection === 'writing' ? 'writing' : collection === 'projects' ? 'projects' : collection === 'fun' ? 'fun' : collection === 'agents' ? 'agents' : collection === 'books' ? 'books' : 'pages'}
+        imageDir={collection === 'projects' ? 'projects' : collection === 'fun' ? 'fun' : collection === 'agents' ? 'agents' : collection === 'books' ? 'books' : 'pages'}
         slugHint={typeof data[def.slugFrom] === 'string' ? (data[def.slugFrom] as string) : ''}
         draftKey={`cms-draft:${collection}:${slug ?? 'new'}`}
       />

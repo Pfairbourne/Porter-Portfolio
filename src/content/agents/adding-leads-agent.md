@@ -1,10 +1,7 @@
 ---
 title: Adding Leads Agent
 year: 2026
-summary: >-
-  Run-on-demand prospector that turns an ICP into a fresh batch of qualified, deduped leads pulled
-  live from Apollo, cross-checked against the CRM, and reasoned over by Claude Opus, ready to drop
-  straight into outbound.
+summary: "Turns an ICP into a batch of qualified, deduped leads — outbound-ready."
 tags:
   - MindStudio
   - Claude
@@ -15,6 +12,7 @@ tags:
   - ICP Matching
 link: https://app.mindstudio.ai/agents/adding-leads-agent-0270d253
 hero: /images/agents/adding-leads-agent.png
+icon: funnel
 heroCaption: "Main flow — blocklist, ICP routing, Apollo search, CRM dedupe, Opus qualification."
 order: 40
 draft: false

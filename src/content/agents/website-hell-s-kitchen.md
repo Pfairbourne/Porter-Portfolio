@@ -1,10 +1,7 @@
 ---
 title: Website Roaster
 year: 2025
-summary: >-
-  Feed it a URL. It crawls the homepage and subpages, then comes back with a Gordon Ramsay–grade
-  roast of the site: brutally honest, properly funny, but also the kind of critique you'd actually
-  act on.
+summary: "Feed it a URL, get a Gordon Ramsay–grade roast of the website."
 tags:
   - MindStudio
   - Claude
@@ -13,6 +10,7 @@ tags:
   - Creative
 link: https://app.mindstudio.ai/agents/website-hells-kitchen-49434ea0
 hero: /images/agents/website-hell-s-kitchen.png
+icon: browser
 order: 90
 draft: false
 ---
