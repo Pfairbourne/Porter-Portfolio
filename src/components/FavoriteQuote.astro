@@ -55,9 +55,12 @@
 
   gsap.registerPlugin(MotionPathPlugin);
 
+  // Desktop-only: the quote launcher lives in the dock (hidden ≤720px) and the
+  // flight path is tuned for wide viewports, so skip all of it on phones.
+  const DESKTOP = window.matchMedia('(min-width: 721px)').matches;
   const layer = document.getElementById('quote-layer');
   const tpl = document.getElementById('quote-card-template') as HTMLTemplateElement | null;
-  if (layer && tpl) {
+  if (DESKTOP && layer && tpl) {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     // ---- Frame set (index order). Owner can relabel these in one place. ----
@@ -130,7 +133,12 @@
     // by FLY (the shared size multiplier — keeps the crash continuous so the plane
     // doesn't inflate on impact). Only the final unroll settles to scale 1 = the
     // small sheet. Tuned by eye; set FLY = 1 to match the resting-sheet size.
-    const FLY = 1.55;
+    const FLY = 1.47;
+
+    // Gravity-style ease for the valley → crash glide. Velocity is HIGH at the low
+    // point, dips to ~30% over the crest (a dip — never a full stop), then climbs
+    // back up into the descent: v(t) = 0.5625 + 1.3125·(2t−1)², integrated here.
+    const gravityArc = (t: number) => 0.5625 * t + 0.21875 * (Math.pow(2 * t - 1, 3) + 1);
 
     const done = (anim: any): Promise<void> =>
       new Promise((res) => { anim.eventCallback('onComplete', res); anim.eventCallback('onReverseComplete', res); });
@@ -285,25 +293,25 @@
       const crashX = crash.x, crashY = crash.y;                  // crash = last waypoint (sits "behind" the rest)
       const entryX = dir > 0 ? -(left) - 80 : (vw - left) + 80;  // off-screen on the approach side
       const pathPoints = [{ x: entryX, y: -150 }, ...c.mid];     // flowing curve: entry → waypoints → crash
-      // Progress fraction of each waypoint along the path (straight-line approx),
-      // so we can time each segment by hand: valley = fr1, peak = fr2.
+      // Progress fraction of the valley waypoint along the path (straight-line
+      // approx) = fr1, so we can time the initial swoop-down by hand.
       const segLen: number[] = [];
       let total = 0;
       for (let i = 1; i < pathPoints.length; i++) {
         const d = Math.hypot(pathPoints[i].x - pathPoints[i - 1].x, pathPoints[i].y - pathPoints[i - 1].y);
         segLen.push(d); total += d;
       }
-      const fr1 = segLen[0] / total;                  // entry → valley (descending)
-      const fr2 = (segLen[0] + segLen[1]) / total;    // valley → peak (climbing)
+      const fr1 = segLen[0] / total;                  // entry → valley; the rest of the path glides through in one segment
 
       showFrame(c, 0);
       gsap.set(c.stage, { x: entryX, y: -150, scale: 1.3 * FLY, rotation: 0 });
 
       // Phase 1 — GRAVITY FLIGHT along a long, smooth, banked path. The motion
-      // path is paused; we drive its progress in 3 segments so the speed reads as
-      // gravity — FAST + accelerating on descents, SLOW + decelerating on the
-      // climb to the peak (nearly stalling at the top). autoRotate banks the nose
-      // along the slope (offset 180° when the art faces left).
+      // path is paused; we drive its progress in 2 segments: a quick accelerating
+      // dive to the valley, then a gravity glide (gravityArc) that SLOWS as it
+      // climbs and dips over the crest without ever stopping, then speeds back up
+      // into the descent. autoRotate banks the nose along the slope (offset 180°
+      // when art faces left).
       const mp = gsap.to(c.stage, {
         motionPath: { path: pathPoints, curviness: 2, autoRotate: dir > 0 ? true : 180 },
         ease: 'none', duration: 1, paused: true,
@@ -312,10 +320,9 @@
       const upd = () => { mp.progress(driver.p); };
       const flight = gsap.timeline();
       flight
-        .to(driver, { p: fr1, duration: 0.7,  ease: 'power2.in',  onUpdate: upd }, 0)      // descend → valley: speed up
-        .to(driver, { p: fr2, duration: 1.45, ease: 'power2.out', onUpdate: upd }, 0.7)    // climb → peak: slow down
-        .to(driver, { p: 1,   duration: 0.6,  ease: 'power2.in',  onUpdate: upd }, 2.15)   // dive → crash: speed up
-        .to(c.stage, { scale: 0.85 * FLY, duration: 2.75, ease: 'power1.out' }, 0);
+        .to(driver, { p: fr1, duration: 0.45, ease: 'power2.in', onUpdate: upd }, 0)        // entry → valley: dive, accelerating (fastest at the low point)
+        .to(driver, { p: 1,   duration: 0.85, ease: gravityArc,  onUpdate: upd }, 0.45)     // valley → crest → crash: slow on the climb, dip over the top (never stops), speed up on the descent
+        .to(c.stage, { scale: 0.85 * FLY, duration: 1.3, ease: 'power1.out' }, 0);
       c.tl = flight;
       await done(flight);
       mp.kill();
@@ -374,6 +381,7 @@
         .call(() => showFrame(c, UNROLL[1]), [], 1.14)   // 3 — last ball-ish frame on touchdown
         .call(() => showFrame(c, UNROLL[2]), [], 1.36)   // 5 — slightly curved, upright
         .call(() => showFrame(c, UNROLL[3]), [], 1.64);  // 6 — flat, upright
+      land.timeScale(1.4);   // play the whole leap-frog ~30% faster (trims the open time)
       c.tl = land;
       await done(land);
       if (c.state === 'closing') return;
@@ -404,10 +412,17 @@
       const top = parseFloat(c.el.style.top) || 0;
       const fallY = window.innerHeight + 240 - top;
       stepFrames(c, CLOSE, 90);
+      // Tumble off-screen with a random direction (left or right) and one of four
+      // natural spin speeds, so no two closes look alike. The fall is a fixed
+      // 0.55s, so a larger angle = a faster spin.
+      const tumbleDir = Math.random() < 0.5 ? 1 : -1;
+      const FALL_SPINS = [55, 90, 135, 180];   // degrees swept during the fall
+      const fallRot = tumbleDir * FALL_SPINS[Math.floor(Math.random() * FALL_SPINS.length)];
+      const tipRot = tumbleDir * 16;           // small initial tip, same direction as the tumble
       const closeTl = gsap.timeline({ onComplete: () => remove(c, hadFocus) });
       closeTl
-        .to(c.stage, { rotation: 22, scale: 0.72, duration: 0.22, ease: 'power1.in' }, 0)
-        .to(c.stage, { y: fallY, rotation: 90, duration: 0.55, ease: 'power2.in' }, 0.22);
+        .to(c.stage, { rotation: tipRot, scale: 0.72, duration: 0.22, ease: 'power1.in' }, 0)
+        .to(c.stage, { y: fallY, rotation: fallRot, duration: 0.55, ease: 'power2.in' }, 0.22);
       c.tl = closeTl;
     }
 

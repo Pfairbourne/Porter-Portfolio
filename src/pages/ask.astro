@@ -1,0 +1,116 @@
+---
+import WindowLayout from '../layouts/WindowLayout.astro';
+---
+<WindowLayout
+  windowTitle="ask.ai"
+  title="Ask about this site — Porter Fairbourne"
+  description="Ask the site assistant anything about Porter Fairbourne or how to get around the portfolio."
+  narrow
+>
+  <section class="ask">
+    <div class="ask__log" id="ask-log" aria-live="polite">
+      <div class="ask__msg ask__msg--bot">
+        <p>Hi — I’m Porter’s site assistant. Ask me anything about Porter, his work, or how to find your way around.</p>
+      </div>
+    </div>
+    <form class="ask__form" id="ask-form">
+      <textarea
+        class="ask__input"
+        id="ask-input"
+        rows="1"
+        placeholder="Ask about Porter or this site…"
+        maxlength="2000"
+        autocomplete="off"
+      ></textarea>
+      <button class="ask__send" id="ask-send" type="submit">Send</button>
+    </form>
+  </section>
+
+  <script is:inline>
+    (function () {
+      var form = document.getElementById('ask-form');
+      var input = document.getElementById('ask-input');
+      var log = document.getElementById('ask-log');
+      var send = document.getElementById('ask-send');
+      if (!form || !input || !log || !send) return;
+
+      var history = [];
+      var busy = false;
+
+      function addMsg(role, text) {
+        var wrap = document.createElement('div');
+        wrap.className = 'ask__msg ask__msg--' + (role === 'user' ? 'user' : 'bot');
+        var p = document.createElement('p');
+        p.textContent = text;
+        wrap.appendChild(p);
+        log.appendChild(wrap);
+        log.scrollTop = log.scrollHeight;
+        return wrap;
+      }
+
+      function setBusy(state) {
+        busy = state;
+        send.disabled = state;
+        input.disabled = state;
+      }
+
+      function autosize() {
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+      }
+      input.addEventListener('input', autosize);
+
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          if (form.requestSubmit) form.requestSubmit();
+          else form.dispatchEvent(new Event('submit', { cancelable: true }));
+        }
+      });
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (busy) return;
+        var text = input.value.trim();
+        if (!text) return;
+
+        input.value = '';
+        autosize();
+        addMsg('user', text);
+        history.push({ role: 'user', content: text });
+        setBusy(true);
+
+        var typing = addMsg('bot', '…');
+        typing.classList.add('ask__msg--typing');
+
+        fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ messages: history.slice(-24) })
+        })
+          .then(function (r) {
+            return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+          })
+          .then(function (res) {
+            var reply = (res.d && (res.d.reply || res.d.error)) || 'Something went wrong.';
+            typing.classList.remove('ask__msg--typing');
+            typing.querySelector('p').textContent = reply;
+            if (res.ok && res.d && res.d.reply) {
+              history.push({ role: 'assistant', content: res.d.reply });
+            }
+            log.scrollTop = log.scrollHeight;
+            setBusy(false);
+            input.focus();
+          })
+          .catch(function () {
+            typing.classList.remove('ask__msg--typing');
+            typing.querySelector('p').textContent = 'Network error. Please try again.';
+            setBusy(false);
+            input.focus();
+          });
+      });
+
+      input.focus();
+    })();
+  </script>
+</WindowLayout>

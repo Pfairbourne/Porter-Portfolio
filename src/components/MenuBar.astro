@@ -4,47 +4,253 @@ interface Props {
 }
 const { status = 'Busy Building' } = Astro.props;
 
-const EMAIL = 'pfairbourne@gmail.com';
-const PHONE = '801-597-9812';
-const LOCATION = 'Draper, Utah';
+const EMAIL = 'mailto:pfairbourne@gmail.com';
 const LINKEDIN = 'https://www.linkedin.com/in/porter-fairbourne-6a472a28a/';
+
+type MenuItem =
+  | { sep: true }
+  | { label: string; href: string; external?: boolean }
+  | { label: string; action: string };
+
+type Menu = { id: string; label: string; brand?: boolean; items: MenuItem[] };
+
+const menus: Menu[] = [
+  {
+    id: 'porter',
+    label: 'P.',
+    brand: true,
+    items: [
+      { label: 'About Porter', href: '/about' },
+      { label: 'What I’m doing now', href: '/now' },
+      { label: 'Résumé', href: '/resume' },
+      { sep: true },
+      { label: 'Settings', href: '/settings' },
+    ],
+  },
+  {
+    id: 'file',
+    label: 'File',
+    items: [
+      { label: 'Open Résumé', href: '/resume' },
+      { label: 'Email me', href: EMAIL, external: true },
+      { label: 'Book a meeting', href: '/calendar' },
+      { sep: true },
+      { label: 'Print this page', action: 'print' },
+    ],
+  },
+  {
+    id: 'view',
+    label: 'View',
+    items: [
+      { label: 'Tidy icons', action: 'reset-desktop' },
+      { label: 'Show / hide dock', action: 'toggle-dock' },
+    ],
+  },
+  {
+    id: 'go',
+    label: 'Go',
+    items: [
+      { label: 'Projects', href: '/projects' },
+      { label: 'AI Agents', href: '/agents' },
+      { label: 'Internal Tools', href: '/fun' },
+      { sep: true },
+      { label: 'Photos', href: '/photos' },
+      { label: 'Reading', href: '/books' },
+      { label: 'Movies', href: '/movies' },
+      { label: 'Calendar', href: '/calendar' },
+    ],
+  },
+  {
+    id: 'bookmarks',
+    label: 'Bookmarks',
+    items: [
+      { label: 'LinkedIn', href: LINKEDIN, external: true },
+    ],
+  },
+  {
+    id: 'help',
+    label: 'Help',
+    items: [
+      { label: 'About this site', href: '/stack' },
+      { label: 'Style guide', href: '/style-guide' },
+      { sep: true },
+      { label: 'Ask about this site', href: '/ask' },
+      { sep: true },
+      { label: 'Email me', href: EMAIL, external: true },
+    ],
+  },
+];
 ---
 <header class="menubar" role="banner">
-  <span class="menubar__brand">Porter Fairbourne<span class="accent">.</span></span>
-  <span class="menubar__status">
-    <span class="menubar__pulse" aria-hidden="true"></span>
-    <span>{status}</span>
-  </span>
-  <span class="menubar__clock" id="menubar-clock" aria-live="off">— —</span>
-  <span class="menubar__plain">{LOCATION}</span>
-  <a class="menubar__link" href={`mailto:${EMAIL}`}>{EMAIL}</a>
-  <span class="menubar__plain">{PHONE}</span>
-  <button class="menubar__action" type="button" data-action="reset-desktop" aria-label="Return files to their default positions">
-    Tidy icons
-  </button>
-  <a class="menubar__cta" href={LINKEDIN} target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>
+  <nav class="menubar__menus" aria-label="Site menu">
+    {menus.map((menu) => (
+      <div class="menu" data-menu={menu.id}>
+        <button
+          class:list={['menu__button', menu.brand && 'menu__button--brand']}
+          type="button"
+          aria-haspopup="true"
+          aria-expanded="false"
+          aria-controls={`menu-${menu.id}`}
+        >{menu.label}</button>
+        <ul class="menu__dropdown" id={`menu-${menu.id}`} role="menu" hidden>
+          {menu.items.map((item) => (
+            'sep' in item ? (
+              <li class="menu__sep" role="separator"></li>
+            ) : 'action' in item ? (
+              <li role="none">
+                <button class="menu__item" type="button" role="menuitem" data-action={item.action}>
+                  {item.label}
+                </button>
+              </li>
+            ) : (
+              <li role="none">
+                <a
+                  class="menu__item"
+                  role="menuitem"
+                  href={item.href}
+                  {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                >
+                  <span>{item.label}</span>
+                  {item.external && <span class="menu__ext" aria-hidden="true">↗</span>}
+                </a>
+              </li>
+            )
+          ))}
+        </ul>
+      </div>
+    ))}
+  </nav>
+
+  <div class="menubar__tray">
+    <span class="menubar__status">
+      <span class="menubar__pulse" aria-hidden="true"></span>
+      <span>{status}</span>
+    </span>
+    <a class="menubar__cta" href={LINKEDIN} target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>
+    <span class="menubar__plain" id="menubar-date">—</span>
+    <span class="menubar__plain" id="menubar-clock" aria-live="off">— —</span>
+  </div>
 </header>
+
+<script is:inline>
+  // — Menu-bar dropdown controller —
+  // macOS-style: click a title to open it; while one is open, hovering another
+  // switches to it. Click-outside and Esc close. Item clicks close the menu and
+  // let the link/action proceed (windowed links are caught by the desktop
+  // controller; reset-desktop is handled by the desktop's own listener).
+  (function () {
+    var bar = document.querySelector('.menubar__menus');
+    if (!bar) return;
+    var menus = Array.prototype.slice.call(bar.querySelectorAll('.menu'));
+    var openMenu = null;
+
+    function btn(menu) { return menu.querySelector('.menu__button'); }
+    function panel(menu) { return menu.querySelector('.menu__dropdown'); }
+    function items(menu) { return Array.prototype.slice.call(menu.querySelectorAll('.menu__item')); }
+
+    function open(menu, focusFirst) {
+      if (openMenu && openMenu !== menu) close(openMenu);
+      openMenu = menu;
+      btn(menu).setAttribute('aria-expanded', 'true');
+      panel(menu).removeAttribute('hidden');
+      menu.classList.add('is-open');
+      if (focusFirst) { var it = items(menu); if (it.length) it[0].focus(); }
+    }
+    function close(menu) {
+      if (!menu) return;
+      btn(menu).setAttribute('aria-expanded', 'false');
+      panel(menu).setAttribute('hidden', '');
+      menu.classList.remove('is-open');
+      if (openMenu === menu) openMenu = null;
+    }
+    function closeAll() { if (openMenu) close(openMenu); }
+
+    function focusSibling(menu, dir) {
+      var i = menus.indexOf(menu);
+      open(menus[(i + dir + menus.length) % menus.length], true);
+    }
+
+    menus.forEach(function (menu) {
+      var button = btn(menu);
+
+      button.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (openMenu === menu) close(menu);
+        else open(menu, false);
+      });
+
+      button.addEventListener('mouseenter', function () {
+        if (openMenu && openMenu !== menu) open(menu, false);
+      });
+
+      button.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(menu, true); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); focusSibling(menu, 1); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); focusSibling(menu, -1); }
+      });
+
+      panel(menu).addEventListener('click', function (e) {
+        var item = e.target.closest('.menu__item');
+        if (!item) return;
+        var action = item.getAttribute('data-action');
+        if (action === 'print') { e.preventDefault(); closeAll(); window.print(); return; }
+        if (action === 'toggle-dock') { e.preventDefault(); document.body.classList.toggle('dock-hidden'); closeAll(); return; }
+        // links + reset-desktop: just close; their handlers run via bubbling
+        closeAll();
+      });
+
+      panel(menu).addEventListener('keydown', function (e) {
+        var list = items(menu);
+        var idx = list.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') { e.preventDefault(); (list[idx + 1] || list[0]).focus(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); (list[idx - 1] || list[list.length - 1]).focus(); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); focusSibling(menu, 1); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); focusSibling(menu, -1); }
+        else if (e.key === 'Escape') { e.preventDefault(); close(menu); btn(menu).focus(); }
+      });
+    });
+
+    document.addEventListener('click', function (e) {
+      if (openMenu && !openMenu.contains(e.target)) closeAll();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && openMenu) { var m = openMenu; close(m); btn(m).focus(); }
+    });
+  })();
+</script>
 
 <script is:inline>
   (function () {
     var el = document.getElementById('menubar-clock');
+    var dateEl = document.getElementById('menubar-date');
     if (!el) return;
     function tick() {
+      var now = new Date();
       try {
         var parts = new Intl.DateTimeFormat('en-US', {
           timeZone: 'America/Denver',
           hour: '2-digit',
           minute: '2-digit',
           hour12: false
-        }).formatToParts(new Date());
+        }).formatToParts(now);
         var h = '00', m = '00';
         for (var i = 0; i < parts.length; i++) {
           if (parts[i].type === 'hour') h = parts[i].value;
           else if (parts[i].type === 'minute') m = parts[i].value;
         }
         el.textContent = h + ':' + m + ' MST';
+        if (dateEl) {
+          dateEl.textContent = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Denver',
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric'
+          }).format(now);
+        }
       } catch (_) {
         el.textContent = '';
+        if (dateEl) dateEl.textContent = '';
       }
     }
     tick();

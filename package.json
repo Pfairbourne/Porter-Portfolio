@@ -9,9 +9,11 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "import:agents": "node --experimental-strip-types --no-warnings=ExperimentalWarning scripts/import-agents.ts"
+    "import:agents": "node --experimental-strip-types --no-warnings=ExperimentalWarning scripts/import-agents.ts",
+    "og:image": "node scripts/generate-og-image.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
     "@astrojs/vercel": "^8.2.11",
     "@octokit/rest": "^22.0.1",
     "@upstash/ratelimit": "^2.0.8",
@@ -29,6 +31,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/marked": "^5.0.2",
     "@types/node": "^25.8.0",
+    "opentype.js": "^2.0.0",
     "typescript": "^5.9.3",
     "zod": "^3.25.0"
   }

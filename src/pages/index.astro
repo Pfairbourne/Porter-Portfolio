@@ -4,6 +4,7 @@ import MenuBar from '../components/MenuBar.astro';
 import DesktopIcon from '../components/DesktopIcon.astro';
 import Dock from '../components/Dock.astro';
 import FavoriteQuote from '../components/FavoriteQuote.astro';
+import { getCollection } from 'astro:content';
 import { getVisibility, getMenubarStatus, getIconLabels } from '../lib/kv';
 import type { BrandName } from '../lib/brand-glyphs';
 
@@ -12,11 +13,14 @@ import type { BrandName } from '../lib/brand-glyphs';
 // effect without a redeploy). Cold-start cost on Vercel free tier is acceptable.
 export const prerender = false;
 
-const [dockVisibility, desktopVisibility, menubarStatus, iconLabels] = await Promise.all([
+const [dockVisibility, desktopVisibility, menubarStatus, iconLabels, projectEntries, agentEntries, funEntries] = await Promise.all([
   getVisibility('dock'),
   getVisibility('desktop'),
   getMenubarStatus(),
   getIconLabels(),
+  getCollection('projects', ({ data }) => !data.draft),
+  getCollection('agents', ({ data }) => !data.draft),
+  getCollection('fun', ({ data }) => !data.draft),
 ]);
 
 const labelFor = (id: string, fallback: string) => iconLabels[id]?.trim() || fallback;
@@ -50,12 +54,43 @@ const leftIcons: IconConfig[] = [
   { id: 'about', href: '/about', label: 'about.md', ext: 'md', variant: 'file' },
 ];
 
-// Right group renders as a single row of three files.
+// Right group. About-this-site (/stack) and the style guide (/style-guide)
+// live in the Help menu instead, so the desktop keeps only the now file.
 const rightIcons: IconConfig[] = [
   { id: 'now', href: '/now', label: 'now.txt', ext: 'txt', variant: 'file' },
-  { id: 'stack', href: '/stack', label: 'stack.md', ext: 'md', variant: 'file' },
-  { id: 'style-guide', href: '/style-guide', label: 'style-guide.html', ext: 'html', variant: 'file' },
 ];
+
+const MAIL_TO = 'mailto:pfairbourne@gmail.com';
+const LINKEDIN = 'https://www.linkedin.com/in/porter-fairbourne-6a472a28a/';
+
+// Mobile home: the phone layout drops the OS metaphor for a clean scrollable
+// list. Same ids as the desktop icons/dock (so admin show/hide carries over via
+// the visibility maps) but plain, recruiter-facing labels rather than the
+// file-system names. style-guide / settings / the quote launcher are omitted.
+type MobileLink = { id: string; href: string; label: string; count?: number };
+
+const workLinks: MobileLink[] = [
+  { id: 'selected-work', href: '/projects', label: 'Projects', count: projectEntries.length },
+  { id: 'ai-agents', href: '/agents', label: 'AI Agents', count: agentEntries.length },
+  { id: 'fun-projects', href: '/fun', label: 'Internal Tools', count: funEntries.length },
+];
+const aboutLinks: MobileLink[] = [
+  { id: 'about', href: '/about', label: 'About' },
+  { id: 'now', href: '/now', label: 'Now' },
+  { id: 'stack', href: '/stack', label: 'Stack' },
+  { id: 'resume', href: '/resume', label: 'Résumé' },
+];
+const moreLinks: MobileLink[] = [
+  { id: 'photos', href: '/photos', label: 'Photos' },
+  { id: 'reader', href: '/books', label: 'Reading' },
+  { id: 'movies', href: '/movies', label: 'Movies' },
+  { id: 'calendar', href: '/calendar', label: 'Calendar' },
+  { id: 'mail', href: MAIL_TO, label: 'Contact' },
+];
+
+const visibleWork = workLinks.filter((l) => desktopVisibility[l.id] !== false);
+const visibleAbout = aboutLinks.filter((l) => desktopVisibility[l.id] !== false);
+const visibleMore = moreLinks.filter((l) => dockVisibility[l.id] !== false);
 ---
 <DesktopLayout
   title="Porter Fairbourne — Product Manager"
@@ -121,6 +156,40 @@ const rightIcons: IconConfig[] = [
     </div>
   </div>
 
+  <!-- Mobile home (shown ≤720px) — clean scrollable layout; the desktop OS
+       metaphor above is hidden at this breakpoint. -->
+  <main class="mhome">
+    <header class="mhome__head">
+      <h1 class="mhome__name">Porter Fairbourne<span class="accent">.</span></h1>
+      <p class="mhome__tag">Product Manager, Builder, and Operator.</p>
+      <div class="mhome__meta">
+        <span class="mhome__status"><span class="mhome__pulse" aria-hidden="true"></span>{menubarStatus}</span>
+        <a class="mhome__cta" href={LINKEDIN} target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>
+      </div>
+    </header>
+
+    {[
+      { label: 'Work', items: visibleWork },
+      { label: 'About', items: visibleAbout },
+      { label: 'More', items: visibleMore },
+    ].map((section) => (
+      <nav class="mhome__section" aria-label={section.label}>
+        <h2 class="mhome__label">{section.label}</h2>
+        <ul class="mhome__list">
+          {section.items.map((l) => (
+            <li>
+              <a class="mrow" href={l.href}>
+                <span class="mrow__label">{l.label}</span>
+                {l.count != null && <span class="mrow__count">{l.count}</span>}
+                <svg class="mrow__chev" viewBox="0 0 8 14" width="8" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 1l6 6-6 6" /></svg>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    ))}
+  </main>
+
   <Dock visibility={dockVisibility} labels={iconLabels} />
 
   <!-- Paper-airplane "Favorite quote" feature — launched by the dock's quote icon -->
@@ -155,7 +224,8 @@ const rightIcons: IconConfig[] = [
 
       var WINDOWED_PREFIXES = [
         '/about', '/now', '/stack', '/resume', '/fun', '/projects',
-        '/agents', '/style-guide', '/photos', '/books', '/movies', '/calendar'
+        '/agents', '/style-guide', '/photos', '/books', '/movies', '/calendar',
+        '/ask'
       ];
       var ORIGINAL_TITLE = document.title;
       var cache = {};
@@ -347,6 +417,8 @@ const rightIcons: IconConfig[] = [
     (function () {
       var blink = document.getElementById('portrait-blink');
       if (!blink) return;
+      // Desktop-only: the portrait is hidden ≤720px, so skip the blink timers.
+      if (!window.matchMedia('(min-width: 721px)').matches) return;
       var mq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
       if (mq && mq.matches) return;
 
@@ -383,6 +455,9 @@ const rightIcons: IconConfig[] = [
       var root = document.querySelector('.os');
       var surface = document.querySelector('.surface');
       if (!root || !surface) return;
+      // Desktop-only: the icon grid is hidden ≤720px; measuring a display:none
+      // surface yields zero rects, so don't initialize dragging on phones.
+      if (!window.matchMedia('(min-width: 721px)').matches) return;
 
       var icons = Array.prototype.slice.call(document.querySelectorAll('.icon[data-icon-id]'));
       if (!icons.length) return;
@@ -538,6 +613,139 @@ const rightIcons: IconConfig[] = [
           for (var i = 0; i < icons.length; i++) place(icons[i]);
         }, 150);
       });
+    })();
+  </script>
+
+  <script is:inline>
+    // — Onboarding guide beacon —
+    // A single pulsing ember dot guides first-time visitors to open three
+    // folders in order. The dot sits on the first UNOPENED target; opening it
+    // clears the dot (pop-out) and advances to the next. State persists in
+    // localStorage, so once a folder is opened its light never returns. After
+    // all three, the desktop is clean.
+    (function () {
+      // Desktop-only: the folder icons this lights are hidden ≤720px.
+      if (!window.matchMedia('(min-width: 721px)').matches) return;
+      var KEY = 'porter-os/onboarding-v1';
+      var ORDER = ['selected-work', 'ai-agents', 'fun-projects'];
+      var PATHS = [['/projects', 'selected-work'], ['/agents', 'ai-agents'], ['/fun', 'fun-projects']];
+
+      var reduced = false;
+      try { reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) {}
+
+      var opened = {};
+      try { var s = JSON.parse(localStorage.getItem(KEY) || '{}'); opened = (s && s.opened) || {}; } catch (_) { opened = {}; }
+      function persist() {
+        try { localStorage.setItem(KEY, JSON.stringify({ opened: opened })); } catch (_) {}
+      }
+
+      function iconById(id) { return document.querySelector('.icon[data-icon-id="' + id + '"]'); }
+
+      function nextTarget() {
+        for (var i = 0; i < ORDER.length; i++) {
+          var id = ORDER[i];
+          if (opened[id]) continue;
+          if (!iconById(id)) continue;       // hidden / absent → skip past it
+          return id;
+        }
+        return null;
+      }
+
+      var currentId = null;
+      var beaconEl = null;
+
+      function showBeacon(id) {
+        var icon = iconById(id);
+        if (!icon) return;
+        var glyph = icon.querySelector('.icon__glyph');
+        if (!glyph) return;
+        var el = document.createElement('span');
+        el.className = 'guide-beacon';
+        el.setAttribute('aria-hidden', 'true');
+        glyph.appendChild(el);
+        beaconEl = el;
+        currentId = id;
+        icon.classList.add('icon--guide-active');
+        if (reduced) {
+          el.classList.add('is-on');         // CSS strips the animation under reduced-motion
+        } else {
+          void el.offsetWidth;               // force a reflow so the appear transition runs
+          el.classList.add('is-on');         // (reliable even when rAF is throttled / tab hidden)
+        }
+      }
+
+      function clearBeacon(animate, done) {
+        var el = beaconEl;
+        var icon = currentId ? iconById(currentId) : null;
+        if (icon) icon.classList.remove('icon--guide-active');
+        beaconEl = null;
+        currentId = null;
+        if (!el) { if (done) done(); return; }
+        if (!animate || reduced) {
+          if (el.parentNode) el.parentNode.removeChild(el);
+          if (done) done();
+          return;
+        }
+        el.classList.remove('is-on');
+        el.classList.add('is-clearing');
+        var removed = false;
+        function rm() {
+          if (removed) return;
+          removed = true;
+          if (el.parentNode) el.parentNode.removeChild(el);
+          if (done) done();
+        }
+        el.addEventListener('transitionend', rm);
+        setTimeout(rm, 340);                  // fallback if transitionend doesn't fire
+      }
+
+      function render() {
+        var next = nextTarget();
+        if (next === currentId) return;       // already correct (incl. both null)
+        clearBeacon(false, function () { if (next) showBeacon(next); });
+      }
+
+      function markOpened(id) {
+        if (opened[id]) return;
+        opened[id] = true;
+        persist();
+        if (id === currentId) {
+          clearBeacon(true, function () {     // pop the dot out, then advance
+            var next = nextTarget();
+            if (next) showBeacon(next);
+          });
+        } else {
+          render();                           // opened out of order; keep dot on first-unopened
+        }
+      }
+
+      // Deep-link / refresh restore opens a folder with no click — the window
+      // controller has already rewritten location.pathname to that path, so
+      // mark it opened on load so we don't light the folder being viewed.
+      var changed = false;
+      for (var p = 0; p < PATHS.length; p++) {
+        var prefix = PATHS[p][0], pid = PATHS[p][1];
+        if (location.pathname === prefix || location.pathname.indexOf(prefix + '/') === 0) {
+          if (!opened[pid]) { opened[pid] = true; changed = true; }
+        }
+      }
+      if (changed) persist();
+
+      // Mark a target opened whenever its icon is clicked. Dragged clicks are
+      // suppressed upstream (stopPropagation in the icon-position script), so a
+      // drag never reaches this listener.
+      document.addEventListener('click', function (e) {
+        var node = e.target;
+        var icon = node && node.closest ? node.closest('.icon[data-icon-id]') : null;
+        if (!icon) return;
+        var id = icon.getAttribute('data-icon-id');
+        if (ORDER.indexOf(id) === -1) return;
+        markOpened(id);
+      });
+
+      function init() { render(); }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+      else init();
     })();
   </script>
 </DesktopLayout>

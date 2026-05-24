@@ -45,6 +45,20 @@ function getContentSaveLimiter(): Ratelimit | null {
   return contentSaveLimiter;
 }
 
+let chatLimiter: Ratelimit | null = null;
+function getChatLimiter(): Ratelimit | null {
+  if (chatLimiter) return chatLimiter;
+  const r = getRedis();
+  if (!r) return null;
+  chatLimiter = new Ratelimit({
+    redis: r,
+    limiter: Ratelimit.slidingWindow(20, '1 h'),
+    analytics: false,
+    prefix: 'porter:rl:chat',
+  });
+  return chatLimiter;
+}
+
 export function clientIp(request: Request): string {
   const fwd = request.headers.get('x-forwarded-for');
   if (fwd) return fwd.split(',')[0].trim();
@@ -67,6 +81,17 @@ export async function checkContentSaveRateLimit(request: Request): Promise<{
   remaining: number;
 }> {
   const limiter = getContentSaveLimiter();
+  if (!limiter) return { success: true, remaining: 999 };
+  const ip = clientIp(request);
+  const { success, remaining } = await limiter.limit(ip);
+  return { success, remaining };
+}
+
+export async function checkChatRateLimit(request: Request): Promise<{
+  success: boolean;
+  remaining: number;
+}> {
+  const limiter = getChatLimiter();
   if (!limiter) return { success: true, remaining: 999 };
   const ip = clientIp(request);
   const { success, remaining } = await limiter.limit(ip);

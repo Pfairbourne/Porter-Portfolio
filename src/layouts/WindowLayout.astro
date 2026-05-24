@@ -24,13 +24,16 @@ const {
 } = Astro.props;
 
 const fullTitle = title ?? `${windowTitle} — Porter Fairbourne`;
-const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://porterfairbourne.com').toString();
+const site = Astro.site ?? new URL('https://porterfairbourne.com');
+const canonical = new URL(Astro.url.pathname, site).toString();
+// og:image must be absolute — iMessage/Slack/social scrapers won't resolve a relative path.
+const ogImageAbs = new URL(ogImage, site).toString();
 ---
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     {/*
       Windowed pages exist as real routes (for SEO + as fetch targets for the modal),
@@ -59,12 +62,18 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? 'https://porterfairb
     <title>{fullTitle}</title>
     {description && <meta name="description" content={description} />}
     <link rel="canonical" href={canonical} />
+    <meta property="og:site_name" content="Porter Fairbourne" />
     <meta property="og:title" content={fullTitle} />
     {description && <meta property="og:description" content={description} />}
     <meta property="og:url" content={canonical} />
     <meta property="og:type" content="article" />
-    <meta property="og:image" content={ogImage} />
+    <meta property="og:image" content={ogImageAbs} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    {description && <meta name="twitter:description" content={description} />}
+    <meta name="twitter:image" content={ogImageAbs} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
