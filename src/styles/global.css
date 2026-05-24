@@ -1050,8 +1050,7 @@ pre code {
 /* SVG halftone icon internals — see src/components/FileGlyph.astro and FolderGlyph.astro */
 .halftone-icon { width: 100%; height: 100%; display: block; }
 .icon-paper { fill: var(--bg-elev); }
-/* Desktop file + folder bodies shaded blue. */
-.icon--file .icon-paper,
+/* Desktop folder bodies shaded blue; files stay white (--bg-elev). */
 .icon--folder .icon-paper { fill: var(--icon-blue); }
 .icon-dots circle {
   fill: var(--ink);
