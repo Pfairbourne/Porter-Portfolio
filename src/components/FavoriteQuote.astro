@@ -79,7 +79,7 @@
 
     interface Card {
       id: number; el: HTMLElement; stage: HTMLElement; frames: HTMLElement[];
-      note: HTMLElement; textEl: HTMLElement; authorEl: HTMLElement; closeBtn: HTMLElement;
+      textEl: HTMLElement; authorEl: HTMLElement; closeBtn: HTMLElement;
       state: 'flying' | 'crumpling' | 'unrolling' | 'revealing' | 'open' | 'closing';
       tl: gsap.core.Timeline | gsap.core.Tween | null; frameTimer: number | null;
       dir: 1 | -1;   // travel direction: +1 = enters left, flies right; −1 = enters right, flies left
@@ -123,7 +123,7 @@
     let nextId = 1;
     let topZ = 150;
     let lastQuote = -1;
-    let W = 340, H = 191;                 // remeasured from the first real card
+    let W = 242, H = 136;                 // resting-card size; remeasured from the first real card
 
     // placement constants (keep cards clear of the menubar + viewport edges)
     const MARGIN = 24, MENUBAR = 54;
@@ -142,6 +142,11 @@
 
     const done = (anim: any): Promise<void> =>
       new Promise((res) => { anim.eventCallback('onComplete', res); anim.eventCallback('onReverseComplete', res); });
+
+    // True once dismiss() has flipped the card to 'closing'. Kept as its own
+    // function so TS doesn't narrow c.state to the current phase literal and flag
+    // these (valid, async-mutated) guards as impossible comparisons.
+    const aborted = (c: Card) => c.state === 'closing';
 
     // ---- Preload all frames; gate the trigger until ready ----
     let ready = false, queued = 0, loaded = 0;
@@ -240,7 +245,6 @@
         id, el,
         stage: el.querySelector('.qcard__stage') as HTMLElement,
         frames: Array.from(el.querySelectorAll('.qcard__frame')) as HTMLElement[],
-        note: el.querySelector('.qcard__note') as HTMLElement,
         textEl: el.querySelector('.qcard__text') as HTMLElement,
         authorEl: el.querySelector('.qcard__author') as HTMLElement,
         closeBtn: el.querySelector('.qcard__close') as HTMLElement,
@@ -290,7 +294,7 @@
       const left = parseFloat(c.el.style.left) || 0;
       const vw = window.innerWidth;
       const crash = c.mid[c.mid.length - 1];
-      const crashX = crash.x, crashY = crash.y;                  // crash = last waypoint (sits "behind" the rest)
+      const crashX = crash.x;                                    // crash = last waypoint (sits "behind" the rest); only its x is used
       const entryX = dir > 0 ? -(left) - 80 : (vw - left) + 80;  // off-screen on the approach side
       const pathPoints = [{ x: entryX, y: -150 }, ...c.mid];     // flowing curve: entry → waypoints → crash
       // Progress fraction of the valley waypoint along the path (straight-line
@@ -326,7 +330,7 @@
       c.tl = flight;
       await done(flight);
       mp.kill();
-      if (c.state === 'closing') return;
+      if (aborted(c)) return;
 
       // Phase 2 — IMPACT: smack the wall at the bottom of the dive. Snap to the
       // first-crash frame, SQUASH + RECOIL off it. Keeps the banked (nose-down)
@@ -340,14 +344,14 @@
         .to(c.stage, { scaleX: 0.84 * FLY, scaleY: 0.84 * FLY, duration: 0.16, ease: 'power2.out' }, 0.2);          // settle out of the squash (rotation stays 0 — faces forward)
       c.tl = impact;
       await done(impact);
-      if (c.state === 'closing') return;
+      if (aborted(c)) return;
 
       // Phase 3 — roll into a BALL fast (frames + scale). Rotation stays where the
       // banked dive left it (already nose-down); the roll completes in the leap-frog.
       const crumple = gsap.to(c.stage, { x: crashX, scale: 0.5 * FLY, duration: 0.24, ease: 'power2.in' });
       c.tl = crumple;
       await Promise.all([stepFrames(c, CRUMPLE.slice(2), 55), done(crumple)]);  // frames 2 → 3 → 4, fast
-      if (c.state === 'closing') return;
+      if (aborted(c)) return;
 
       // Phase 4 — LEAP-FROG: fall, then two forward bounces, unravelling into the
       // sheet where the 2nd leap lands. The roll finishes UPRIGHT before frames
@@ -384,7 +388,7 @@
       land.timeScale(1.4);   // play the whole leap-frog ~30% faster (trims the open time)
       c.tl = land;
       await done(land);
-      if (c.state === 'closing') return;
+      if (aborted(c)) return;
       showFrame(c, 6);
       gsap.set(c.stage, { x: 0, y: 0, rotation: 0, scale: 1 });
 
