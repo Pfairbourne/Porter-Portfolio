@@ -587,7 +587,7 @@
         if (!touring || userPaused || humanActive || !conversation) return;   // bailed mid-navigation
         repinOrb();                            // float the orb beside the freshly opened window
         let directive: string;
-        if (i === 0) directive = `Start the walkthrough with one short framing line (you will walk them through Porter's work and they can jump in with a question anytime), then sell ${step.label} in one short sentence. Then stop.`;
+        if (i === 0) directive = `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then give one short, persuasive sentence about ${step.label}. Then stop.`;
         else if (step.notes) directive = `The visitor is now looking at ${step.label}. Sell it using Porter's own talking points, delivered naturally and persuasively as a few short spoken sentences. Do not read them word for word and do not list them. Talking points: ${step.notes} Then stop.`;
         else if (step.intro) directive = `The visitor is now looking at ${step.label}. Give one short framing sentence, then stop.`;
         else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
