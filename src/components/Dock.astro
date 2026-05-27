@@ -6,6 +6,7 @@ import ReaderGlyph from './dock-glyphs/ReaderGlyph.astro';
 import MoviesGlyph from './dock-glyphs/MoviesGlyph.astro';
 import CalendarGlyph from './dock-glyphs/CalendarGlyph.astro';
 import MailGlyph from './dock-glyphs/MailGlyph.astro';
+import LinkedInGlyph from './dock-glyphs/LinkedInGlyph.astro';
 import SettingsGlyph from './dock-glyphs/SettingsGlyph.astro';
 import type { VisibilityMap, IconLabelMap } from '../lib/kv';
 
@@ -21,11 +22,13 @@ const labelFor = (id: string, fallback: string) => labels[id]?.trim() || fallbac
 // Mail uses the visitor's own email client. Adjust the address in the
 // `mailto:` href if your contact email changes.
 const MAIL_TO = 'mailto:pfairbourne@gmail.com';
+const LINKEDIN = 'https://www.linkedin.com/in/porter-fairbourne-6a472a28a/';
 
 type DockApp = {
   id: string;
   href: string;
   label: string;
+  external?: boolean;
   Glyph: typeof PhotosGlyph;
 };
 
@@ -36,12 +39,13 @@ const apps: DockApp[] = [
   { id: 'movies',   href: '/movies',   label: 'Movies',         Glyph: MoviesGlyph },
   { id: 'calendar', href: '/calendar', label: 'Calendar',       Glyph: CalendarGlyph },
   { id: 'mail',     href: MAIL_TO,     label: 'Mail',           Glyph: MailGlyph },
+  { id: 'linkedin', href: LINKEDIN,    label: 'LinkedIn',       external: true, Glyph: LinkedInGlyph },
   { id: 'settings', href: '/settings', label: 'Settings',       Glyph: SettingsGlyph },
 ];
 ---
 <nav class="dock" aria-label="Apps">
-  {apps.filter((a) => showIf(a.id)).map(({ id, href, label, Glyph }) => (
-    <DockIcon id={id} href={href} label={labelFor(id, label)}>
+  {apps.filter((a) => showIf(a.id)).map(({ id, href, label, external, Glyph }) => (
+    <DockIcon id={id} href={href} label={labelFor(id, label)} external={external}>
       <Glyph />
     </DockIcon>
   ))}

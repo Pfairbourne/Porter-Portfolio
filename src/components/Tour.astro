@@ -1,0 +1,1172 @@
+---
+/**
+ * Guide orb — the site's voice guide, drawn as a halftone particle sphere on a
+ * full-viewport overlay canvas (see src/lib/guide-orb.ts). It parks top-right
+ * (desktop only); after ~10s of cumulative mouse movement, or on click, it swooshes
+ * across the screen into a panel. The panel introduces the guide and offers a guided
+ * tour or free exploration; a bottom bar takes typed questions and a mic enables
+ * voice, both routed to an ElevenLabs Conversational AI agent (a clone of Porter's
+ * voice). The orb's spines bristle while the guide speaks.
+ *
+ * "Take the tour" runs an agent-led, CLIENT-driven walkthrough (TOUR_STEPS in
+ * src/lib/tour.ts): the panel collapses to a slim caption bar, the orb floats beside
+ * the open window, and a halftone cursor (src/lib/guide-cursor.ts) clicks through the
+ * desktop — folder icons, listing cards — while the agent narrates each page. The
+ * cursor also points at what's being described. If the visitor grabs their real
+ * mouse, the auto-pilot stands down and resumes after a short idle.
+ *
+ * Degrades gracefully: hidden on mobile, and a failed agent connection / blocked mic
+ * surfaces a visible "offline" state rather than dead-ending silently.
+ */
+---
+<canvas class="guide-orb-stage" id="guide-orb-stage" aria-hidden="true"></canvas>
+<canvas class="guide-cursor-stage" id="guide-cursor-stage" aria-hidden="true"></canvas>
+
+<button class="guide-orb" id="guide-orb" type="button" aria-label="Open the site guide" hidden>
+  <span class="guide-orb__core" aria-hidden="true"></span>
+</button>
+
+<div class="guide-panel" id="guide-panel" role="dialog" aria-label="Site guide" aria-modal="false" hidden>
+  <header class="guide-panel__head">
+    <span class="guide-avatar" data-guide-avatar aria-hidden="true"><span class="guide-avatar__core"></span></span>
+    <span class="guide-panel__titles">
+      <span class="guide-panel__title">Porter's Guide</span>
+      <span class="guide-panel__state" data-guide-state aria-live="polite"></span>
+    </span>
+    <button class="guide-panel__sound" type="button" data-guide-sound aria-label="Mute the guide's voice">
+      <svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 6.7h2.4L8.8 3.8v10.4L5.4 11.3H3z" fill="currentColor" stroke="none" />
+        <path class="guide-sound-wave" d="M11.4 6.6a3.4 3.4 0 0 1 0 4.8M13.4 4.6a6 6 0 0 1 0 8.8" />
+        <line class="guide-sound-slash" x1="11.3" y1="5" x2="16.2" y2="13.2" />
+      </svg>
+    </button>
+    <button class="guide-panel__close" type="button" data-guide-close aria-label="Close the guide">
+      <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+        <line x1="2.5" y1="2.5" x2="9.5" y2="9.5" /><line x1="9.5" y1="2.5" x2="2.5" y2="9.5" />
+      </svg>
+    </button>
+  </header>
+
+  <div class="guide-panel__body">
+    <p class="guide-msg" data-guide-msg aria-live="polite"></p>
+    <div class="guide-choices" data-guide-choices>
+      <button class="guide-btn guide-btn--primary" type="button" data-guide-tour>Take the tour</button>
+      <button class="guide-btn" type="button" data-guide-dismiss>I'll explore</button>
+    </div>
+  </div>
+
+  <form class="guide-ask" data-guide-ask>
+    <button class="guide-ask__mic" type="button" data-guide-mic aria-label="Enable microphone">
+      <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" /><path d="M3 7.5a5 5 0 0 0 10 0" /><line x1="8" y1="12.5" x2="8" y2="14.5" />
+      </svg>
+    </button>
+    <div class="guide-ask__field" data-guide-field>
+      <input class="guide-ask__input" type="text" data-guide-input placeholder="Ask me anything…" autocomplete="off" maxlength="500" />
+    </div>
+    <button class="guide-ask__send" type="submit" aria-label="Send">↑</button>
+  </form>
+</div>
+
+<script>
+  import { Conversation } from '@elevenlabs/client';
+  import { TOUR_GUIDE_PROMPT, TOUR_STEPS } from '../lib/tour';
+  import { GuideOrb, type OrbState } from '../lib/guide-orb';
+  import { GuideCursor } from '../lib/guide-cursor';
+
+  const INTRO = "Hi, I'm Porter's guide. Want a quick tour of the site, or would you rather explore on your own? You can ask me anything, by voice or text.";
+
+  const orb = document.getElementById('guide-orb') as HTMLButtonElement | null;
+  const panel = document.getElementById('guide-panel') as HTMLElement | null;
+
+  if (orb && panel && window.matchMedia('(min-width: 721px)').matches) {
+    const avatar = panel.querySelector('[data-guide-avatar]') as HTMLElement;
+    const stateEl = panel.querySelector('[data-guide-state]') as HTMLElement;
+    const msgEl = panel.querySelector('[data-guide-msg]') as HTMLElement;
+    const choicesEl = panel.querySelector('[data-guide-choices]') as HTMLElement;
+    const closeBtn = panel.querySelector('[data-guide-close]') as HTMLButtonElement;
+    const tourBtn = panel.querySelector('[data-guide-tour]') as HTMLButtonElement;
+    const dismissBtn = panel.querySelector('[data-guide-dismiss]') as HTMLButtonElement;
+    const askForm = panel.querySelector('[data-guide-ask]') as HTMLFormElement;
+    const inputEl = panel.querySelector('[data-guide-input]') as HTMLInputElement;
+    const fieldEl = panel.querySelector('[data-guide-field]') as HTMLElement;
+    const micBtn = panel.querySelector('[data-guide-mic]') as HTMLButtonElement;
+    const soundBtn = panel.querySelector('[data-guide-sound]') as HTMLButtonElement;
+    const msgHome = msgEl.parentElement as HTMLElement;   // .guide-panel__body — where the caption lives outside the tour
+
+    const desktop = () => (window as any).desktopOS as { open: (p: string) => void; close: () => void } | undefined;
+
+    // ---- shared state ----
+    let panelOpen = false;
+    let touring = false;
+    let resumeTimer: number | null = null;
+    let advanceTimer: number | null = null;   // advance to the next tour step after a silence
+    let expectTimer: number | null = null;     // grace window while the visitor might be asking
+    let tourStep = 0;                           // current index into TOUR_STEPS
+    let orbFx: GuideOrb | null = null;   // the halftone particle orb (drawn on the overlay canvas)
+    let cursorFx: GuideCursor | null = null;   // the tour's halftone "mouse pointer"
+    let navigating = false;   // a cursor-driven step is mid-flight (don't stack advances)
+    let humanActive = false;  // the visitor grabbed their real mouse → auto-pilot stands down
+    let cursorPointTimer: number | null = null;
+    let humanTimer: number | null = null;
+    let echoTimer: number | null = null; // clears a transient typed-message echo in tour mode
+    let echoing = false;
+
+    // agent
+    let conversation: Conversation | null = null;
+    let connecting = false;
+    let voiceEnabled = false;
+    let micMuted = false;
+    let pendingText: string | null = null;
+    let outputMuted = false;
+    let userPaused = false;      // the visitor hit Pause: agent must stop listening AND talking
+    let tourMode = false;        // connected via "Take the tour" → agent leads the walkthrough on connect
+    // Inject the code prompt only once the agent has "Overrides" enabled on its dashboard.
+    // ElevenLabs hard-rejects a disallowed override (kills the connection), so this stays
+    // off until the dashboard is ready; flip to true then to activate the scripted tour.
+    const useOverrides = false;
+    let audioSeen = false;       // any audio chunk arrived from the agent this session
+    let voiceWarned = false;     // surfaced the "no voice from the agent" notice once
+    let voiceWatchdog: number | null = null;
+
+    // Resume a shared AudioContext during the user gesture so the agent's first
+    // reply is audible. connectGuide awaits the signed URL before the SDK builds
+    // its own output context, which on Safari would land outside the gesture and
+    // start suspended (text shows, no voice). Resuming one here in-gesture unlocks
+    // page audio so the SDK's context inherits the running state.
+    let audioCtx: AudioContext | null = null;
+    function unlockAudio() {
+      try {
+        const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (!Ctx) return;
+        if (!audioCtx) audioCtx = new Ctx();
+        if (audioCtx!.state === 'suspended') audioCtx!.resume();
+        const src = audioCtx!.createBufferSource();
+        src.buffer = audioCtx!.createBuffer(1, 1, 22050);
+        src.connect(audioCtx!.destination);
+        src.start(0);
+      } catch (_) {}
+    }
+    type State = 'off' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'muted' | 'paused';
+    const LABELS: Record<State, string> = {
+      off: '', connecting: 'Connecting…', listening: 'Listening', thinking: 'Thinking…', speaking: 'Speaking', muted: 'Mic off', paused: 'Paused',
+    };
+    function setState(s: State) {
+      if (voiceWarned && (s === 'speaking' || s === 'listening')) {
+        stateEl.textContent = 'No voice, text only';   // once we know the agent sends no audio, keep it visible
+        stateEl.className = 'guide-panel__state is-novoice';
+      } else {
+        stateEl.textContent = LABELS[s];
+        stateEl.className = 'guide-panel__state is-' + s;
+      }
+      micBtn.classList.toggle('is-muted', s === 'muted');
+      micBtn.setAttribute('aria-label', s === 'muted' ? 'Unmute microphone' : 'Enable microphone');
+      orbFx?.setState(ORB_STATE[s]);
+    }
+    function setMsg(t: string) {
+      capActive = false; capTrack = null; capSpans = [];
+      msgEl.textContent = t;
+      if (document.body.classList.contains('tour-mode')) fieldEl.classList.toggle('has-caption', !!t);
+    }
+    // The agent reached "speaking" but no audio chunk arrived: it has no TTS voice
+    // configured (text-only). Surface it in the panel (visible in prod, not just
+    // the console) so the failure is obvious rather than a silent dead-end.
+    function flagNoVoice() {
+      if (voiceWarned) return;
+      voiceWarned = true;
+      setState('speaking');
+      console.warn('[guide] Agent connected and replied, but sent NO audio. The ElevenLabs agent has no voice configured (text-only). Assign a TTS voice to the agent on the dashboard.');
+    }
+    // The session could not be established (signed-URL mint failed, mic blocked, WS
+    // error). Make it visible in the panel instead of silently blanking, so a dead
+    // connection is obvious and the console says exactly why.
+    function flagOffline(label: string, detail?: string) {
+      stateEl.textContent = label;
+      stateEl.className = 'guide-panel__state is-offline';
+      console.warn('[guide] guide unavailable:', detail || label);
+    }
+    // Idle auto-disconnect: end the session if nothing happens for IDLE_MS so an
+    // abandoned-but-open panel never keeps billing. Re-armed by every bit of activity
+    // (agent/user speech, messages, the tour advancing, mic/text), so it never fires
+    // mid-tour or mid-conversation — only on genuine silence.
+    let idleTimer: number | null = null;
+    const IDLE_MS = 90000;
+    function disarmIdle() { if (idleTimer !== null) { clearTimeout(idleTimer); idleTimer = null; } }
+    function armIdle() {
+      disarmIdle();
+      idleTimer = window.setTimeout(() => {
+        idleTimer = null;
+        if (conversation || connecting) { endSession(); if (panelOpen) setState('off'); }
+      }, IDLE_MS);
+    }
+
+    // ---- the orb: a halftone particle sphere on a full-viewport overlay canvas ----
+    // One orb does everything: parks at the dormant button, swooshes across the screen
+    // into the panel header on open, reacts to the voice (talking / listening /
+    // thinking), and shoots out to point a halftone hand at whatever the guide opens.
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const stage = document.getElementById('guide-orb-stage') as HTMLCanvasElement | null;
+    let agentSpeaking = false;
+    let rafId = 0;
+    let ampCur = 0;
+    const VOICE_GAIN = 2.6;   // how hard the live voice level drives the orb (turn up = punchier)
+    function anchorOf(el: HTMLElement) {
+      const b = el.getBoundingClientRect();
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2, r: Math.max(b.width, b.height) / 2 };
+    }
+    // The dormant button is fixed, so cache its anchor instead of measuring every frame.
+    // Cache holds until a resize, and we recompute while it's still hidden (rect = 0).
+    let dormantCache: { x: number; y: number; r: number } | null = null;
+    const dormantAnchor = () => {
+      if (!dormantCache || dormantCache.r === 0) dormantCache = anchorOf(orb!);
+      return dormantCache;
+    };
+    window.addEventListener('resize', () => { dormantCache = null; }, { passive: true });
+    const avatarAnchor = () => anchorOf(avatar);
+    // While the tour runs the orb sits at the bottom of the page, just to the left of the
+    // slim caption bar (the collapsed panel) — where the visitor asked for it — level with
+    // the bar, with a gentle bob.
+    const ORB_R = 28;
+    function windowPin() {
+      const bob = Math.sin(performance.now() / 900) * 6;
+      const bar = panel!.getBoundingClientRect();
+      if (bar.width > 4 && bar.top < window.innerHeight - 8) {
+        const x = Math.max(ORB_R + 12, bar.left - (ORB_R + 30));   // just left of the caption bar
+        const y = bar.top + bar.height / 2;                         // level with the bar
+        return { x, y: y + bob, r: ORB_R };
+      }
+      // fallback before the bar is laid out: bottom-left
+      return { x: ORB_R + 16, y: window.innerHeight - (ORB_R + 64) + bob, r: ORB_R };
+    }
+    if (stage) {
+      orbFx = new GuideOrb(stage);
+      orbFx.setTracker(() => (!panelOpen ? dormantAnchor() : touring ? windowPin() : avatarAnchor()));
+      orbFx.start();
+    }
+    const cursorStage = document.getElementById('guide-cursor-stage') as HTMLCanvasElement | null;
+    if (cursorStage) {
+      cursorFx = new GuideCursor(cursorStage);
+      // its loop runs only during a tour (started in takeTour, stopped on teardown) —
+      // no point animating an invisible canvas the rest of the time
+    }
+    // Map the panel's conversational state onto the orb's visual state.
+    const ORB_STATE: Record<State, OrbState> = {
+      off: 'idle', connecting: 'thinking', listening: 'listening',
+      thinking: 'thinking', speaking: 'talking', muted: 'idle', paused: 'idle',
+    };
+    // Fly the orb out and point its halftone hand at an element, then revert. Only while
+    // the guide is open, and never under reduced motion.
+    let pointTimer: number | null = null;
+    function pointAtEl(getEl: () => Element | null, delay = 420, ms = 2000) {
+      if (!orbFx || reduceMotion || !panelOpen) return;
+      if (pointTimer !== null) clearTimeout(pointTimer);
+      pointTimer = window.setTimeout(() => {
+        pointTimer = null;
+        const el = getEl();
+        if (!el || !orbFx || !panelOpen) return;
+        const b = el.getBoundingClientRect();
+        if (b.width === 0 && b.height === 0) return;
+        orbFx.pointAt(b.left + Math.min(b.width / 2, 90), b.top + Math.min(b.height / 2, 40), ms);
+      }, delay);
+    }
+    const pointAtWindow = () => pointAtEl(() => document.getElementById('desktop-window'), 420, 1500);
+    // Re-pin the orb beside the window after it (re)opens, using a comet move in its
+    // travel style. Waits for the window's open animation to settle first.
+    let repinTimer: number | null = null;
+    function repinOrb() {
+      if (!orbFx) return;
+      if (repinTimer !== null) clearTimeout(repinTimer);
+      repinTimer = window.setTimeout(() => { repinTimer = null; if (touring && orbFx) orbFx.swooshTo(windowPin()); }, 380);
+    }
+    // ---- pointing & browsing: the cursor reads the page instead of sitting still ----
+    const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
+    const bodyEl = () => document.getElementById('desktop-window-body');
+    // eased scroll of a container — smooth, unlike the browser's choppy 'smooth' behavior
+    function smoothScrollTo(el: HTMLElement, top: number, dur = 850): Promise<void> {
+      return new Promise((resolve) => {
+        const start = el.scrollTop;
+        const goal = Math.max(0, top);
+        const delta = goal - start;
+        if (reduceMotion || Math.abs(delta) < 2) { el.scrollTop = goal; resolve(); return; }
+        const t0 = performance.now();
+        const tick = () => {
+          const p = Math.min(1, (performance.now() - t0) / dur);
+          const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // easeInOutQuad
+          el.scrollTop = start + delta * e;
+          if (p < 1 && touring) requestAnimationFrame(tick);
+          else resolve();
+        };
+        requestAnimationFrame(tick);
+      });
+    }
+    function centerInBody(el: Element): Promise<void> {
+      const body = bodyEl();
+      if (!body) return Promise.resolve();
+      const br = body.getBoundingClientRect();
+      const er = (el as HTMLElement).getBoundingClientRect();
+      return smoothScrollTo(body, body.scrollTop + (er.top - br.top) - (body.clientHeight / 2 - er.height / 2));
+    }
+    function pulseEl(el: Element) {
+      el.classList.add('tour-highlight');
+      window.setTimeout(() => el.classList.remove('tour-highlight'), 1900);
+    }
+    function moveCursorToEl(el: Element) {
+      if (!cursorFx || reduceMotion || humanActive) return;
+      const r = (el as HTMLElement).getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) return;
+      cursorFx.show();
+      cursorFx.moveTo(r.left + Math.min(r.width * 0.4, 80), r.top + Math.min(r.height * 0.5, 28));
+    }
+    // Gesture at an element (scrolls it into view first). Used by the agent's pointAt tool
+    // and project highlights.
+    function cursorPointAt(el: Element | null, delay = 220) {
+      if (!el) return;
+      if (reduceMotion || !cursorFx || !touring || humanActive) { pulseEl(el); return; }
+      if (cursorPointTimer !== null) clearTimeout(cursorPointTimer);
+      cursorPointTimer = window.setTimeout(async () => {
+        cursorPointTimer = null;
+        if (!touring || navigating || humanActive || !cursorFx) return;
+        await centerInBody(el);
+        if (!touring || navigating || humanActive) return;
+        moveCursorToEl(el);
+        pulseEl(el);
+      }, delay);
+    }
+    // A prominent element currently in the body's viewport, to point at while browsing.
+    function pickBrowseTarget(body: HTMLElement): Element | null {
+      const br = body.getBoundingClientRect();
+      const cands = Array.from(body.querySelectorAll('h2, h3, img, figure, .project-card, blockquote'));
+      const visible = cands.filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 8 && r.top < br.bottom - 40 && r.bottom > br.top + 60;
+      });
+      return visible.length ? visible[Math.floor(visible.length / 2)] : null;
+    }
+    // After a page opens, browse it: dwell on the top, then scroll down in stages, moving
+    // the cursor to point at what's in view at each stop — until the step advances. A token
+    // + the step index make it self-terminate the moment the next step starts.
+    let browseToken = 0;
+    async function browseStep() {
+      if (reduceMotion || !cursorFx || !touring) return;
+      const myStep = tourStep;
+      const token = ++browseToken;
+      const body = bodyEl();
+      if (!body) return;
+      const live = () => touring && !navigating && !humanActive && tourStep === myStep && token === browseToken;
+      await sleep(650);
+      if (!live()) return;
+      const head = body.querySelector('h1, .project-title, h2, .project-card');
+      if (head) { moveCursorToEl(head); pulseEl(head); }
+      await sleep(1700);
+      let guard = 0;
+      while (live() && guard++ < 6) {
+        const max = body.scrollHeight - body.clientHeight;
+        if (max <= 8 || body.scrollTop >= max - 8) break;
+        await smoothScrollTo(body, Math.min(max, body.scrollTop + body.clientHeight * 0.72), 1000);
+        if (!live()) return;
+        const tgt = pickBrowseTarget(body);
+        if (tgt) { moveCursorToEl(tgt); pulseEl(tgt); }
+        await sleep(1700);
+      }
+    }
+    // Resolve an element the agent named (for the pointAt client tool).
+    function resolvePointTarget(p: { id?: string; selector?: string; text?: string }): Element | null {
+      const body = document.getElementById('desktop-window-body');
+      if (!body) return null;
+      if (p.selector) { try { const el = body.querySelector(p.selector); if (el) return el; } catch (_) {} }
+      if (p.id) {
+        const el = body.querySelector(`a[href$="/${p.id}"], a[href*="${p.id}"]`);
+        if (el) return el;
+      }
+      if (p.text) {
+        const needle = p.text.trim().toLowerCase();
+        const nodes = Array.from(body.querySelectorAll('h1,h2,h3,a,.project-card,strong,li'));
+        for (const n of nodes) { if ((n.textContent || '').trim().toLowerCase().includes(needle)) return n; }
+      }
+      return null;
+    }
+    function targetAmp(): number {
+      if (voiceEnabled && agentSpeaking && conversation) {
+        let v = 0; try { v = conversation.getOutputVolume(); } catch (_) {}
+        // Drive the orb off the LIVE voice level so the spines track the speech shape:
+        // a small floor keeps it alive in the gaps, louder syllables punch it toward 1.
+        return Math.min(1, Math.max(0.1, (v || 0) * VOICE_GAIN));
+      }
+      return 0;
+    }
+    function frame() {
+      const target = targetAmp();
+      ampCur += (target - ampCur) * (target > ampCur ? 0.5 : 0.18);   // fast attack, gentle release → voice-shaped
+      orbFx?.setAmplitude(ampCur);
+      if (capActive) revealCaption();
+      if (panelOpen) rafId = requestAnimationFrame(frame);
+      else rafId = 0;
+    }
+    function startLoop() { if (!rafId) rafId = requestAnimationFrame(frame); }
+    function stopLoop() { if (rafId) { cancelAnimationFrame(rafId); rafId = 0; } ampCur = 0; orbFx?.setAmplitude(0); }
+
+    // ---- captions: a smooth horizontal teleprompter. The whole line is laid out once
+    // on a single row inside a clipped, edge-faded viewport. Each frame we translate the
+    // row so the spoken word stays centred and fade words by their distance from it.
+    // Nodes are built once per line (never per word) and weight never changes, so there
+    // is no reflow — the text glides instead of jumping. ----
+    let capWords: string[] = [];
+    let capCenters: number[] = [];     // x-centre of each word within the track
+    let capTrack: HTMLElement | null = null;
+    let capSpans: HTMLElement[] = [];
+    let capViewW = 0;
+    let capStart = 0;
+    let capEstimateMs = 3000;
+    let capActive = false;
+    const escHtml = (s: string) => s.replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
+    function buildCaption(text: string) {
+      // an agent caption supersedes any transient typed-message echo
+      if (echoTimer !== null) { clearTimeout(echoTimer); echoTimer = null; }
+      echoing = false;
+      msgEl.classList.remove('is-echo');
+      if (document.body.classList.contains('tour-mode')) fieldEl.classList.add('has-caption');
+      if (reduceMotion) { setMsg(text); return; }   // no scrolling under reduced-motion: show the line
+      capWords = text.split(/\s+/).filter(Boolean);
+      capStart = performance.now();
+      capEstimateMs = Math.max(2400, (capWords.length / 2.7) * 1000);   // ~2.7 words/sec — closer to the agent's pace
+      capActive = capWords.length > 0;
+      if (!capActive) { capTrack = null; capSpans = []; msgEl.textContent = ''; return; }
+      msgEl.innerHTML = '<span class="guide-cap"><span class="guide-cap__track">'
+        + capWords.map((w) => `<span>${escHtml(w)}</span>`).join(' ')
+        + '</span></span>';
+      const view = msgEl.querySelector('.guide-cap') as HTMLElement | null;
+      capTrack = msgEl.querySelector('.guide-cap__track');
+      capSpans = Array.prototype.slice.call(msgEl.querySelectorAll('.guide-cap__track > span'));
+      capViewW = view ? view.clientWidth : msgEl.clientWidth;
+      capCenters = capSpans.map((s) => s.offsetLeft + s.offsetWidth / 2);
+      revealCaption();
+    }
+    function captionProgress(): number {
+      return (performance.now() - capStart) / capEstimateMs;   // timed estimate from the agent message length
+    }
+    function capFinish() { if (capActive) capStart = performance.now() - capEstimateMs; }   // jump focus to the last word
+    function revealCaption() {
+      if (!capActive || !capTrack || !capSpans.length) return;
+      const prog = Math.max(0, Math.min(1, captionProgress()));
+      const fpos = prog * (capWords.length - 1);   // continuous focus position
+      const i0 = Math.floor(fpos), i1 = Math.min(capWords.length - 1, i0 + 1), frac = fpos - i0;
+      const focusX = capCenters[i0] + (capCenters[i1] - capCenters[i0]) * frac;
+      capTrack.style.transform = `translate3d(${(capViewW / 2 - focusX).toFixed(1)}px,0,0)`;
+      for (let k = 0; k < capSpans.length; k++) {  // current word stays full-dark; neighbours fall off fast so it pops
+        const dist = Math.abs(k - fpos);
+        capSpans[k].style.opacity = (dist < 0.5 ? 1 : Math.max(0.2, 0.62 - (dist - 0.5) * 0.22)).toFixed(2);
+      }
+    }
+
+    // ---- agent speech ↔ listening coordination ----
+    // The agent (or the visitor) starting cancels any pending "back to listening";
+    // when the agent stops, return to the listening state after a short beat.
+    function holdForAgent() {
+      if (resumeTimer !== null) { clearTimeout(resumeTimer); resumeTimer = null; }
+    }
+    function releaseAfterAgent() {
+      if (resumeTimer !== null) clearTimeout(resumeTimer);
+      resumeTimer = window.setTimeout(() => {
+        resumeTimer = null;
+        if (userPaused) return;                 // stay silenced while the visitor has it paused
+        if (!micMuted) setState('listening');
+      }, 600);
+    }
+
+    // ---- agent-led tour: the CLIENT drives navigation + pacing ----
+    // The code opens one page, asks the agent to sell just that page, waits for it to
+    // finish, then advances. The agent never navigates, so the screen always matches the
+    // narration. A short silence advances; a spoken interruption pauses it; once the
+    // interruption is answered it resumes; reaching the last step ends the tour.
+    const SILENCE_MS = 3000;
+    function clearAdvance() { if (advanceTimer !== null) { clearTimeout(advanceTimer); advanceTimer = null; } }
+    function clearExpect() { if (expectTimer !== null) { clearTimeout(expectTimer); expectTimer = null; } }
+    function scheduleAdvance() {
+      clearAdvance();
+      if (!touring || userPaused || humanActive || !conversation) return;
+      advanceTimer = window.setTimeout(() => {
+        advanceTimer = null;
+        if (touring && !userPaused && conversation && !agentSpeaking) runStep(tourStep + 1);
+      }, SILENCE_MS);
+    }
+    // ---- cursor auto-pilot: the guide's pointer clicks its way through the site ----
+    function windowOpen(): boolean {
+      const w = document.getElementById('desktop-window');
+      return !!w && !w.hasAttribute('hidden');
+    }
+    function iconEl(path: string): HTMLElement | null {
+      return (document.querySelector(`a.icon[href="${path}"]`) || document.querySelector(`a.icon[href^="${path}"]`)) as HTMLElement | null;
+    }
+    function cardEl(path: string): HTMLElement | null {
+      const body = document.getElementById('desktop-window-body');
+      if (!body) return null;
+      // a real listing card, not a prev/next link on an item page (so "is the listing
+      // showing?" is answered correctly and we pop back to the folder when it isn't)
+      const links = body.querySelectorAll<HTMLElement>(`a[href$="${path}"], a[href*="${path}"]`);
+      for (const el of Array.from(links)) {
+        if (!el.closest('.case-nav')) return el;
+      }
+      return null;
+    }
+    function nextArrowEl(): HTMLElement | null {
+      const body = document.getElementById('desktop-window-body');
+      return body ? (body.querySelector('.case-nav__cell--end a') as HTMLElement | null) : null;
+    }
+    function closeBtnEl(): HTMLElement | null {
+      return document.querySelector('#desktop-window .window__close') as HTMLElement | null;
+    }
+    function waitForEl(getEl: () => HTMLElement | null, timeout = 2500): Promise<HTMLElement | null> {
+      return new Promise((resolve) => {
+        const start = performance.now();
+        const tryFind = () => {
+          const el = getEl();
+          if (el) { resolve(el); return; }
+          if (!touring || userPaused || humanActive || performance.now() - start > timeout) { resolve(null); return; }
+          window.setTimeout(tryFind, 60);
+        };
+        tryFind();
+      });
+    }
+    // Glide the pointer to an element and click it, then run `act` (the authoritative open).
+    // Falls back to `act` directly when there's no element or under reduced motion.
+    async function gestureClick(el: HTMLElement | null, act: () => void) {
+      if (!el || reduceMotion || !cursorFx) { act(); return; }
+      try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+      await sleep(220);                       // let any scroll settle before aiming
+      if (!touring || userPaused || humanActive) return;
+      const r = el.getBoundingClientRect();
+      cursorFx.show();
+      await cursorFx.moveTo(r.left + Math.min(r.width / 2, 64), r.top + Math.min(r.height / 2, 22));
+      if (!touring || userPaused || humanActive) return;
+      await cursorFx.click();
+      act();
+    }
+    // Which on-screen affordance leads to this step. Section roots open from their
+    // desktop folder icon; item pages are reached by clicking their listing card (the
+    // page "Next →" arrow isn't usable — its sibling order doesn't match the tour and
+    // only projects even have one). Roots with no desktop icon just open.
+    function stepKind(step: { path: string }): 'icon' | 'card' | 'open' {
+      const seg = step.path.split('/').filter(Boolean);
+      if (seg.length < 2) return iconEl('/' + (seg[0] || '')) ? 'icon' : 'open';
+      return 'card';
+    }
+    // Drive the cursor to reach `step`, opening the window at the moment it "clicks".
+    async function driveTo(step: { path: string }, prev: { path: string } | null) {
+      const open = () => desktop()?.open(step.path);
+      const kind = stepKind(step);
+      if (kind === 'open') { open(); return; }
+      if (kind === 'icon') {
+        // section change: close the current window, then click the next folder icon
+        if (windowOpen()) { await gestureClick(closeBtnEl(), () => desktop()?.close()); await sleep(260); }
+        if (!touring || userPaused || humanActive) return;
+        await gestureClick(iconEl(step.path), open);
+        return;
+      }
+      // item: make sure its folder listing is showing, then click the card
+      const root = '/' + step.path.split('/').filter(Boolean)[0];
+      const firstOfSection = !!prev && prev.path === root;
+      if (!firstOfSection && !cardEl(step.path)) {
+        desktop()?.open(root);                          // pop back to the folder
+        await waitForEl(() => cardEl(step.path), 2500);
+      }
+      if (!touring || userPaused || humanActive) return;
+      const el = await waitForEl(() => cardEl(step.path), 2500);
+      await gestureClick(el, open);
+    }
+    async function runStep(i: number) {
+      if (navigating) return;                  // a step is already in flight
+      if (!touring || userPaused || humanActive || !conversation) return;
+      if (i >= TOUR_STEPS.length) { finishTour(); return; }
+      navigating = true;
+      clearAdvance();
+      try {
+        tourStep = i;
+        const step = TOUR_STEPS[i];
+        const prev = i > 0 ? TOUR_STEPS[i - 1] : null;
+        await driveTo(step, prev);             // pointer clicks through to the page (or opens it)
+        if (!touring || userPaused || humanActive || !conversation) return;   // bailed mid-navigation
+        repinOrb();                            // float the orb beside the freshly opened window
+        let directive: string;
+        if (i === 0) directive = `Start the walkthrough with one short framing line (you will walk them through Porter's work and they can jump in with a question anytime), then sell ${step.label} in one short sentence. Then stop.`;
+        else if (step.notes) directive = `The visitor is now looking at ${step.label}. Sell it using Porter's own talking points, delivered naturally and persuasively as a few short spoken sentences. Do not read them word for word and do not list them. Talking points: ${step.notes} Then stop.`;
+        else if (step.intro) directive = `The visitor is now looking at ${step.label}. Give one short framing sentence, then stop.`;
+        else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
+        try { conversation.sendUserMessage(directive); } catch (_) {}
+        browseStep();   // scroll through + gesture at the content while it's described
+      } finally {
+        navigating = false;
+      }
+    }
+    function finishTour() {
+      touring = false; navigating = false;
+      clearAdvance(); clearExpect(); clearCursorTimers();
+      setTourLayout(false);                 // back to the full panel for Q&A
+      cursorFx?.hide();
+      cursorFx?.stop();
+      orbFx?.release();
+      orbFx?.swooshTo(avatarAnchor());       // orb flies home into the panel header
+      try { conversation && conversation.sendUserMessage('The walkthrough is finished. Give one short line inviting them to open the résumé, book a meeting, or ask anything, then stop.'); } catch (_) {}
+    }
+    // A real spoken interruption: hold off advancing until the agent has answered. If no
+    // answer arrives (e.g. background noise tripped the mic), resume after a few seconds.
+    function pauseForUser() {
+      if (!touring) return;
+      clearAdvance();
+      clearExpect();
+      expectTimer = window.setTimeout(() => { expectTimer = null; if (touring && !userPaused && !agentSpeaking) scheduleAdvance(); }, 7000);
+    }
+
+    // ---- client tools ----
+    const WINDOW_PATHS: Record<string, string> = {
+      about: '/about', now: '/now', projects: '/projects', work: '/projects', 'case studies': '/projects',
+      agents: '/agents', 'ai agents': '/agents', tools: '/fun', 'internal tools': '/fun', fun: '/fun',
+      reading: '/books', books: '/books', movies: '/movies', photos: '/photos', resume: '/resume',
+      'résumé': '/resume', stack: '/stack', 'about this site': '/stack', calendar: '/calendar', contact: '/calendar', ask: '/ask',
+    };
+    function highlightProjectCard(id: string) {
+      const body = document.getElementById('desktop-window-body');
+      if (!body || !id) return;
+      const link = body.querySelector(`a[href$="/projects/${id}"], a[href*="${id}"]`) as HTMLElement | null;
+      const card = (link && (link.closest('.project-card') as HTMLElement)) || link;
+      if (!card) return;
+      if (touring) {
+        cursorPointAt(card, 200);   // the tour's pointer gestures at the card
+      } else {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.add('tour-highlight');
+        window.setTimeout(() => card.classList.remove('tour-highlight'), 2400);
+        pointAtEl(() => card, 520, 2200);   // Q&A: the orb's halftone hand points
+      }
+    }
+    const clientTools = {
+      openWindow: (p: { name?: string }) => {
+        const key = (p?.name || '').trim().toLowerCase();
+        const path = WINDOW_PATHS[key];
+        if (path) { desktop()?.open(path); if (touring) repinOrb(); else pointAtWindow(); return `Opened ${key}.`; }
+        return `There is no window called "${key}".`;
+      },
+      navigateTo: (p: { path?: string }) => {
+        const path = (p?.path || '').trim();
+        if (!path || path === '/') { desktop()?.close(); return 'Returned to the desktop.'; }
+        const full = path.startsWith('/') ? path : '/' + path;
+        desktop()?.open(full);
+        if (touring) repinOrb(); else pointAtWindow();
+        return `Opened ${path}.`;
+      },
+      highlightProject: (p: { id?: string }) => {
+        const id = (p?.id || '').trim();
+        desktop()?.open('/projects');
+        window.setTimeout(() => highlightProjectCard(id), 650);
+        return `Highlighting ${id}.`;
+      },
+      pointAt: (p: { id?: string; selector?: string; text?: string }) => {
+        const el = resolvePointTarget(p || {});
+        if (el) { cursorPointAt(el, 120); return 'Pointing at it.'; }
+        return 'Could not find that on screen.';
+      },
+    };
+
+    // ---- agent session ----
+    async function connectGuide() {
+      if (conversation || connecting || userPaused) return;   // never bring the agent up while paused
+      connecting = true;
+      audioSeen = false; voiceWarned = false;
+      unlockAudio();   // resume audio within the gesture, before we await the signed URL
+      setState('connecting');
+      try {
+        const res = await fetch('/api/tour/agent-url');
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; signedUrl?: string; reason?: string; status?: number; detail?: string };
+        if (!data.ok || !data.signedUrl) {
+          connecting = false; pendingText = null;
+          flagOffline('Guide offline', 'agent-url: ' + (data.reason || res.status) + (data.detail ? ' (' + data.detail + ')' : ''));
+          bailTourOffline();
+          return;
+        }
+        conversation = await Conversation.startSession({
+          signedUrl: data.signedUrl,
+          clientTools,
+          // Inject the sales-guide brain from code. Requires "Overrides" enabled on the
+          // agent's Security settings; if the agent rejects it the catch below reconnects
+          // without overrides, so the guide still works (using its dashboard prompt).
+          ...(useOverrides ? { overrides: { agent: { prompt: { prompt: TOUR_GUIDE_PROMPT } } } } : {}),
+          onConnect: () => {
+            connecting = false; voiceEnabled = true;
+            if (userPaused) return;   // paused mid-connect: the post-await guard tears it down
+            setState('listening');
+            armIdle();
+            try { conversation && conversation.setVolume({ volume: outputMuted ? 0 : 1 }); } catch (_) {}
+            if (tourMode) {
+              // Agent-led tour: the client now drives the page-by-page walkthrough.
+              tourMode = false;   // one-shot: only kick off on this connect, not on later reconnects
+              runStep(0);
+            } else if (pendingText) {
+              // flush a queued question now that the socket is open (typed before connect)
+              try { conversation && conversation.sendUserMessage(pendingText); } catch (_) {} pendingText = null;
+            }
+          },
+          onModeChange: ({ mode }) => {
+            if (userPaused) return;   // ignore agent activity while the visitor has it paused
+            armIdle();
+            if (mode === 'speaking') {
+              clearAdvance(); clearExpect();   // agent talking → cancel pending advance + interruption grace
+              holdForAgent(); agentSpeaking = true; startLoop(); if (!micMuted) setState('speaking');
+              // Watchdog: if the agent "speaks" but no audio lands in 3s, it has no voice.
+              if (voiceWatchdog !== null) clearTimeout(voiceWatchdog);
+              if (!audioSeen) voiceWatchdog = window.setTimeout(() => { if (!audioSeen) flagNoVoice(); }, 3000);
+            } else {
+              agentSpeaking = false; releaseAfterAgent(); capFinish();   // snap the caption to the end when speech stops
+              if (expectTimer === null) scheduleAdvance();   // don't advance while waiting on a question
+            }
+          },
+          onMessage: ({ message, role }) => {
+            armIdle();
+            if (role === 'user') { holdForAgent(); clearAdvance(); if (!micMuted) setState('thinking'); }
+            else if (role === 'agent' && message) { buildCaption(message); }
+          },
+          onVadScore: ({ vadScore }) => { if (vadScore > 0.6) { holdForAgent(); armIdle(); pauseForUser(); } },
+          onAudio: () => {
+            audioSeen = true;
+            armIdle();
+            if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
+            if (voiceWarned) { voiceWarned = false; setState(agentSpeaking ? 'speaking' : micMuted ? 'muted' : 'listening'); }   // slow first chunk: undo the false alarm
+            if (import.meta.env.DEV) console.log('[guide] agent audio chunk received');
+          },
+          onError: (m) => { console.warn('[guide] agent error:', m); },
+          onDisconnect: (d) => {
+            conversation = null; voiceEnabled = false; connecting = false; agentSpeaking = false;
+            if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
+            if (panelOpen) {
+              if (userPaused) setState('paused');                                    // we cut it on purpose (pause)
+              else if (d.reason === 'error') flagOffline('Guide offline', d.message); // surface a dropped/failed socket
+              else setState('off');
+            }
+          },
+        });
+        // If the panel was closed/paused, or the tab was hidden, while we were still
+        // connecting, the session resolves now with no UI to control it — tear it
+        // straight back down so the ElevenLabs agent + mic never linger in the background.
+        if (!panelOpen || userPaused || document.hidden) { endSession(); return; }
+      } catch (e) {
+        connecting = false; conversation = null; voiceEnabled = false; pendingText = null;
+        const msg = e instanceof Error ? e.name + ': ' + e.message : String(e);
+        const micBlocked = /not\s*allowed|permission|denied/i.test(msg);   // VoiceConversation needs the mic
+        flagOffline(micBlocked ? 'Mic blocked' : 'Guide offline', msg);
+        bailTourOffline();
+      }
+    }
+    function endSession() {
+      if (conversation) { try { conversation.endSession(); } catch (_) {} conversation = null; }
+      voiceEnabled = false; connecting = false; micMuted = false; agentSpeaking = false;
+      if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
+      disarmIdle();
+      clearAdvance();
+      clearExpect();
+    }
+    // If the voice agent can't be reached when a tour starts, don't strand the visitor in
+    // the collapsed tour bar with an idle cursor — revert to the full panel (the offline
+    // state is already shown) so they can retry, explore, or type. No-op outside a tour.
+    function bailTourOffline() {
+      if (!touring) return;
+      touring = false; tourMode = false; navigating = false;
+      clearAdvance(); clearExpect(); clearCursorTimers();
+      setTourLayout(false);
+      setMsg("The voice guide can't connect right now. You can still explore on your own, or ask me anything by text.");
+      cursorFx?.hide(); cursorFx?.stop();
+      orbFx?.release();
+      orbFx?.swooshTo(avatarAnchor());
+      choicesEl.hidden = false;
+    }
+
+    // ---- panel open / close + tour control ----
+    // Tour layout: collapse the panel to a slim caption bar and move the rolling caption
+    // to overlay the input (one thin line). The orb leaves the header to float free.
+    function setTourLayout(on: boolean) {
+      document.body.classList.toggle('tour-mode', on);
+      if (on) {
+        fieldEl.appendChild(msgEl);              // caption rolls over the input line
+        msgEl.classList.add('guide-msg--inline');
+      } else if (msgEl.parentElement === fieldEl) {
+        msgHome.insertBefore(msgEl, choicesEl);  // restore to the full-panel body
+        msgEl.classList.remove('guide-msg--inline', 'is-echo');
+        fieldEl.classList.remove('is-typing', 'has-caption');
+      }
+    }
+    function clearCursorTimers() {
+      if (cursorPointTimer !== null) { clearTimeout(cursorPointTimer); cursorPointTimer = null; }
+      if (humanTimer !== null) { clearTimeout(humanTimer); humanTimer = null; }
+      humanActive = false;
+    }
+    // A typed question briefly shows on the bar, then clears to free the space again.
+    function showEcho(text: string) {
+      if (echoTimer !== null) clearTimeout(echoTimer);
+      inputEl.blur();
+      fieldEl.classList.remove('is-typing');
+      echoing = true;
+      setMsg(text);
+      msgEl.classList.add('is-echo');
+      echoTimer = window.setTimeout(() => {
+        echoTimer = null;
+        if (echoing) { echoing = false; msgEl.classList.remove('is-echo'); setMsg(''); }
+      }, 3500);
+    }
+    function openGuide() {
+      if (panelOpen) return;
+      panelOpen = true;
+      orb!.hidden = true;
+      panel!.hidden = false;
+      document.body.classList.add('tour-active');
+      (window as any).__osBeacon?.hide();   // one nudge at a time: dim the desktop beacon while the guide is up
+      setTourLayout(false);   // open as the full intro panel, not the slim tour bar
+      startLoop();
+      // Swoosh from the dormant corner into the panel header. Synchronous (not deferred a
+      // frame) so the flight is set before the orb's own loop can spring a step toward the
+      // avatar first — which read as a tiny teleport before the swoop.
+      orbFx?.release();
+      orbFx?.setState('idle');
+      orbFx?.swooshTo(avatarAnchor());
+      touring = false; tourMode = false;
+      choicesEl.hidden = false;
+      setMsg(INTRO);
+      // Opening the panel does NOT connect the agent — that would start a metered
+      // ElevenLabs session (and a live mic) before the visitor asks for anything. The
+      // agent connects lazily on a real action: Take the tour, the mic, or a question.
+    }
+    function closeGuide() {
+      if (!panelOpen) return;
+      panelOpen = false; touring = false; agentSpeaking = false; userPaused = false; tourMode = false; navigating = false;
+      setTourLayout(false);
+      cursorFx?.hide();
+      cursorFx?.stop();
+      clearCursorTimers();
+      if (echoTimer !== null) { clearTimeout(echoTimer); echoTimer = null; } echoing = false;
+      stopLoop();
+      if (resumeTimer !== null) { clearTimeout(resumeTimer); resumeTimer = null; }
+      endSession();
+      panel!.hidden = true;
+      orb!.hidden = false;
+      document.body.classList.remove('tour-active');
+      (window as any).__osBeacon?.show();   // dismissed → light the next folder to explore
+      // Comet back home to the dormant corner.
+      orbFx?.release();
+      orbFx?.setState('idle');
+      orbFx?.swooshTo(dormantAnchor());
+      desktop()?.close();
+    }
+    function takeTour() {
+      userPaused = false;
+      tourMode = true;          // agent leads the walkthrough as soon as it connects
+      touring = true;
+      choicesEl.hidden = true;
+      setTourLayout(true);      // collapse to the slim caption bar
+      orbFx?.release();
+      orbFx?.swooshTo(windowPin());   // orb comets off to float beside the window (or its corner spot)
+      cursorFx?.start();
+      cursorFx?.show();
+      cursorFx?.place(window.innerWidth * 0.5, window.innerHeight * 0.62);   // pointer waits, then drives
+      setMsg('Starting the tour…');   // captions then fill in from the agent's speech
+      connectGuide();           // the click is a user gesture, so voice + mic can start
+    }
+    // ---- text + mic ----
+    askForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = inputEl.value.trim();
+      if (!text) return;
+      inputEl.value = '';
+      setState('thinking');
+      armIdle();
+      if (document.body.classList.contains('tour-mode')) showEcho(text);   // flash the question, then free the space
+      if (conversation && voiceEnabled) { try { conversation.sendUserMessage(text); } catch (_) {} }
+      else { pendingText = text; connectGuide(); }   // submit is a gesture → connect, then send on onConnect
+    });
+    // In the slim tour bar, focusing the input hides the rolling caption so the visitor
+    // can see what they type; blurring an empty field brings the caption back.
+    inputEl.addEventListener('focus', () => { if (document.body.classList.contains('tour-mode')) fieldEl.classList.add('is-typing'); });
+    inputEl.addEventListener('blur', () => { if (!inputEl.value) fieldEl.classList.remove('is-typing'); });
+    micBtn.addEventListener('click', () => {
+      if (!conversation || !voiceEnabled) { connectGuide(); return; }   // click is a gesture → (re)connect
+      micMuted = !micMuted;
+      try { conversation.setMicMuted(micMuted); } catch (_) {}
+      setState(micMuted ? 'muted' : 'listening');
+      armIdle();
+    });
+    soundBtn.addEventListener('click', () => {
+      outputMuted = !outputMuted;
+      try { conversation && conversation.setVolume({ volume: outputMuted ? 0 : 1 }); } catch (_) {}
+      soundBtn.classList.toggle('is-off', outputMuted);
+      soundBtn.setAttribute('aria-label', outputMuted ? "Unmute the guide's voice" : "Mute the guide's voice");
+    });
+
+    // ---- wiring ----
+    orb.addEventListener('click', () => openGuide());
+    closeBtn.addEventListener('click', closeGuide);
+    dismissBtn.addEventListener('click', closeGuide);
+    // Hard stop the agent + mic if the page is unloaded with a session live.
+    window.addEventListener('pagehide', () => endSession());
+    // Tab backgrounded / app minimised → end the metered session + mic shortly after
+    // (cost + privacy). A quick flick back cancels it; the visitor re-engages with the
+    // mic or a question when they return.
+    let hideTimer: number | null = null;
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        // pause the canvas loops outright (no point burning battery on an unseen tab)
+        orbFx?.stop();
+        cursorFx?.stop();
+        if ((conversation || connecting) && hideTimer === null) {
+          hideTimer = window.setTimeout(() => { hideTimer = null; endSession(); if (panelOpen) setState('off'); }, 3000);
+        }
+      } else {
+        orbFx?.start();
+        if (touring) cursorFx?.start();
+        if (hideTimer !== null) { clearTimeout(hideTimer); hideTimer = null; }
+      }
+    });
+    tourBtn.addEventListener('click', takeTour);
+
+    // Back-compat: a stray "start-tour" trigger still opens the guide.
+    document.addEventListener('click', (e) => {
+      const t = (e.target as Element).closest('[data-action="start-tour"]');
+      if (t) { e.preventDefault(); openGuide(); }
+    });
+
+    // Esc closes the guide before the desktop window's own Esc handler.
+    document.addEventListener('keydown', (e) => {
+      if (!panelOpen) return;
+      if (e.key === 'Escape' && document.activeElement !== inputEl) { e.preventDefault(); e.stopImmediatePropagation(); closeGuide(); }
+    }, true);
+
+    // Hand control back when the visitor uses their real mouse: a click on the page (not
+    // the panel) stands the cursor auto-pilot down; it resumes after a short idle.
+    document.addEventListener('pointerdown', (e) => {
+      if (!touring) return;
+      if (panel.contains(e.target as Node)) return;   // using the panel isn't "taking over"
+      humanActive = true;
+      cursorFx?.hide();
+      cursorFx?.stop();
+      clearAdvance();
+      if (cursorPointTimer !== null) { clearTimeout(cursorPointTimer); cursorPointTimer = null; }
+      if (humanTimer !== null) clearTimeout(humanTimer);
+      humanTimer = window.setTimeout(() => {
+        humanTimer = null;
+        humanActive = false;
+        // resume gently: bring the orb back beside whatever the visitor landed on, then
+        // re-arm the (delayed) advance — don't immediately yank to the next step.
+        if (touring && !userPaused && conversation) { cursorFx?.show(); repinOrb(); scheduleAdvance(); }
+      }, 5000);
+    }, true);
+
+    // Show the dormant orb (desktop only) and snap the canvas orb onto it.
+    orb.hidden = false;
+    orbFx?.place(dormantAnchor());
+
+    // Auto pop-out after ~6s of cumulative active mouse movement (once per session).
+    let moveMs = 0, lastMove = 0, autoArmed = true;
+    function onMove() {
+      const now = Date.now();
+      if (lastMove && now - lastMove < 200) moveMs += now - lastMove;
+      lastMove = now;
+      if (autoArmed && moveMs >= 6000) {
+        autoArmed = false;
+        document.removeEventListener('mousemove', onMove);
+        if (!panelOpen) openGuide();
+      }
+    }
+    document.addEventListener('mousemove', onMove);
+
+    if (import.meta.env.DEV) (window as any).__guide = { open: openGuide, close: closeGuide, takeTour, orbFx, cursorFx, pointAtEl, avatarAnchor, dormantAnchor, windowPin, repinOrb, driveTo, iconEl, cardEl, nextArrowEl, runStep, TOUR_STEPS, cursorPointAt, resolvePointTarget, clientTools };
+  }
+</script>
+
+<style>
+  /* ---- overlay canvas the orb is painted on (full viewport, never blocks input) ---- */
+  .guide-orb-stage {
+    position: fixed; inset: 0;
+    z-index: 320;            /* above the open panel (300) so the orb can fly over everything */
+    pointer-events: none;
+  }
+  /* the tour's halftone pointer sits just above the orb */
+  .guide-cursor-stage {
+    position: fixed; inset: 0;
+    z-index: 321;
+    pointer-events: none;
+  }
+  @media (max-width: 720px) { .guide-orb-stage, .guide-cursor-stage { display: none; } }
+
+  /* ---- dormant orb hit target (the orb itself is drawn on the canvas above) ---- */
+  .guide-orb {
+    position: fixed;
+    top: 64px;
+    right: 26px;
+    z-index: 250;            /* above dock (80) / windows (200), below the open panel */
+    width: 34px; height: 34px;
+    padding: 0; border: 0; background: none; cursor: pointer;
+  }
+  .guide-orb[hidden] { display: none; }
+  /* The orb is now rendered as halftone particles on the canvas; these boxes stay as
+     invisible layout anchors the canvas orb reads its position + size from. */
+  .guide-orb__core, .guide-avatar__core {
+    display: block; width: 100%; height: 100%; border-radius: 50%;
+  }
+  .guide-orb:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 50%; }
+
+  /* ---- expanded panel ---- */
+  .guide-panel {
+    position: fixed;
+    left: 50%; bottom: 28px;
+    transform: translateX(-50%);
+    z-index: 300;
+    width: min(94vw, 460px);
+    display: flex; flex-direction: column; gap: var(--s-3);
+    padding: var(--s-4) var(--s-4) var(--s-3);
+    background: rgba(255, 255, 255, 0.68);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 18px;
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    backdrop-filter: blur(22px) saturate(180%);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.6) inset,
+      0 16px 50px -12px rgba(22, 21, 19, 0.26),
+      0 2px 6px -2px rgba(22, 21, 19, 0.08);
+    animation: guide-rise 320ms cubic-bezier(0.22, 1.2, 0.4, 1) both;
+    transition: width 300ms ease, padding 300ms ease, border-radius 300ms ease, bottom 300ms ease;
+  }
+  .guide-panel[hidden] { display: none; }
+  @keyframes guide-rise { from { opacity: 0; transform: translate(-50%, 22px) scale(0.96); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+
+  /* Intro (open, not touring): the panel takes the hero sign's place — it centres over
+     the sign region (~63vh; both viewport-relative so they track across sizes) and the
+     sign's own name + tagline fade out (see the global block). Starting the tour adds
+     .tour-mode, which drops this and collapses the panel to the slim caption bar. */
+  body.tour-active:not(.tour-mode) .guide-panel {
+    top: 62%; bottom: auto;
+    transform: translate(-50%, -50%);
+    animation: guide-rise-sign 340ms cubic-bezier(0.22, 1.2, 0.4, 1) both;
+  }
+  @keyframes guide-rise-sign {
+    from { opacity: 0; transform: translate(-50%, calc(-50% + 16px)) scale(0.96); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
+
+  .guide-panel__head { display: flex; align-items: center; gap: var(--s-3); }
+  .guide-avatar { width: 40px; height: 40px; flex-shrink: 0; display: block; }
+  .guide-panel__titles { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+  .guide-panel__title { font-family: var(--font-serif); font-size: 18px; color: var(--ink); line-height: 1.1; }
+  .guide-panel__state { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); min-height: 12px; }
+  .guide-panel__state.is-listening { color: #3fae5a; }
+  .guide-panel__state.is-speaking, .guide-panel__state.is-thinking { color: var(--accent); }
+  .guide-panel__state.is-novoice { color: var(--accent); }
+  .guide-panel__state.is-offline { color: var(--muted); }
+  .guide-panel__state.is-paused { color: var(--muted); }
+  .guide-panel__close {
+    width: 24px; height: 24px; flex-shrink: 0; padding: 0; border: 0; background: none;
+    color: var(--muted); cursor: pointer; transition: color 160ms ease;
+  }
+  .guide-panel__close:hover, .guide-panel__close:focus-visible { outline: none; color: var(--accent); }
+  .guide-panel__sound {
+    width: 26px; height: 26px; flex-shrink: 0; padding: 0; border: 0; background: none;
+    color: var(--ink-2); cursor: pointer; transition: color 160ms ease;
+  }
+  .guide-panel__sound:hover, .guide-panel__sound:focus-visible { outline: none; color: var(--accent); }
+  .guide-panel__sound .guide-sound-slash { display: none; }
+  .guide-panel__sound.is-off { color: var(--muted); }
+  .guide-panel__sound.is-off .guide-sound-wave { display: none; }
+  .guide-panel__sound.is-off .guide-sound-slash { display: block; }
+
+  .guide-panel__body { display: flex; flex-direction: column; gap: var(--s-3); }
+  .guide-msg { margin: 0; font-family: var(--font-sans); font-size: 15px; line-height: 1.5; color: var(--ink); min-height: 3em; text-wrap: pretty; }
+  /* NOTE: .guide-cap* live in the <style is:global> block below — they're applied to
+     nodes buildCaption() creates at runtime via innerHTML, which never carry Astro's
+     component-scope attribute, so scoped rules would silently miss them. */
+
+  .guide-choices { display: flex; gap: var(--s-2); }
+  .guide-choices[hidden] { display: none; }
+  .guide-btn {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.03em;
+    padding: 8px 16px; border: 1px solid var(--rule); border-radius: var(--radius-pill);
+    background: transparent; color: var(--ink-2); cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+  }
+  .guide-btn--sm { padding: 6px 13px; }
+  .guide-btn:hover, .guide-btn:focus-visible { outline: none; color: var(--accent); border-color: var(--accent); }
+  .guide-btn--primary { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+  .guide-btn--primary:hover, .guide-btn--primary:focus-visible { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .guide-ask { display: flex; align-items: center; gap: var(--s-2); border-top: 1px solid var(--rule); padding-top: var(--s-3); }
+  .guide-ask__mic {
+    width: 34px; height: 34px; flex-shrink: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--rule); border-radius: 50%; background: transparent; color: var(--ink-2); cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+  }
+  .guide-ask__mic:hover, .guide-ask__mic:focus-visible { outline: none; color: var(--accent); border-color: var(--accent); }
+  .guide-ask__mic.is-muted { color: var(--muted); border-color: var(--rule); background: var(--bg); opacity: 0.65; }
+  .guide-ask__field { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; }
+  .guide-ask__input {
+    flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--radius-pill);
+    font-family: var(--font-sans); font-size: 14px; background: var(--bg); color: var(--ink);
+  }
+  .guide-ask__input:focus { outline: none; border-color: var(--ink); }
+  .guide-ask__send {
+    width: 34px; height: 34px; flex-shrink: 0; padding: 0; border: 1px solid var(--ink); border-radius: 50%;
+    background: var(--ink); color: var(--bg); font-size: 15px; cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease;
+  }
+  .guide-ask__send:hover, .guide-ask__send:focus-visible { outline: none; background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* ---- tour mode: the panel collapses to a slim caption bar; the orb floats free ---- */
+  body.tour-mode .guide-panel {
+    width: min(94vw, 720px);
+    bottom: 18px;
+    padding: 6px 12px 8px;
+    gap: 4px;
+    border-radius: var(--radius-pill);
+  }
+  body.tour-mode .guide-panel__body { display: none; }
+  body.tour-mode .guide-avatar,
+  body.tour-mode .guide-panel__titles,
+  body.tour-mode .guide-panel__sound { display: none; }
+  body.tour-mode .guide-panel__head { min-height: 0; justify-content: flex-end; gap: 0; }
+  body.tour-mode .guide-panel__close { width: 16px; height: 16px; }
+  body.tour-mode .guide-ask { border-top: none; padding-top: 0; }
+
+  /* the caption, moved over the input, rolls as one thin line */
+  .guide-msg--inline {
+    position: absolute; inset: 0; margin: 0; min-height: 0;
+    display: flex; align-items: center;
+    pointer-events: none; font-size: 14px;
+  }
+  .guide-ask__field.is-typing .guide-msg--inline { opacity: 0; }       /* clear the line while typing */
+  .guide-ask__field.has-caption .guide-ask__input::placeholder { color: transparent; }
+  .guide-msg.is-echo { color: var(--muted); font-style: italic; }      /* a transient typed-message echo */
+
+  @media (prefers-reduced-motion: reduce) {
+    .guide-orb, .guide-panel { animation: none; }
+  }
+  @media (max-width: 720px) { .guide-orb { display: none; } }
+</style>
+
+<style is:global>
+  /* Tuck the dock away while the guide panel is open. */
+  body.tour-active .dock { opacity: 0; pointer-events: none; transition: opacity 240ms ease; }
+  /* The open intro panel takes the hero sign's place, so fade the sign's own name +
+     tagline out while the guide is up (restored on close, or when the tour starts). */
+  body.tour-active:not(.tour-mode) .hero-figure__name,
+  body.tour-active:not(.tour-mode) .hero-figure__tagline { opacity: 0; transition: opacity 220ms ease; }
+
+  /* Caption teleprompter — GLOBAL because buildCaption() builds these nodes at runtime
+     (no Astro scope attr). One clipped, edge-faded row that scrolls so the spoken word
+     stays centred; JS sets the row transform + per-word opacity each frame. */
+  .guide-cap {
+    display: block; width: 100%; max-width: 100%; overflow: hidden; height: 1.5em; position: relative;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 12%, #000 88%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 12%, #000 88%, transparent 100%);
+  }
+  .guide-cap__track { position: relative; display: inline-block; white-space: nowrap; will-change: transform; }
+  .guide-cap__track > span { color: var(--ink); font-weight: 500; font-size: 15px; }
+  /* The agent's highlightProject tool pulses a project card (injected into the modal). */
+  .tour-highlight { animation: tour-highlight 2.4s ease; border-radius: var(--radius-card); }
+  @keyframes tour-highlight {
+    0% { box-shadow: 0 0 0 0 var(--accent-soft); }
+    25% { box-shadow: 0 0 0 3px var(--accent); }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) { .tour-highlight { animation: none; outline: 2px solid var(--accent); } }
+</style>

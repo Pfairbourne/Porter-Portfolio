@@ -124,11 +124,21 @@ function buildBrandField(spec: import('./brand-glyphs').BrandSpec, blurPx: numbe
   };
 }
 
-function inkColor(): string {
+function cssVar(name: string, fallback: string): string {
   return (
-    getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() ||
-    '#161513'
+    getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
   );
+}
+
+/** Dot color for file halftones: the global near-black ink. */
+function inkColor(): string {
+  return cssVar('--ink', '#161513');
+}
+
+/** Dot color for folder halftones: a dark blue that reads as ink on the
+ *  light-blue folder body instead of plain black. */
+function folderInkColor(): string {
+  return cssVar('--icon-folder-ink', '#123f5e');
 }
 
 // Cache keyed by variant+brand — the file gradient and each folder brand are
@@ -147,7 +157,7 @@ export function rasterizeFolder(brand?: string): string {
   canvas.height = H * SCALE;
   const ctx = canvas.getContext('2d')!;
   ctx.scale(SCALE, SCALE);
-  ctx.fillStyle = inkColor();
+  ctx.fillStyle = folderInkColor();
 
   const spec = brand && (brand as BrandName) in BRAND_GLYPHS ? BRAND_GLYPHS[brand as BrandName] : undefined;
   const sampleBrand = spec ? buildBrandField(spec, blur) : null;

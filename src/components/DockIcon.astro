@@ -3,10 +3,18 @@ interface Props {
   id: string;
   href: string;
   label: string;
+  external?: boolean;
 }
-const { id, href, label } = Astro.props;
+const { id, href, label, external = false } = Astro.props;
 ---
-<a class="dock__icon" href={href} aria-label={label} data-dock-icon-id={id} draggable="false">
+<a
+  class="dock__icon"
+  href={href}
+  aria-label={label}
+  data-dock-icon-id={id}
+  draggable="false"
+  {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+>
   <span class="dock__tile">
     <slot />
   </span>

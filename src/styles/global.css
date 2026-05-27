@@ -12,6 +12,8 @@
   --accent:    #b45309;
   --accent-soft: #fef3c7;
   --icon-blue: #6db3e8;
+  --icon-paper: #f5f1e8;
+  --icon-folder-ink: #123f5e;
 
   /* type */
   --font-serif: 'Instrument Serif', Georgia, serif;
@@ -842,10 +844,10 @@ pre code {
   align-items: center;
   gap: var(--s-5);
   padding: 10px var(--s-5);
-  background: rgba(255, 255, 255, 0.78);
-  -webkit-backdrop-filter: saturate(140%) blur(10px);
-  backdrop-filter: saturate(140%) blur(10px);
-  border-bottom: 1px solid var(--rule);
+  background: rgba(30, 27, 23, 0.86);
+  -webkit-backdrop-filter: saturate(130%) blur(12px);
+  backdrop-filter: saturate(130%) blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
   font-family: var(--font-mono);
   font-size: 11.5px;
   letter-spacing: 0.02em;
@@ -863,7 +865,7 @@ pre code {
   font-size: 12px;
   line-height: 1;
   letter-spacing: 0.02em;
-  color: var(--ink);
+  color: #e7e2da;
   background: transparent;
   border: 0;
   padding: 6px 9px;
@@ -873,8 +875,8 @@ pre code {
   transition: background 120ms ease, color 120ms ease;
 }
 .menu__button--brand { font-weight: 700; }
-.menu__button:hover { background: rgba(22, 21, 19, 0.06); }
-.menu.is-open .menu__button { background: var(--ink); color: var(--bg); }
+.menu__button:hover { background: rgba(255, 255, 255, 0.1); }
+.menu.is-open .menu__button { background: var(--accent); color: #fff; }
 .menu__dropdown {
   position: absolute;
   top: calc(100% + 5px);
@@ -1022,30 +1024,10 @@ body.dock-hidden .dock { display: none; }
   letter-spacing: 0.02em;
 }
 .menubar__group--end { gap: var(--s-4); }
-.menubar__plain { color: var(--ink-2); }
+.menubar__plain { color: rgba(231, 226, 218, 0.58); }
 .menubar__sep {
   color: var(--rule);
   user-select: none;
-}
-.menubar__cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--ink);
-  border-radius: var(--radius-pill);
-  background: var(--ink);
-  color: var(--bg);
-  text-decoration: none;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
-}
-.menubar__cta:hover {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
 }
 .menubar__action {
   display: inline-flex;
@@ -1063,7 +1045,6 @@ body.dock-hidden .dock { display: none; }
   cursor: pointer;
   transition: color 160ms ease, border-color 160ms ease;
 }
-.menubar__cta { line-height: 1; }
 .menubar__action:hover {
   color: var(--accent);
   border-color: var(--accent);
@@ -1072,21 +1053,21 @@ body.dock-hidden .dock { display: none; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--ink-2);
+  color: rgba(231, 226, 218, 0.82);
 }
 .menubar__pulse {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--muted);
-  box-shadow: 0 0 0 0 rgba(138, 132, 125, 0.45);
+  background: #f7a23a;
+  box-shadow: 0 0 0 0 rgba(247, 162, 58, 0.5);
   animation: menubar-pulse 2.2s ease-out infinite;
   flex-shrink: 0;
 }
 @keyframes menubar-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(138, 132, 125, 0.45); }
-  70%  { box-shadow: 0 0 0 10px rgba(138, 132, 125, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(138, 132, 125, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(247, 162, 58, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(247, 162, 58, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(247, 162, 58, 0); }
 }
 
 /* — Desktop surface — */
@@ -1261,7 +1242,8 @@ body.dock-hidden .dock { display: none; }
 /* SVG halftone icon internals — see src/components/FileGlyph.astro and FolderGlyph.astro */
 .halftone-icon { width: 100%; height: 100%; display: block; }
 .icon-paper { fill: var(--bg-elev); }
-/* Desktop folder bodies shaded blue; files stay white (--bg-elev). */
+/* Desktop file (document) bodies use a warm off-white paper tone; folders shaded blue. */
+.icon--file .icon-paper { fill: var(--icon-paper); }
 .icon--folder .icon-paper { fill: var(--icon-blue); }
 .icon-dots circle {
   fill: var(--ink);
@@ -1293,15 +1275,18 @@ body.dock-hidden .dock { display: none; }
   stroke-width: 1.2;
   transition: stroke 160ms ease, stroke-opacity 160ms ease;
 }
-/* Files turn ember on hover; folders keep ink, just bump opacity. */
+/* Files turn ember on hover; folders keep their dark-blue ink, just bump opacity. */
 .icon--file:hover .icon-outline { stroke: var(--accent); stroke-opacity: 1; }
-.icon--folder:hover .icon-outline { stroke: var(--ink); stroke-opacity: 0.85; }
+.icon--folder:hover .icon-outline { stroke: var(--icon-folder-ink); stroke-opacity: 0.85; }
 .icon-seam {
   fill: none;
   stroke: var(--ink);
   stroke-opacity: 0.5;
   stroke-width: 0.75;
 }
+/* Folder edges + seam use the same dark blue as their dot art (not black). */
+.icon--folder .icon-outline { stroke: var(--icon-folder-ink); }
+.icon--folder .icon-seam { stroke: var(--icon-folder-ink); }
 
 /* Desktop icon halftone — unified lattice classes shared by FileGlyph
    and FolderGlyph. Replaces the older "icon-dots" approach for desktop
@@ -1438,7 +1423,7 @@ body.dock-hidden .dock { display: none; }
 .hero-figure__stack {
   position: absolute;
   left: 50%;
-  top: -1.8vh; /* nudged up 1vh from -0.8vh */
+  top: -5.3vh; /* raised ~3.5vh; bottom still overflows ~0.5vh so it never gaps */
   transform: translateX(-50%);
   height: 105.8vh; /* 15% larger than the original 92vh */
   /* width auto via the natural image aspect ratio */
@@ -1977,6 +1962,9 @@ body.has-modal { overflow: hidden; overscroll-behavior: none; }
 }
 .dock__icon[data-dock-icon-id="mail"] .dock__tile {
   background: linear-gradient(165deg, #4aa3ff 0%, #1f6ff0 100%);
+}
+.dock__icon[data-dock-icon-id="linkedin"] .dock__tile {
+  background: linear-gradient(165deg, #2f8fde 0%, #0a66c2 100%);
 }
 .dock__icon[data-dock-icon-id="settings"] .dock__tile {
   background: linear-gradient(165deg, #9aa3b2 0%, #5d6675 100%);

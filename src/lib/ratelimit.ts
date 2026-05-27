@@ -97,3 +97,29 @@ export async function checkChatRateLimit(request: Request): Promise<{
   const { success, remaining } = await limiter.limit(ip);
   return { success, remaining };
 }
+
+// Voice tour: minting an agent signed URL starts a billable ElevenLabs
+// conversation session, so gate it per IP.
+let tourSessionLimiter: Ratelimit | null = null;
+function getTourSessionLimiter(): Ratelimit | null {
+  if (tourSessionLimiter) return tourSessionLimiter;
+  const r = getRedis();
+  if (!r) return null;
+  tourSessionLimiter = new Ratelimit({
+    redis: r,
+    limiter: Ratelimit.slidingWindow(20, '1 h'),
+    analytics: false,
+    prefix: 'porter:rl:tour',
+  });
+  return tourSessionLimiter;
+}
+
+export async function checkTourSessionRateLimit(request: Request): Promise<{
+  success: boolean;
+  remaining: number;
+}> {
+  const limiter = getTourSessionLimiter();
+  if (!limiter) return { success: true, remaining: 999 };
+  const { success, remaining } = await limiter.limit(clientIp(request));
+  return { success, remaining };
+}

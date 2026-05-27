@@ -4,6 +4,7 @@ import MenuBar from '../components/MenuBar.astro';
 import DesktopIcon from '../components/DesktopIcon.astro';
 import Dock from '../components/Dock.astro';
 import FavoriteQuote from '../components/FavoriteQuote.astro';
+import Tour from '../components/Tour.astro';
 import { getCollection } from 'astro:content';
 import { getVisibility, getMenubarStatus, getIconLabels } from '../lib/kv';
 import type { BrandName } from '../lib/brand-glyphs';
@@ -194,6 +195,7 @@ const visibleMore = moreLinks.filter((l) => dockVisibility[l.id] !== false);
 
   <!-- Paper-airplane "Favorite quote" feature — launched by the dock's quote icon -->
   <FavoriteQuote />
+  <Tour />
 
   <!-- Floating window — opens when a file/folder is clicked -->
   <div class="desktop-window" id="desktop-window" role="dialog" aria-modal="true" aria-labelledby="desktop-window-title" hidden>
@@ -407,6 +409,13 @@ const visibleMore = moreLinks.filter((l) => dockVisibility[l.id] !== false);
           openWindowAt(path, false, null);
         }
       });
+
+      // Expose a tiny API so the guided tour can drive the desktop windows
+      // (open a section, or close back to the desktop) without faking clicks.
+      window.desktopOS = {
+        open: function (path) { openWindowAt(path, false, null); },
+        close: function () { closeWindow(false); },
+      };
     })();
   </script>
 
@@ -653,6 +662,7 @@ const visibleMore = moreLinks.filter((l) => dockVisibility[l.id] !== false);
 
       var currentId = null;
       var beaconEl = null;
+      var suppressed = true;    // start hidden; the orange beacon only appears after the guide is dismissed
 
       function showBeacon(id) {
         var icon = iconById(id);
@@ -700,22 +710,24 @@ const visibleMore = moreLinks.filter((l) => dockVisibility[l.id] !== false);
       }
 
       function render() {
+        if (suppressed) { clearBeacon(false); return; }
         var next = nextTarget();
         if (next === currentId) return;       // already correct (incl. both null)
         clearBeacon(false, function () { if (next) showBeacon(next); });
       }
 
       function markOpened(id) {
-        if (opened[id]) return;
-        opened[id] = true;
-        persist();
-        if (id === currentId) {
-          clearBeacon(true, function () {     // pop the dot out, then advance
+        var wasCurrent = (id === currentId);
+        var wasOpen = !!opened[id];
+        if (!wasOpen) { opened[id] = true; persist(); }
+        if (wasCurrent) {
+          clearBeacon(true, function () {     // pop the lit dot out, then advance to the next unopened (if any)
+            if (suppressed) return;
             var next = nextTarget();
             if (next) showBeacon(next);
           });
-        } else {
-          render();                           // opened out of order; keep dot on first-unopened
+        } else if (!wasOpen) {
+          render();                           // opened a different folder → re-evaluate first-unopened
         }
       }
 
@@ -742,6 +754,24 @@ const visibleMore = moreLinks.filter((l) => dockVisibility[l.id] !== false);
         if (ORDER.indexOf(id) === -1) return;
         markOpened(id);
       });
+
+      function firstWithIcon() {
+        for (var i = 0; i < ORDER.length; i++) { if (iconById(ORDER[i])) return ORDER[i]; }
+        return null;
+      }
+      // The voice guide drives this: hide the beacon while its panel is up, and on dismiss
+      // light it again — preferring the first UNOPENED folder, but falling back to the very
+      // first folder for a returning visitor (who has opened everything) so the "explore"
+      // nudge always appears when they wave the guide away.
+      window.__osBeacon = {
+        hide: function () { suppressed = true; clearBeacon(true); },
+        show: function () {
+          suppressed = false;
+          var id = nextTarget() || firstWithIcon();
+          if (!id || id === currentId) return;
+          clearBeacon(false, function () { showBeacon(id); });
+        },
+      };
 
       function init() { render(); }
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
