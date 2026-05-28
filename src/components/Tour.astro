@@ -472,6 +472,8 @@
     let capStart = 0;
     let capEstimateMs = 3000;
     let capActive = false;
+    let pendingCapStart = false;       // buildCaption ran; waiting for first audio chunk to re-anchor the clock
+    let lastWps = 3.4;                 // EMA of actual TTS words/sec — updated from each completed utterance
     const escHtml = (s: string) => s.replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
     function buildCaption(text: string) {
       // an agent caption supersedes any transient typed-message echo
@@ -481,8 +483,9 @@
       if (document.body.classList.contains('tour-mode')) fieldEl.classList.add('has-caption');
       if (reduceMotion) { setMsg(text); return; }   // no scrolling under reduced-motion: show the line
       capWords = text.split(/\s+/).filter(Boolean);
-      capStart = performance.now();
-      capEstimateMs = Math.max(2000, (capWords.length / 3.4) * 1000);   // ~3.4 words/sec — tuned to ElevenLabs TTS pace so the caption doesn't trail the audio
+      capStart = performance.now();           // fallback start; onAudio will re-anchor when the first chunk lands
+      pendingCapStart = true;                 // re-anchor capStart on the next onAudio
+      capEstimateMs = Math.max(2000, (capWords.length / lastWps) * 1000);   // EMA-learned TTS pace, self-tunes per utterance
       capActive = capWords.length > 0;
       if (!capActive) { capTrack = null; capSpans = []; msgEl.textContent = ''; return; }
       msgEl.innerHTML = '<span class="guide-cap"><span class="guide-cap__track">'
@@ -685,6 +688,19 @@
     // sure/please/cool/sounds good). Anchored to ^ so a question that mentions "continue"
     // mid-sentence doesn't falsely resume.
     const RESUME_RE = /^(?:(?:yes|yeah|yep|sure|ok|okay|alright|all\s*right|sounds\s*good|please|cool)[\s,.!]+)?(continue|keep going|go on|next|resume|carry on|let'?s continue|you can continue|continue the tour|let'?s go)\b/i;
+    // After the agent's "tour or question?" greeting, accept tour cues the agent might
+    // have failed to act on (e.g. it forgot to call startTour). Filters out questions
+    // so "what's the tour about?" doesn't false-trigger.
+    function looksLikeTourYes(text: string): boolean {
+      const t = (text || '').trim().toLowerCase().replace(/[.!]+$/, '');
+      if (!t) return false;
+      if (/[?]$/.test(t)) return false;
+      if (/^(what|who|why|when|where|how|can you|could you|would you|will you|do you|is there|tell me|describe)/i.test(t)) return false;
+      if (/\b(tour|walkthrough|walk\s*through|show\s*me\s*around|guided)\b/i.test(t)) return true;
+      // Bare affirmative answer to the tour-or-question prompt.
+      if (/^(yes|yeah|yep|sure|ok|okay|alright|all\s*right|sounds\s*good|cool|absolutely|definitely|please|do it|let'?s do it|go ahead|let'?s go)\s*$/i.test(t)) return true;
+      return false;
+    }
     function enterQa() {
       if (!touring || qaActive) return;
       qaActive = true;
@@ -806,7 +822,7 @@
             } else if (exploring && !exploringGreeted) {
               // First connect of an exploring session: agent greets and offers the tour vocally.
               exploringGreeted = true;
-              const opener = `Greet the visitor in one short sentence and ask whether they would like a quick guided tour of Porter's work, or if they have a specific question. Wait for their answer. If they accept the tour (yes, please, sure, take me through it, etc.), call the startTour tool. If they ask a question, answer it directly using your tools. Do not narrate a tour unless they accept.`;
+              const opener = `Say ONE short greeting sentence and ask whether they would like a quick guided tour of Porter's work, or if they have a specific question. Then STOP and wait for their answer. Do NOT navigate anywhere. Do NOT call any tool yet. Do NOT start describing Porter or any page. Just greet and ask the choice. If they later accept the tour (yes, sure, please, take me through it, etc.), call the startTour tool. If they ask a question, answer it directly using your tools.`;
               lastDirective = opener; lastDirectiveAt = Date.now();
               try { conversation && conversation.sendUserMessage(opener); } catch (_) {}
             }
@@ -829,7 +845,18 @@
               if (voiceWatchdog !== null) clearTimeout(voiceWatchdog);
               if (!audioSeen) voiceWatchdog = window.setTimeout(() => { if (!audioSeen) flagNoVoice(); }, 3000);
             } else {
-              agentSpeaking = false; releaseAfterAgent(); capFinish();   // snap the caption to the end when speech stops
+              agentSpeaking = false; releaseAfterAgent();
+              // Backsolve actual TTS pace from the just-finished utterance and roll it into
+              // the lastWps EMA, so future captions get a better estimate. Must run before
+              // capFinish, which snaps capStart way back to mark the line done.
+              if (capActive && capWords.length > 1 && capStart > 0 && !pendingCapStart) {
+                const actualDurMs = performance.now() - capStart;
+                if (actualDurMs > 800) {
+                  const measuredWps = capWords.length / (actualDurMs / 1000);
+                  if (measuredWps > 1.5 && measuredWps < 6.0) lastWps = lastWps * 0.55 + measuredWps * 0.45;
+                }
+              }
+              capFinish();   // snap the caption to the end when speech stops
               if (qaActive) showResume();                    // answered a question → wait, surface Resume, never auto-advance
               else if (expectTimer === null) scheduleAdvance();   // don't advance while waiting on a question
             }
@@ -843,6 +870,11 @@
               if (touring) {
                 if (qaActive && RESUME_RE.test(text)) { resumeTour(); return; }      // "continue" → pick the tour back up
                 enterQa();                                                           // a real question → hold the tour
+              } else if (exploring && !touring && looksLikeTourYes(text)) {
+                // The agent should have called startTour, but didn't (e.g. tool not in
+                // dashboard config, or it just decided to narrate instead). Take over.
+                takeTour();
+                return;
               }
               if (!micMuted) setState('thinking');
             } else if (role === 'agent' && message) { buildCaption(message); }
@@ -863,6 +895,9 @@
             armIdle();
             if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
             if (voiceWarned) { voiceWarned = false; setState(agentSpeaking ? 'speaking' : micMuted ? 'muted' : 'listening'); }   // slow first chunk: undo the false alarm
+            // Re-anchor the caption clock to the actual audio start (instead of the
+            // transcript-arrival moment), so the highlighted word tracks the spoken word.
+            if (pendingCapStart && capActive) { capStart = performance.now(); pendingCapStart = false; }
             if (import.meta.env.DEV) console.log('[guide] agent audio chunk received');
           },
           onError: (m) => { console.warn('[guide] agent error:', m); },
@@ -1050,6 +1085,10 @@
       inputEl.value = '';
       if (touring && qaActive && RESUME_RE.test(text)) { resumeTour(); return; }   // typed "continue" → resume, don't ask the agent
       if (!touring && !exploring) enterExploring();   // first free-form message → slim bar layout, orb floats free
+      if (exploring && !touring && looksLikeTourYes(text)) {   // typed acceptance of the tour offer → start the tour
+        takeTour();
+        return;
+      }
       setState('thinking');
       armIdle();
       if (touring) enterQa();   // a typed question mid-tour holds the walkthrough until resume
