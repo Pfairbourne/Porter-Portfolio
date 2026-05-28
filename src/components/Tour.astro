@@ -442,7 +442,7 @@
       if (reduceMotion) { setMsg(text); return; }   // no scrolling under reduced-motion: show the line
       capWords = text.split(/\s+/).filter(Boolean);
       capStart = performance.now();
-      capEstimateMs = Math.max(2400, (capWords.length / 2.7) * 1000);   // ~2.7 words/sec — closer to the agent's pace
+      capEstimateMs = Math.max(2000, (capWords.length / 3.4) * 1000);   // ~3.4 words/sec — tuned to ElevenLabs TTS pace so the caption doesn't trail the audio
       capActive = capWords.length > 0;
       if (!capActive) { capTrack = null; capSpans = []; msgEl.textContent = ''; return; }
       msgEl.innerHTML = '<span class="guide-cap"><span class="guide-cap__track">'
@@ -466,9 +466,9 @@
       const i0 = Math.floor(fpos), i1 = Math.min(capWords.length - 1, i0 + 1), frac = fpos - i0;
       const focusX = capCenters[i0] + (capCenters[i1] - capCenters[i0]) * frac;
       capTrack.style.transform = `translate3d(${(capViewW / 2 - focusX).toFixed(1)}px,0,0)`;
-      for (let k = 0; k < capSpans.length; k++) {  // current word stays full-dark; neighbours fall off fast so it pops
+      for (let k = 0; k < capSpans.length; k++) {  // current word pops, neighbours stay legible enough to read ahead
         const dist = Math.abs(k - fpos);
-        capSpans[k].style.opacity = (dist < 0.5 ? 1 : Math.max(0.2, 0.62 - (dist - 0.5) * 0.22)).toFixed(2);
+        capSpans[k].style.opacity = (dist < 0.5 ? 1 : Math.max(0.55, 0.92 - (dist - 0.5) * 0.16)).toFixed(2);
       }
     }
 
@@ -1312,12 +1312,12 @@
      (no Astro scope attr). One clipped, edge-faded row that scrolls so the spoken word
      stays centred; JS sets the row transform + per-word opacity each frame. */
   .guide-cap {
-    display: block; width: 100%; max-width: 100%; overflow: hidden; height: 1.5em; position: relative;
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 12%, #000 88%, transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0, #000 12%, #000 88%, transparent 100%);
+    display: block; width: 100%; max-width: 100%; overflow: hidden; height: 1.6em; position: relative;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%);
   }
   .guide-cap__track { position: relative; display: inline-block; white-space: nowrap; will-change: transform; }
-  .guide-cap__track > span { color: var(--ink); font-weight: 500; font-size: 15px; }
+  .guide-cap__track > span { color: var(--ink); font-weight: 600; font-size: 16px; }
   /* The agent's highlightProject tool pulses a project card (injected into the modal). */
   .tour-highlight { animation: tour-highlight 2.4s ease; border-radius: var(--radius-card); }
   @keyframes tour-highlight {
