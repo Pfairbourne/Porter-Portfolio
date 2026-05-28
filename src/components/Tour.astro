@@ -104,6 +104,7 @@
     let resumeTimer: number | null = null;
     let advanceTimer: number | null = null;   // advance to the next tour step after a silence
     let expectTimer: number | null = null;     // grace window while the visitor might be asking
+    let exploring = false;                      // free-form Q&A mode: slim bar layout, no tour script, agent answers freely
     let qaActive = false;                       // a real question is being handled mid-tour → hold until explicit resume
     let lastDirective = '';                     // last system-injected directive, so its echo isn't read as a question
     let lastDirectiveAt = 0;                    // when we sent it (ms) — used to tell a scripted reply from a Q&A reply
@@ -250,7 +251,7 @@
     }
     if (stage) {
       orbFx = new GuideOrb(stage);
-      orbFx.setTracker(() => (!panelOpen ? dormantAnchor() : touring ? windowPin() : avatarAnchor()));
+      orbFx.setTracker(() => (!panelOpen ? dormantAnchor() : (touring || exploring) ? windowPin() : avatarAnchor()));
       orbFx.start();
     }
     const cursorStage = document.getElementById('guide-cursor-stage') as HTMLCanvasElement | null;
@@ -846,8 +847,8 @@
     // the collapsed tour bar with an idle cursor — revert to the full panel (the offline
     // state is already shown) so they can retry, explore, or type. No-op outside a tour.
     function bailTourOffline() {
-      if (!touring) return;
-      touring = false; tourMode = false; navigating = false; qaActive = false;
+      if (!touring && !exploring) return;
+      touring = false; tourMode = false; navigating = false; qaActive = false; exploring = false;
       clearAdvance(); clearExpect(); clearCursorTimers();
       hideResume();
       setTourLayout(false);
@@ -914,7 +915,7 @@
     }
     function closeGuide() {
       if (!panelOpen) return;
-      panelOpen = false; touring = false; agentSpeaking = false; userPaused = false; tourMode = false; navigating = false; qaActive = false;
+      panelOpen = false; touring = false; agentSpeaking = false; userPaused = false; tourMode = false; navigating = false; qaActive = false; exploring = false;
       hideResume();
       setTourLayout(false);
       cursorFx?.hide();
@@ -934,9 +935,21 @@
       orbFx?.swooshTo(dormantAnchor());
       desktop()?.close();
     }
+    // Free-form Q&A: same slim-bar layout as the tour (orb floats free, caption rolls over
+    // the input), but no scripted walkthrough. Entered the first time the visitor types
+    // a message or clicks the mic before clicking Take the tour.
+    function enterExploring() {
+      if (touring || exploring) return;
+      exploring = true;
+      choicesEl.hidden = true;
+      setTourLayout(true);            // collapse panel to the slim caption bar
+      orbFx?.release();
+      orbFx?.swooshTo(windowPin());   // orb floats free to its bar-side spot
+    }
     function takeTour() {
       userPaused = false;
       qaActive = false;
+      exploring = false;        // transitioning out of free-form into the scripted tour
       hideResume();
       tourMode = true;          // agent leads the walkthrough as soon as it connects
       touring = true;
@@ -957,6 +970,7 @@
       if (!text) return;
       inputEl.value = '';
       if (touring && qaActive && RESUME_RE.test(text)) { resumeTour(); return; }   // typed "continue" → resume, don't ask the agent
+      if (!touring && !exploring) enterExploring();   // first free-form message → slim bar layout, orb floats free
       setState('thinking');
       armIdle();
       if (touring) enterQa();   // a typed question mid-tour holds the walkthrough until resume
@@ -968,8 +982,26 @@
     // can see what they type; blurring an empty field brings the caption back.
     inputEl.addEventListener('focus', () => { if (document.body.classList.contains('tour-mode')) fieldEl.classList.add('is-typing'); });
     inputEl.addEventListener('blur', () => { if (!inputEl.value) fieldEl.classList.remove('is-typing'); });
+    // While the visitor is typing or focused on the input, signal the agent that they are
+    // still here (resets its inactivity timer) so it doesn't prompt "are you still there?"
+    // mid-typed-question. Throttled to avoid spamming the socket.
+    let lastUserActivityAt = 0;
+    function pingUserActivity() {
+      armIdle();
+      if (!conversation || !voiceEnabled) return;
+      const now = Date.now();
+      if (now - lastUserActivityAt < 1000) return;
+      lastUserActivityAt = now;
+      try { conversation.sendUserActivity(); } catch (_) {}
+    }
+    inputEl.addEventListener('input', pingUserActivity);
+    inputEl.addEventListener('focus', pingUserActivity);
     micBtn.addEventListener('click', () => {
-      if (!conversation || !voiceEnabled) { connectGuide(); return; }   // click is a gesture → (re)connect
+      if (!conversation || !voiceEnabled) {
+        if (!touring && !exploring) enterExploring();   // first voice engagement → slim bar layout
+        connectGuide();
+        return;
+      }
       micMuted = !micMuted;
       try { conversation.setMicMuted(micMuted); } catch (_) {}
       setState(micMuted ? 'muted' : 'listening');
