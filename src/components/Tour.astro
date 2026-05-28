@@ -784,6 +784,15 @@
             if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
             if (panelOpen) {
               if (userPaused) setState('paused');                                    // we cut it on purpose (pause)
+              else if (d.reason === 'error' && allowOverrides && !overrideRetry) {
+                // The WS opened then closed with an error, so the throw-catch never ran.
+                // Most likely the prompt override was rejected (the dashboard's prompt
+                // override toggle is off). Retry once on the dashboard prompt so the
+                // visitor doesn't see "Guide offline."
+                overrideRetry = true; allowOverrides = false;
+                console.warn('[guide] disconnect during overrides; retrying once without them:', d.message);
+                connectGuide();
+              }
               else if (d.reason === 'error') flagOffline('Guide offline', d.message); // surface a dropped/failed socket
               else setState('off');
             }
