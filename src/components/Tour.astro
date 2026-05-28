@@ -514,6 +514,41 @@
     // the EMA wps estimate above.
     let capAlign: { starts: number[]; durs: number[]; wordIdx: number[] } | null = null;
     let capAlignReady = false;
+    // ---- Per-visitor daily character budget ----
+    // ElevenLabs charges per TTS character (agent voice output), and there's no login on
+    // the site, so cap each browser's daily agent-speech bytes via localStorage. Pre-flight
+    // refuses new sessions over budget; mid-session it ends gracefully after the current
+    // utterance. The check is per-browser per-day (resets at local midnight) — bypassable
+    // by clearing storage or going incognito, which is fine: the server-side rate limit at
+    // /api/tour/agent-url is the second line of defense for real abuse.
+    const CHAR_BUDGET = 20000;
+    const BUDGET_KEY = 'porter-voice-budget';
+    let budgetLimitReached = false;
+    function todayKey(): string {
+      const d = new Date();
+      return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+    }
+    function readBudget(): { date: string; chars: number } {
+      try {
+        const raw = localStorage.getItem(BUDGET_KEY);
+        if (raw) {
+          const v = JSON.parse(raw);
+          if (v && v.date === todayKey() && typeof v.chars === 'number') return v;
+        }
+      } catch (_) {}
+      return { date: todayKey(), chars: 0 };
+    }
+    function writeBudget(chars: number) {
+      try { localStorage.setItem(BUDGET_KEY, JSON.stringify({ date: todayKey(), chars })); } catch (_) {}
+    }
+    function chargeBudget(n: number): number {
+      const b = readBudget();
+      b.chars += Math.max(0, n | 0);
+      writeBudget(b.chars);
+      return b.chars;
+    }
+    function isOverBudget(): boolean { return readBudget().chars >= CHAR_BUDGET; }
+    const BUDGET_OVER_MSG = "That is the daily limit for the voice guide. Please come back tomorrow, or keep exploring the site on your own.";
     const escHtml = (s: string) => s.replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
     // Largest i where arr[i] <= target. Returns -1 if target is below arr[0].
     function upperBoundLE(arr: number[], target: number): number {
@@ -562,6 +597,12 @@
       msgEl.classList.remove('is-echo');
       if (document.body.classList.contains('tour-mode')) fieldEl.classList.add('has-caption');
       if (reduceMotion) { setMsg(text); return; }   // no scrolling under reduced-motion: show the line
+      // Charge this utterance against the day's budget. If it tips us over, flag a graceful
+      // shutdown to fire when the agent finishes speaking this message (in onModeChange).
+      if (text && text.length > 0) {
+        const total = chargeBudget(text.length);
+        if (total >= CHAR_BUDGET) budgetLimitReached = true;
+      }
       capWords = text.split(/\s+/).filter(Boolean);
       capStart = performance.now();           // fallback start; onAudio will re-anchor when the first chunk lands
       pendingCapStart = true;                 // re-anchor capStart on the next onAudio
@@ -933,6 +974,12 @@
     // ---- agent session ----
     async function connectGuide() {
       if (conversation || connecting || userPaused) return;   // never bring the agent up while paused
+      if (isOverBudget()) {
+        // Daily voice-guide budget exhausted for this browser; refuse to mint another
+        // metered ElevenLabs session. Leave the panel up so the visitor sees why.
+        if (panelOpen) { setState('off'); setMsg(BUDGET_OVER_MSG); }
+        return;
+      }
       connecting = true;
       audioSeen = false; voiceWarned = false;
       unlockAudio();   // resume audio within the gesture, before we await the signed URL
@@ -1010,6 +1057,16 @@
               }
               capFinish();   // snap the caption to the end when speech stops
               capAlign = null; capAlignReady = false;   // drop the stale timeline so the next utterance starts clean
+              if (budgetLimitReached) {
+                // Daily char budget hit during the utterance we just finished. End the
+                // metered session now, show the goodbye line, leave the panel up so the
+                // visitor can read it before closing.
+                budgetLimitReached = false;
+                if (touring) { touring = false; clearAdvance(); clearExpect(); hideResume(); }
+                endSession();
+                setMsg(BUDGET_OVER_MSG);
+                return;
+              }
               if (qaActive) showResume();                    // answered a question → wait, surface Resume, never auto-advance
               else if (expectTimer === null) scheduleAdvance();   // don't advance while waiting on a question
             }
