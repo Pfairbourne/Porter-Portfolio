@@ -633,7 +633,10 @@
     // ---- Q&A hold: a question during the tour pauses the walkthrough until the visitor
     // explicitly resumes (a "Resume tour" tap, or saying "continue"). The screen stays put
     // while the agent answers, so the caption never desyncs and the orb keeps listening. ----
-    const RESUME_RE = /^(continue|keep going|go on|next|resume|carry on|let'?s continue|you can continue|continue the tour)\b/i;
+    // Matches natural resume phrasings with optional filler at the start (yes/ok/alright/
+    // sure/please/cool/sounds good). Anchored to ^ so a question that mentions "continue"
+    // mid-sentence doesn't falsely resume.
+    const RESUME_RE = /^(?:(?:yes|yeah|yep|sure|ok|okay|alright|all\s*right|sounds\s*good|please|cool)[\s,.!]+)?(continue|keep going|go on|next|resume|carry on|let'?s continue|you can continue|continue the tour|let'?s go)\b/i;
     function enterQa() {
       if (!touring || qaActive) return;
       qaActive = true;
@@ -701,8 +704,11 @@
         return 'Could not find that on screen.';
       },
       resumeTour: () => {
-        if (touring && qaActive) { resumeTour(); return 'Resuming the tour.'; }
-        return 'The tour is not paused.';
+        // Resume is visitor-driven (their voice/text "continue" cue, or the Resume button).
+        // The agent should never call this; if a stale prompt does, no-op so the call can't
+        // cut its own answer off by navigating the page mid-utterance.
+        console.warn('[guide] agent called resumeTour; ignored (resume is visitor-driven)');
+        return 'I cannot resume the tour. The visitor will say continue or click the Resume button when they are ready.';
       },
     };
 
@@ -750,8 +756,12 @@
             if (mode === 'speaking') {
               // If the visitor spoke after our last scripted directive and the agent is now
               // replying, this is a Q&A turn — hold the tour even when no user transcript
-              // arrives via onMessage (some agent configs skip user-side transcripts).
-              if (touring && !qaActive && userSpokeAt > lastDirectiveAt && Date.now() - userSpokeAt < 8000) enterQa();
+              // arrives via onMessage (some agent configs skip user-side transcripts). Also
+              // treat as Q&A if the agent starts speaking long after our directive landed,
+              // since scripted speech normally starts within a few seconds of the directive.
+              const recentUserSpeech = userSpokeAt > lastDirectiveAt && Date.now() - userSpokeAt < 8000;
+              const lateAgentSpeech = lastDirectiveAt > 0 && Date.now() - lastDirectiveAt > 6000;
+              if (touring && !qaActive && (recentUserSpeech || lateAgentSpeech)) enterQa();
               clearAdvance(); clearExpect();   // agent talking → cancel pending advance + interruption grace
               holdForAgent(); agentSpeaking = true; startLoop(); if (!micMuted) setState('speaking');
               // Watchdog: if the agent "speaks" but no audio lands in 3s, it has no voice.
