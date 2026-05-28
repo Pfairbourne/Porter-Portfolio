@@ -253,7 +253,12 @@
     function windowPin() {
       if (orbSlot) {
         const r = orbSlot.getBoundingClientRect();
-        if (r.width > 4) return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: Math.min(r.width, r.height) / 2 - 2 };
+        if (r.width > 4) {
+          // The orb's talking spines extend to ~1.5× this.r, so size it as slot/3 to keep
+          // the corona inside the frosted slot rather than spilling into the mic icon.
+          const innerR = Math.min(r.width, r.height) / 3;
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: innerR };
+        }
       }
       // Fallback if the slot isn't laid out yet (panel just opening): bottom-left corner.
       const bar = panel!.getBoundingClientRect();
@@ -1411,7 +1416,7 @@
      The orb canvas (a fullscreen overlay) paints its halftone particles centred on this
      slot's centre, anchored via windowPin(). */
   .guide-ask__orb {
-    width: 56px; height: 56px; flex-shrink: 0;
+    width: 72px; height: 72px; flex-shrink: 0;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.55);
     border: 1px solid rgba(255, 255, 255, 0.7);
@@ -1461,19 +1466,19 @@
 
   /* ---- tour mode: the panel collapses to a slim caption bar; the orb floats free ---- */
   body.tour-mode .guide-panel {
-    width: min(94vw, 720px);
+    width: min(94vw, 860px);
     bottom: 18px;
-    padding: 6px 12px 8px;
+    padding: 8px 22px 10px;
     gap: 4px;
-    border-radius: var(--radius-pill);
+    border-radius: 44px;   /* matches the slot circles' silhouette without going fully pill */
   }
   body.tour-mode .guide-panel__body { display: none; }
   body.tour-mode .guide-avatar,
   body.tour-mode .guide-panel__titles,
   body.tour-mode .guide-panel__sound { display: none; }
-  body.tour-mode .guide-panel__head { min-height: 0; justify-content: flex-end; gap: 0; }
-  body.tour-mode .guide-panel__close { width: 16px; height: 16px; }
-  body.tour-mode .guide-ask { border-top: none; padding-top: 0; }
+  body.tour-mode .guide-panel__head { min-height: 0; justify-content: flex-end; gap: 0; padding-right: 4px; }
+  body.tour-mode .guide-panel__close { width: 20px; height: 20px; }
+  body.tour-mode .guide-ask { border-top: none; padding-top: 0; gap: 14px; }
 
   /* the caption, moved over the input, rolls as one thin line */
   .guide-msg--inline {
