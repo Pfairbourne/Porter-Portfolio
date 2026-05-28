@@ -507,7 +507,8 @@
     let capEstimateMs = 3000;
     let capActive = false;
     let pendingCapStart = false;       // buildCaption ran; waiting for first audio chunk to re-anchor the clock
-    let lastWps = 3.4;                 // EMA of actual TTS words/sec — used as the fallback when alignment isn't sent
+    let lastWps = 3.7;                 // EMA of actual TTS words/sec — used as the fallback when alignment isn't sent
+    let smoothFocusX = Number.NaN;     // visually-smoothed focusX so the rolling translate is always continuous
     // Character-level audio timeline from ElevenLabs's onAudioAlignment (per-utterance,
     // accumulated across audio chunks). When present, revealCaption uses this directly
     // and the highlighted word tracks the spoken word exactly; absent, we fall back to
@@ -607,6 +608,7 @@
       capStart = performance.now();           // fallback start; onAudio will re-anchor when the first chunk lands
       pendingCapStart = true;                 // re-anchor capStart on the next onAudio
       capAlign = null; capAlignReady = false;   // fresh utterance → fresh char timeline
+      smoothFocusX = Number.NaN;              // reset the visual smoothing so it doesn't lerp from the previous line
       capEstimateMs = Math.max(2000, (capWords.length / lastWps) * 1000);   // EMA-learned TTS pace, self-tunes per utterance
       capActive = capWords.length > 0;
       if (!capActive) { capTrack = null; capSpans = []; msgEl.textContent = ''; return; }
@@ -634,11 +636,15 @@
         const N = capAlign.starts.length;
         const lastEnd = capAlign.starts[N - 1] + capAlign.durs[N - 1];
         if (elapsed > lastEnd) {
-          // Alignment stopped arriving partway through the audio (some agent configs only
-          // send alignment for early chunks). Extrapolate the tail using the EMA wps so the
-          // caption keeps flowing instead of freezing on the last aligned word.
+          // Alignment stopped before the audio did (some agent configs only send alignment
+          // for early chunks). Extrapolate using THIS utterance's observed chars/sec — much
+          // closer to the actual TTS pace than the cross-message EMA wps would be.
           const wordsCovered = (capAlign.wordIdx[N - 1] || 0) + 1;
-          const tailWords = ((elapsed - lastEnd) / 1000) * Math.max(0.5, lastWps);
+          const alignSpanMs = lastEnd - capAlign.starts[0];
+          const observedCps = alignSpanMs > 200 ? (N / alignSpanMs) * 1000 : 16; // chars per second
+          const avgCharsPerWord = wordsCovered > 0 ? Math.max(3, N / wordsCovered) : 5;
+          const tailChars = ((elapsed - lastEnd) / 1000) * observedCps;
+          const tailWords = tailChars / avgCharsPerWord;
           fpos = Math.min(capWords.length - 1, wordsCovered - 1 + tailWords);
         } else {
           const i = upperBoundLE(capAlign.starts, elapsed);
@@ -665,8 +671,14 @@
         fpos = prog * (capWords.length - 1);
       }
       const i0 = Math.floor(fpos), i1 = Math.min(capWords.length - 1, i0 + 1), fracW = fpos - i0;
-      const focusX = capCenters[i0] + (capCenters[i1] - capCenters[i0]) * fracW;
-      capTrack.style.transform = `translate3d(${(capViewW / 2 - focusX).toFixed(1)}px,0,0)`;
+      const targetFocusX = capCenters[i0] + (capCenters[i1] - capCenters[i0]) * fracW;
+      // Visual smoothing: critically-damped follow of the target so the rolling translate
+      // is always continuous even when fpos rate varies between words (short words cover
+      // less distance per second than long ones). Tiny time constant (~50ms at 60fps)
+      // keeps perceived sync tight while killing the micro-jitter at word boundaries.
+      if (Number.isNaN(smoothFocusX)) smoothFocusX = targetFocusX;
+      else smoothFocusX += (targetFocusX - smoothFocusX) * 0.35;
+      capTrack.style.transform = `translate3d(${(capViewW / 2 - smoothFocusX).toFixed(1)}px,0,0)`;
       for (let k = 0; k < capSpans.length; k++) {  // current word pops, neighbours stay legible enough to read ahead
         const dist = Math.abs(k - fpos);
         capSpans[k].style.opacity = (dist < 0.5 ? 1 : Math.max(0.65, 0.95 - (dist - 0.5) * 0.15)).toFixed(2);
@@ -1062,7 +1074,9 @@
                 const actualDurMs = performance.now() - capStart;
                 if (actualDurMs > 800) {
                   const measuredWps = capWords.length / (actualDurMs / 1000);
-                  if (measuredWps > 1.5 && measuredWps < 6.0) lastWps = lastWps * 0.55 + measuredWps * 0.45;
+                  // Faster convergence than before — the wall-clock fallback path needs to
+                  // catch the real TTS rate within an utterance or two.
+                  if (measuredWps > 1.5 && measuredWps < 6.0) lastWps = lastWps * 0.35 + measuredWps * 0.65;
                 }
               }
               capFinish();   // snap the caption to the end when speech stops
