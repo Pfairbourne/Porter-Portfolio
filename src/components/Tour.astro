@@ -108,6 +108,13 @@
     let exploringGreeted = false;               // sent the opening "tour or question?" directive once this panel-open
     let tourFromExploring = false;              // takeTour was called while already connected → skip the cold-start greeting
     let qaActive = false;                       // a real question is being handled mid-tour → hold until explicit resume
+    // Push-to-talk: mic is muted by default; visitor taps the mic to speak, mic auto-mutes
+    // after a short tail of silence. Stops background noise + ambient talking from tripping
+    // the agent every time someone in the room speaks.
+    let pttActive = false;
+    let pttSilenceTimer: number | null = null;
+    const PTT_INITIAL_MS = 8000;     // grace window after tapping the mic before the first VAD trigger
+    const PTT_TAIL_MS = 2200;        // silence after each VAD trigger before auto-muting
     let lastDirective = '';                     // last system-injected directive, so its echo isn't read as a question
     let lastDirectiveAt = 0;                    // when we sent it (ms) — used to tell a scripted reply from a Q&A reply
     let userSpokeAt = 0;                        // last VAD-detected speech (ms) — commits to Q&A on the agent's reply even if no transcript arrives
@@ -173,7 +180,7 @@
         stateEl.className = 'guide-panel__state is-' + s;
       }
       micBtn.classList.toggle('is-muted', s === 'muted');
-      micBtn.setAttribute('aria-label', s === 'muted' ? 'Unmute microphone' : 'Enable microphone');
+      micBtn.setAttribute('aria-label', pttActive ? 'Listening, tap to stop' : 'Tap to speak');
       orbFx?.setState(ORB_STATE[s]);
     }
     function setMsg(t: string) {
@@ -750,6 +757,33 @@
       runStep(tourStep + 1);          // pick the walkthrough back up at the next stop
     }
 
+    // ---- push-to-talk ----
+    function armPttSilenceTimer(ms: number) {
+      if (pttSilenceTimer !== null) clearTimeout(pttSilenceTimer);
+      pttSilenceTimer = window.setTimeout(deactivatePtt, ms);
+    }
+    function clearPttSilenceTimer() {
+      if (pttSilenceTimer !== null) { clearTimeout(pttSilenceTimer); pttSilenceTimer = null; }
+    }
+    function activatePtt() {
+      if (!conversation || !voiceEnabled) return;
+      micMuted = false;
+      try { conversation.setMicMuted(false); } catch (_) {}
+      pttActive = true;
+      micBtn.classList.add('is-recording');
+      setState(qaActive ? 'qa' : 'listening');
+      armIdle();
+      armPttSilenceTimer(PTT_INITIAL_MS);
+    }
+    function deactivatePtt() {
+      clearPttSilenceTimer();
+      pttActive = false;
+      micMuted = true;
+      if (conversation) { try { conversation.setMicMuted(true); } catch (_) {} }
+      micBtn.classList.remove('is-recording');
+      if (!agentSpeaking) setState('muted');
+    }
+
     // ---- client tools ----
     const WINDOW_PATHS: Record<string, string> = {
       about: '/about', now: '/now', projects: '/projects', work: '/projects', 'case studies': '/projects',
@@ -840,7 +874,12 @@
           onConnect: () => {
             connecting = false; voiceEnabled = true;
             if (userPaused) return;   // paused mid-connect: the post-await guard tears it down
-            setState('listening');
+            // Push-to-talk: start muted so ambient noise doesn't trigger the agent. The
+            // visitor taps the mic to talk; auto-mute kicks in after silence.
+            micMuted = true; pttActive = false;
+            try { conversation && conversation.setMicMuted(true); } catch (_) {}
+            micBtn.classList.remove('is-recording');
+            setState('muted');
             armIdle();
             try { conversation && conversation.setVolume({ volume: outputMuted ? 0 : 1 }); } catch (_) {}
             if (tourMode) {
@@ -912,13 +951,14 @@
           },
           onVadScore: ({ vadScore }) => {
             if (vadScore <= 0.6) return;
+            if (micMuted) return;   // mic is off; ignore phantom VAD (and any local audio leakage)
             holdForAgent(); armIdle();
             // Ignore VAD while the agent is speaking — its own output through the speakers
-            // bleeds into the visitor's mic and trips VAD, which we'd otherwise read as a
-            // real interruption and use to enter Q&A (blocking the tour's auto-advance).
-            // Real interruptions still arrive via onMessage('user') from the transcript.
+            // bleeds into the visitor's mic and trips VAD. Real interruptions still arrive
+            // via the SDK's own interrupt detection and onMessage('user').
             if (agentSpeaking) return;
             if (touring) userSpokeAt = Date.now();
+            if (pttActive) armPttSilenceTimer(PTT_TAIL_MS);   // extend the silence window each time the visitor actually speaks
             pauseForUser();
           },
           onAudio: () => {
@@ -973,7 +1013,9 @@
     }
     function endSession() {
       if (conversation) { try { conversation.endSession(); } catch (_) {} conversation = null; }
-      voiceEnabled = false; connecting = false; micMuted = false; agentSpeaking = false;
+      voiceEnabled = false; connecting = false; micMuted = true; agentSpeaking = false;
+      clearPttSilenceTimer(); pttActive = false;
+      micBtn.classList.remove('is-recording');
       if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
       disarmIdle();
       clearAdvance();
@@ -1049,6 +1091,8 @@
     function closeGuide() {
       if (!panelOpen) return;
       panelOpen = false; touring = false; agentSpeaking = false; userPaused = false; tourMode = false; navigating = false; qaActive = false; exploring = false; exploringGreeted = false; tourFromExploring = false;
+      clearPttSilenceTimer(); pttActive = false;
+      micBtn.classList.remove('is-recording');
       hideResume();
       setTourLayout(false);
       cursorFx?.hide();
@@ -1151,10 +1195,9 @@
         connectGuide();
         return;
       }
-      micMuted = !micMuted;
-      try { conversation.setMicMuted(micMuted); } catch (_) {}
-      setState(micMuted ? 'muted' : 'listening');
-      armIdle();
+      // Push-to-talk: tap to start, tap again (or wait for silence) to stop.
+      if (pttActive) deactivatePtt();
+      else activatePtt();
     });
     soundBtn.addEventListener('click', () => {
       outputMuted = !outputMuted;
@@ -1366,6 +1409,14 @@
   }
   .guide-ask__mic:hover, .guide-ask__mic:focus-visible { outline: none; color: var(--accent); border-color: var(--accent); }
   .guide-ask__mic.is-muted { color: var(--muted); border-color: var(--rule); background: var(--bg); opacity: 0.65; }
+  /* Push-to-talk active: mic is hot, accent-coloured with a soft pulse so the visitor can
+     see at a glance that the agent is listening to them right now. */
+  .guide-ask__mic.is-recording { color: var(--bg); border-color: var(--accent); background: var(--accent); opacity: 1; animation: guide-ptt-pulse 1.4s ease-in-out infinite; }
+  @keyframes guide-ptt-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 55%, transparent); }
+    50% { box-shadow: 0 0 0 6px color-mix(in oklab, var(--accent) 0%, transparent); }
+  }
+  @media (prefers-reduced-motion: reduce) { .guide-ask__mic.is-recording { animation: none; } }
   .guide-ask__field { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; }
   .guide-ask__input {
     flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid var(--rule); border-radius: var(--radius-pill);
