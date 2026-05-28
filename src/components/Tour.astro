@@ -40,6 +40,14 @@
         <line class="guide-sound-slash" x1="11.3" y1="5" x2="16.2" y2="13.2" />
       </svg>
     </button>
+    <button class="guide-panel__fullscreen" type="button" data-guide-fullscreen aria-label="Enter fullscreen">
+      <svg class="guide-fs-enter" viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2 5V2h3" /><path d="M9 2h3v3" /><path d="M12 9v3h-3" /><path d="M5 12H2V9" />
+      </svg>
+      <svg class="guide-fs-exit" viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M5 2v3H2" /><path d="M9 5V2h3" /><path d="M9 12V9h3" /><path d="M5 9v3H2" />
+      </svg>
+    </button>
     <button class="guide-panel__close" type="button" data-guide-close aria-label="Close the guide">
       <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
         <line x1="2.5" y1="2.5" x2="9.5" y2="9.5" /><line x1="9.5" y1="2.5" x2="2.5" y2="9.5" />
@@ -96,6 +104,7 @@
     const soundBtn = panel.querySelector('[data-guide-sound]') as HTMLButtonElement;
     const resumeBtn = panel.querySelector('[data-guide-resume]') as HTMLButtonElement;
     const orbSlot = panel.querySelector('[data-guide-orb-slot]') as HTMLElement;
+    const fsBtn = panel.querySelector('[data-guide-fullscreen]') as HTMLButtonElement;
     const msgHome = msgEl.parentElement as HTMLElement;   // .guide-panel__body — where the caption lives outside the tour
 
     const desktop = () => (window as any).desktopOS as { open: (p: string) => void; close: () => void } | undefined;
@@ -1384,6 +1393,30 @@
     closeBtn.addEventListener('click', closeGuide);
     dismissBtn.addEventListener('click', closeGuide);
     resumeBtn.addEventListener('click', () => resumeTour());
+    // Fullscreen toggle: hide the button entirely on browsers without the API. Esc still
+    // exits via the browser, but we also listen for fullscreenchange so the icon flips.
+    const docEl = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+    const doc = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> };
+    const fsSupported = !!(docEl.requestFullscreen || docEl.webkitRequestFullscreen);
+    if (!fsSupported) fsBtn.hidden = true;
+    const isFullscreen = () => !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+    function syncFsIcon() {
+      const fs = isFullscreen();
+      fsBtn.classList.toggle('is-fullscreen', fs);
+      fsBtn.setAttribute('aria-label', fs ? 'Exit fullscreen' : 'Enter fullscreen');
+    }
+    fsBtn.addEventListener('click', () => {
+      try {
+        if (isFullscreen()) {
+          (doc.exitFullscreen || doc.webkitExitFullscreen)?.call(doc);
+        } else {
+          (docEl.requestFullscreen || docEl.webkitRequestFullscreen)?.call(docEl);
+        }
+      } catch (_) {}
+    });
+    document.addEventListener('fullscreenchange', syncFsIcon);
+    document.addEventListener('webkitfullscreenchange' as any, syncFsIcon);
+    syncFsIcon();
     // Hard stop the agent + mic if the page is unloaded with a session live.
     window.addEventListener('pagehide', () => endSession());
     // Tab backgrounded / app minimised → end the metered session + mic shortly after
@@ -1640,9 +1673,21 @@
   body.tour-mode .guide-avatar,
   body.tour-mode .guide-panel__titles,
   body.tour-mode .guide-panel__sound { display: none; }
-  body.tour-mode .guide-panel__head { min-height: 0; justify-content: flex-end; gap: 0; padding-right: 4px; }
+  body.tour-mode .guide-panel__head { min-height: 0; justify-content: flex-end; gap: 8px; padding-right: 4px; }
   body.tour-mode .guide-panel__close { width: 20px; height: 20px; }
+  body.tour-mode .guide-panel__fullscreen { width: 20px; height: 20px; }
   body.tour-mode .guide-ask { border-top: none; padding-top: 0; gap: 14px; }
+  /* Fullscreen toggle button: only one of the two icons shows at a time. */
+  .guide-panel__fullscreen {
+    flex-shrink: 0; padding: 0; border: 0; background: none; color: var(--ink-2); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: color 160ms ease;
+  }
+  .guide-panel__fullscreen:hover, .guide-panel__fullscreen:focus-visible { outline: none; color: var(--accent); }
+  .guide-panel__fullscreen[hidden] { display: none; }
+  .guide-fs-exit { display: none; }
+  .guide-panel__fullscreen.is-fullscreen .guide-fs-enter { display: none; }
+  .guide-panel__fullscreen.is-fullscreen .guide-fs-exit { display: inline; }
 
   /* the caption, moved over the input, rolls as one thin line */
   .guide-msg--inline {
