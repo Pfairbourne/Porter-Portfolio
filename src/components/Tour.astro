@@ -332,6 +332,37 @@
     }
     // Gesture at an element (scrolls it into view first). Used by the agent's pointAt tool
     // and project highlights.
+    // Pick a gesture based on what we're pointing at: images/figures/cards get circled
+    // (single or double), headings get a side-to-side sweep, everything else just sits.
+    // Keeps the cursor alive while the agent talks about details on screen.
+    function pickGesture(el: Element): { kind: 'circle' | 'doubleCircle' | 'sweep' | 'none'; } {
+      const tag = el.tagName.toLowerCase();
+      if (el.matches('img, figure, video, svg, picture, .project-card, [class*="screenshot"], [class*="image"]')) {
+        const r = (el as HTMLElement).getBoundingClientRect();
+        return { kind: r.width > 320 ? 'doubleCircle' : 'circle' };
+      }
+      if (['h1', 'h2', 'h3', 'blockquote'].includes(tag) || el.matches('strong, .stat, [class*="metric"], [class*="number"]')) {
+        return { kind: 'sweep' };
+      }
+      return { kind: 'none' };
+    }
+    async function gestureForEl(el: Element) {
+      if (!cursorFx || humanActive) return;
+      const r = (el as HTMLElement).getBoundingClientRect();
+      const cx = r.left + Math.min(r.width / 2, 160);
+      const cy = r.top + Math.min(r.height / 2, 60);
+      const g = pickGesture(el);
+      if (g.kind === 'circle') {
+        const radius = Math.min(48, Math.max(20, Math.min(r.width, r.height) / 5));
+        await cursorFx.traceLoop(cx, cy, radius, 1);
+      } else if (g.kind === 'doubleCircle') {
+        const radius = Math.min(64, Math.max(28, Math.min(r.width, r.height) / 5));
+        await cursorFx.traceLoop(cx, cy, radius, 2);
+      } else if (g.kind === 'sweep') {
+        const amp = Math.min(48, Math.max(18, r.width / 4));
+        await cursorFx.traceSideToSide(cx, cy, amp, 2);
+      }
+    }
     function cursorPointAt(el: Element | null, delay = 220) {
       if (!el) return;
       const active = touring || exploring;
@@ -344,6 +375,9 @@
         if (!(touring || exploring) || humanActive) return;
         moveCursorToEl(el);
         pulseEl(el);
+        await sleep(260);
+        if (!(touring || exploring) || humanActive || !cursorFx) return;
+        await gestureForEl(el);
       }, delay);
     }
     // A prominent element currently in the body's viewport, to point at while browsing.
@@ -379,8 +413,14 @@
         await smoothScrollTo(body, Math.min(max, body.scrollTop + body.clientHeight * 0.72), 1000);
         if (!live()) return;
         const tgt = pickBrowseTarget(body);
-        if (tgt) { moveCursorToEl(tgt); pulseEl(tgt); }
-        await sleep(1700);
+        if (tgt) {
+          moveCursorToEl(tgt);
+          pulseEl(tgt);
+          await sleep(280);
+          if (!live()) return;
+          await gestureForEl(tgt);   // circle images, sweep headings, etc.
+        }
+        await sleep(900);
       }
     }
     // Resolve an element the agent named (for the pointAt client tool).
@@ -603,12 +643,12 @@
         repinOrb();                            // float the orb beside the freshly opened window
         let directive: string;
         if (i === 0 && !tourFromExploring) {
-          directive = `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then give one short, persuasive sentence about ${step.label}. Then stop.`;
+          directive = `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then ONE short sentence framing ${step.label} (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
         } else if (i === 0 && tourFromExploring) {
           tourFromExploring = false;
-          directive = `Starting the guided tour now (you already greeted the visitor). The first stop is ${step.label}. In one short persuasive sentence, say why it matters. Then stop.`;
+          directive = `Tour starting (you already greeted). First stop: ${step.label}. Say ONE short sentence framing it (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
         } else if (step.notes) directive = `The visitor is now looking at ${step.label}. Sell it using Porter's own talking points, delivered naturally and persuasively as a few short spoken sentences. Do not read them word for word and do not list them. Talking points: ${step.notes} Then stop.`;
-        else if (step.intro) directive = `The visitor is now looking at ${step.label}. Give one short framing sentence, then stop.`;
+        else if (step.intro) directive = `The visitor is now looking at ${step.label}. ONE short framing sentence (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
         else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
         lastDirective = directive; lastDirectiveAt = Date.now();   // remember it (and when) so its echo + timing distinguish scripted speech from a Q&A reply
         try { conversation.sendUserMessage(directive); } catch (_) {}
@@ -807,7 +847,17 @@
               if (!micMuted) setState('thinking');
             } else if (role === 'agent' && message) { buildCaption(message); }
           },
-          onVadScore: ({ vadScore }) => { if (vadScore > 0.6) { if (touring) userSpokeAt = Date.now(); holdForAgent(); armIdle(); pauseForUser(); } },
+          onVadScore: ({ vadScore }) => {
+            if (vadScore <= 0.6) return;
+            holdForAgent(); armIdle();
+            // Ignore VAD while the agent is speaking — its own output through the speakers
+            // bleeds into the visitor's mic and trips VAD, which we'd otherwise read as a
+            // real interruption and use to enter Q&A (blocking the tour's auto-advance).
+            // Real interruptions still arrive via onMessage('user') from the transcript.
+            if (agentSpeaking) return;
+            if (touring) userSpokeAt = Date.now();
+            pauseForUser();
+          },
           onAudio: () => {
             audioSeen = true;
             armIdle();

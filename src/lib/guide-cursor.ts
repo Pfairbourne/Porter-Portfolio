@@ -200,6 +200,33 @@ export class GuideCursor {
     return new Promise((res) => setTimeout(res, this.reduced ? 0 : 260));
   }
 
+  /** Trace a circle around (cx,cy) at the given radius. `loops` repeats the trip. */
+  async traceLoop(cx: number, cy: number, radius: number, loops = 1): Promise<void> {
+    this.visible = true;
+    if (this.reduced) { this.place(cx, cy); return; }
+    const pts: Pt[] = [
+      { x: cx, y: cy - radius },     // top
+      { x: cx + radius, y: cy },     // right
+      { x: cx, y: cy + radius },     // bottom
+      { x: cx - radius, y: cy },     // left
+    ];
+    for (let l = 0; l < loops; l++) {
+      for (const p of pts) await this.moveTo(p.x, p.y);
+    }
+    await this.moveTo(cx, cy);
+  }
+
+  /** Sweep horizontally past (cx,cy) — a quick "look here, and here" gesture. */
+  async traceSideToSide(cx: number, cy: number, amplitude: number, count = 2): Promise<void> {
+    this.visible = true;
+    if (this.reduced) { this.place(cx, cy); return; }
+    for (let i = 0; i < count; i++) {
+      await this.moveTo(cx + amplitude, cy);
+      await this.moveTo(cx - amplitude, cy);
+    }
+    await this.moveTo(cx, cy);
+  }
+
   private resolveTween() {
     if (this.tweenTimer !== null) { clearTimeout(this.tweenTimer); this.tweenTimer = null; }
     const r = this.tweenResolve;
