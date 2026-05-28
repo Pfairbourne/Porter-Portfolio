@@ -105,6 +105,8 @@
     let advanceTimer: number | null = null;   // advance to the next tour step after a silence
     let expectTimer: number | null = null;     // grace window while the visitor might be asking
     let exploring = false;                      // free-form Q&A mode: slim bar layout, no tour script, agent answers freely
+    let exploringGreeted = false;               // sent the opening "tour or question?" directive once this panel-open
+    let tourFromExploring = false;              // takeTour was called while already connected → skip the cold-start greeting
     let qaActive = false;                       // a real question is being handled mid-tour → hold until explicit resume
     let lastDirective = '';                     // last system-injected directive, so its echo isn't read as a question
     let lastDirectiveAt = 0;                    // when we sent it (ms) — used to tell a scripted reply from a Q&A reply
@@ -332,13 +334,14 @@
     // and project highlights.
     function cursorPointAt(el: Element | null, delay = 220) {
       if (!el) return;
-      if (reduceMotion || !cursorFx || !touring || humanActive) { pulseEl(el); return; }
+      const active = touring || exploring;
+      if (reduceMotion || !cursorFx || !active || humanActive) { pulseEl(el); return; }
       if (cursorPointTimer !== null) clearTimeout(cursorPointTimer);
       cursorPointTimer = window.setTimeout(async () => {
         cursorPointTimer = null;
-        if (!touring || navigating || humanActive || !cursorFx) return;
+        if (!(touring || exploring) || (touring && navigating) || humanActive || !cursorFx) return;
         await centerInBody(el);
-        if (!touring || navigating || humanActive) return;
+        if (!(touring || exploring) || humanActive) return;
         moveCursorToEl(el);
         pulseEl(el);
       }, delay);
@@ -599,8 +602,12 @@
         if (!touring || userPaused || humanActive || !conversation) return;   // bailed mid-navigation
         repinOrb();                            // float the orb beside the freshly opened window
         let directive: string;
-        if (i === 0) directive = `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then give one short, persuasive sentence about ${step.label}. Then stop.`;
-        else if (step.notes) directive = `The visitor is now looking at ${step.label}. Sell it using Porter's own talking points, delivered naturally and persuasively as a few short spoken sentences. Do not read them word for word and do not list them. Talking points: ${step.notes} Then stop.`;
+        if (i === 0 && !tourFromExploring) {
+          directive = `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then give one short, persuasive sentence about ${step.label}. Then stop.`;
+        } else if (i === 0 && tourFromExploring) {
+          tourFromExploring = false;
+          directive = `Starting the guided tour now (you already greeted the visitor). The first stop is ${step.label}. In one short persuasive sentence, say why it matters. Then stop.`;
+        } else if (step.notes) directive = `The visitor is now looking at ${step.label}. Sell it using Porter's own talking points, delivered naturally and persuasively as a few short spoken sentences. Do not read them word for word and do not list them. Talking points: ${step.notes} Then stop.`;
         else if (step.intro) directive = `The visitor is now looking at ${step.label}. Give one short framing sentence, then stop.`;
         else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
         lastDirective = directive; lastDirectiveAt = Date.now();   // remember it (and when) so its echo + timing distinguish scripted speech from a Q&A reply
@@ -711,6 +718,13 @@
         console.warn('[guide] agent called resumeTour; ignored (resume is visitor-driven)');
         return 'I cannot resume the tour. The visitor will say continue or click the Resume button when they are ready.';
       },
+      startTour: () => {
+        if (touring) return 'The tour is already running.';
+        // Defer slightly so the agent's tool-return settles before we send the kickoff
+        // directive, avoiding overlap with whatever it says about starting the tour.
+        window.setTimeout(() => { if (!touring) takeTour(); }, 250);
+        return 'Starting the tour now.';
+      },
     };
 
     // ---- agent session ----
@@ -749,6 +763,12 @@
             } else if (pendingText) {
               // flush a queued question now that the socket is open (typed before connect)
               try { conversation && conversation.sendUserMessage(pendingText); } catch (_) {} pendingText = null;
+            } else if (exploring && !exploringGreeted) {
+              // First connect of an exploring session: agent greets and offers the tour vocally.
+              exploringGreeted = true;
+              const opener = `Greet the visitor in one short sentence and ask whether they would like a quick guided tour of Porter's work, or if they have a specific question. Wait for their answer. If they accept the tour (yes, please, sure, take me through it, etc.), call the startTour tool. If they ask a question, answer it directly using your tools. Do not narrate a tour unless they accept.`;
+              lastDirective = opener; lastDirectiveAt = Date.now();
+              try { conversation && conversation.sendUserMessage(opener); } catch (_) {}
             }
           },
           onModeChange: ({ mode }) => {
@@ -898,24 +918,21 @@
       panel!.hidden = false;
       document.body.classList.add('tour-active');
       (window as any).__osBeacon?.hide();   // one nudge at a time: dim the desktop beacon while the guide is up
-      setTourLayout(false);   // open as the full intro panel, not the slim tour bar
       startLoop();
-      // Swoosh from the dormant corner into the panel header. Synchronous (not deferred a
-      // frame) so the flight is set before the orb's own loop can spring a step toward the
-      // avatar first — which read as a tiny teleport before the swoop.
       orbFx?.release();
       orbFx?.setState('idle');
-      orbFx?.swooshTo(avatarAnchor());
       touring = false; tourMode = false;
-      choicesEl.hidden = false;
-      setMsg(INTRO);
-      // Opening the panel does NOT connect the agent — that would start a metered
-      // ElevenLabs session (and a live mic) before the visitor asks for anything. The
-      // agent connects lazily on a real action: Take the tour, the mic, or a question.
+      // Go straight to the slim Q&A bar; the agent will greet and verbally offer the tour.
+      // This eagerly opens a metered ElevenLabs session since the visitor explicitly
+      // opened the guide (or it auto-popped from real desktop activity).
+      unlockAudio();
+      enterExploring();
+      setMsg('Connecting…');   // placeholder until the agent's greeting lands
+      connectGuide();
     }
     function closeGuide() {
       if (!panelOpen) return;
-      panelOpen = false; touring = false; agentSpeaking = false; userPaused = false; tourMode = false; navigating = false; qaActive = false; exploring = false;
+      panelOpen = false; touring = false; agentSpeaking = false; userPaused = false; tourMode = false; navigating = false; qaActive = false; exploring = false; exploringGreeted = false; tourFromExploring = false;
       hideResume();
       setTourLayout(false);
       cursorFx?.hide();
@@ -935,9 +952,9 @@
       orbFx?.swooshTo(dormantAnchor());
       desktop()?.close();
     }
-    // Free-form Q&A: same slim-bar layout as the tour (orb floats free, caption rolls over
-    // the input), but no scripted walkthrough. Entered the first time the visitor types
-    // a message or clicks the mic before clicking Take the tour.
+    // Free-form Q&A: slim-bar layout (orb floats free, caption rolls over the input) with
+    // no scripted walkthrough. The agent greets here and verbally offers the tour; the
+    // visitor's answer drives what happens (the agent calls startTour, or just answers).
     function enterExploring() {
       if (touring || exploring) return;
       exploring = true;
@@ -945,23 +962,35 @@
       setTourLayout(true);            // collapse panel to the slim caption bar
       orbFx?.release();
       orbFx?.swooshTo(windowPin());   // orb floats free to its bar-side spot
+      // Start the cursor loop so the agent can use pointAt to gesture at things;
+      // it stays hidden until a pointAt call moves+shows it.
+      cursorFx?.start();
+      cursorFx?.place(window.innerWidth * 0.5, window.innerHeight * 0.62);
     }
     function takeTour() {
       userPaused = false;
       qaActive = false;
+      const wasExploring = exploring;
       exploring = false;        // transitioning out of free-form into the scripted tour
       hideResume();
-      tourMode = true;          // agent leads the walkthrough as soon as it connects
       touring = true;
       choicesEl.hidden = true;
-      setTourLayout(true);      // collapse to the slim caption bar
+      setTourLayout(true);      // collapse to the slim caption bar (no-op if already slim)
       orbFx?.release();
       orbFx?.swooshTo(windowPin());   // orb comets off to float beside the window (or its corner spot)
       cursorFx?.start();
       cursorFx?.show();
       cursorFx?.place(window.innerWidth * 0.5, window.innerHeight * 0.62);   // pointer waits, then drives
       setMsg('Starting the tour…');   // captions then fill in from the agent's speech
-      connectGuide();           // the click is a user gesture, so voice + mic can start
+      if (conversation && voiceEnabled) {
+        // Already connected (e.g. agent called startTour from the opening greeting);
+        // skip the cold-start greeting line and jump straight to step 0.
+        tourFromExploring = wasExploring;
+        runStep(0);
+      } else {
+        tourMode = true;          // agent leads the walkthrough as soon as it connects
+        connectGuide();           // first connect; onConnect will fire runStep(0)
+      }
     }
     // ---- text + mic ----
     askForm.addEventListener('submit', (e) => {
