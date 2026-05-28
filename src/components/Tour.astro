@@ -1239,8 +1239,6 @@
 </style>
 
 <style is:global>
-  /* Tuck the dock away while the guide panel is open. */
-  body.tour-active .dock { opacity: 0; pointer-events: none; transition: opacity 240ms ease; }
   /* The open intro panel takes the hero sign's place, so fade the sign's own name +
      tagline out while the guide is up (restored on close, or when the tour starts). */
   body.tour-active:not(.tour-mode) .hero-figure__name,
