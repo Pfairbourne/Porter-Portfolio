@@ -106,6 +106,8 @@
     let expectTimer: number | null = null;     // grace window while the visitor might be asking
     let qaActive = false;                       // a real question is being handled mid-tour → hold until explicit resume
     let lastDirective = '';                     // last system-injected directive, so its echo isn't read as a question
+    let lastDirectiveAt = 0;                    // when we sent it (ms) — used to tell a scripted reply from a Q&A reply
+    let userSpokeAt = 0;                        // last VAD-detected speech (ms) — commits to Q&A on the agent's reply even if no transcript arrives
     let tourStep = 0;                           // current index into TOUR_STEPS
     let orbFx: GuideOrb | null = null;   // the halftone particle orb (drawn on the overlay canvas)
     let cursorFx: GuideCursor | null = null;   // the tour's halftone "mouse pointer"
@@ -600,7 +602,7 @@
         else if (step.notes) directive = `The visitor is now looking at ${step.label}. Sell it using Porter's own talking points, delivered naturally and persuasively as a few short spoken sentences. Do not read them word for word and do not list them. Talking points: ${step.notes} Then stop.`;
         else if (step.intro) directive = `The visitor is now looking at ${step.label}. Give one short framing sentence, then stop.`;
         else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
-        lastDirective = directive;   // remember it so its transcript echo isn't read as a visitor question
+        lastDirective = directive; lastDirectiveAt = Date.now();   // remember it (and when) so its echo + timing distinguish scripted speech from a Q&A reply
         try { conversation.sendUserMessage(directive); } catch (_) {}
         browseStep();   // scroll through + gesture at the content while it's described
       } finally {
@@ -616,7 +618,7 @@
       cursorFx?.stop();
       orbFx?.release();
       orbFx?.swooshTo(avatarAnchor());       // orb flies home into the panel header
-      lastDirective = 'The walkthrough is finished. Give one short line inviting them to open the résumé, book a meeting, or ask anything, then stop.';
+      lastDirective = 'The walkthrough is finished. Give one short line inviting them to open the résumé, book a meeting, or ask anything, then stop.'; lastDirectiveAt = Date.now();
       try { conversation && conversation.sendUserMessage(lastDirective); } catch (_) {}
     }
     // A real spoken interruption: hold off advancing until the agent has answered. If no
@@ -746,6 +748,10 @@
             if (userPaused) return;   // ignore agent activity while the visitor has it paused
             armIdle();
             if (mode === 'speaking') {
+              // If the visitor spoke after our last scripted directive and the agent is now
+              // replying, this is a Q&A turn — hold the tour even when no user transcript
+              // arrives via onMessage (some agent configs skip user-side transcripts).
+              if (touring && !qaActive && userSpokeAt > lastDirectiveAt && Date.now() - userSpokeAt < 8000) enterQa();
               clearAdvance(); clearExpect();   // agent talking → cancel pending advance + interruption grace
               holdForAgent(); agentSpeaking = true; startLoop(); if (!micMuted) setState('speaking');
               // Watchdog: if the agent "speaks" but no audio lands in 3s, it has no voice.
@@ -770,7 +776,7 @@
               if (!micMuted) setState('thinking');
             } else if (role === 'agent' && message) { buildCaption(message); }
           },
-          onVadScore: ({ vadScore }) => { if (vadScore > 0.6) { holdForAgent(); armIdle(); pauseForUser(); } },
+          onVadScore: ({ vadScore }) => { if (vadScore > 0.6) { if (touring) userSpokeAt = Date.now(); holdForAgent(); armIdle(); pauseForUser(); } },
           onAudio: () => {
             audioSeen = true;
             armIdle();
