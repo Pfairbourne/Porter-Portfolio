@@ -631,23 +631,33 @@
         // Drive directly off the TTS character timeline so the focus word tracks the
         // spoken word frame-by-frame, including through pauses inside a sentence.
         const elapsed = performance.now() - capStart;
-        const i = upperBoundLE(capAlign.starts, elapsed);
-        if (i < 0) {
-          fpos = 0;
+        const N = capAlign.starts.length;
+        const lastEnd = capAlign.starts[N - 1] + capAlign.durs[N - 1];
+        if (elapsed > lastEnd) {
+          // Alignment stopped arriving partway through the audio (some agent configs only
+          // send alignment for early chunks). Extrapolate the tail using the EMA wps so the
+          // caption keeps flowing instead of freezing on the last aligned word.
+          const wordsCovered = (capAlign.wordIdx[N - 1] || 0) + 1;
+          const tailWords = ((elapsed - lastEnd) / 1000) * Math.max(0.5, lastWps);
+          fpos = Math.min(capWords.length - 1, wordsCovered - 1 + tailWords);
         } else {
-          const w = capAlign.wordIdx[i];
-          // Sub-word smoothness: linearly interpolate within the current word's char span
-          // so the rolling translate never jumps from word to word — it glides.
-          let firstChar = i;
-          while (firstChar > 0 && capAlign.wordIdx[firstChar - 1] === w) firstChar--;
-          let lastChar = i;
-          const N = capAlign.starts.length;
-          while (lastChar < N - 1 && capAlign.wordIdx[lastChar + 1] === w) lastChar++;
-          const wStart = capAlign.starts[firstChar];
-          const wEnd = capAlign.starts[lastChar] + capAlign.durs[lastChar];
-          const span = wEnd - wStart;
-          const frac = span > 0 ? Math.max(0, Math.min(1, (elapsed - wStart) / span)) : 0;
-          fpos = Math.min(capWords.length - 1, w + frac);
+          const i = upperBoundLE(capAlign.starts, elapsed);
+          if (i < 0) {
+            fpos = 0;
+          } else {
+            const w = capAlign.wordIdx[i];
+            // Sub-word smoothness: linearly interpolate within the current word's char span
+            // so the rolling translate never jumps from word to word — it glides.
+            let firstChar = i;
+            while (firstChar > 0 && capAlign.wordIdx[firstChar - 1] === w) firstChar--;
+            let lastChar = i;
+            while (lastChar < N - 1 && capAlign.wordIdx[lastChar + 1] === w) lastChar++;
+            const wStart = capAlign.starts[firstChar];
+            const wEnd = capAlign.starts[lastChar] + capAlign.durs[lastChar];
+            const span = wEnd - wStart;
+            const frac = span > 0 ? Math.max(0, Math.min(1, (elapsed - wStart) / span)) : 0;
+            fpos = Math.min(capWords.length - 1, w + frac);
+          }
         }
       } else {
         // Fallback: EMA-estimated time progress (used when the agent doesn't send alignment).
@@ -1118,6 +1128,7 @@
             if (!capActive) return;
             if (pendingCapStart) { capStart = performance.now(); pendingCapStart = false; }
             appendAlignment(al.chars, al.char_start_times_ms, al.char_durations_ms);
+            if (import.meta.env.DEV && capAlign) console.log('[guide] align chunk +', al.chars.length, 'chars; tl=', capAlign.starts.length, 'lastEnd=', (capAlign.starts[capAlign.starts.length - 1] + capAlign.durs[capAlign.durs.length - 1]).toFixed(0), 'ms');
           },
           onError: (m) => { console.warn('[guide] agent error:', m); },
           onDisconnect: (d) => {
