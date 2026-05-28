@@ -507,8 +507,54 @@
     let capEstimateMs = 3000;
     let capActive = false;
     let pendingCapStart = false;       // buildCaption ran; waiting for first audio chunk to re-anchor the clock
-    let lastWps = 3.4;                 // EMA of actual TTS words/sec — updated from each completed utterance
+    let lastWps = 3.4;                 // EMA of actual TTS words/sec — used as the fallback when alignment isn't sent
+    // Character-level audio timeline from ElevenLabs's onAudioAlignment (per-utterance,
+    // accumulated across audio chunks). When present, revealCaption uses this directly
+    // and the highlighted word tracks the spoken word exactly; absent, we fall back to
+    // the EMA wps estimate above.
+    let capAlign: { starts: number[]; durs: number[]; wordIdx: number[] } | null = null;
+    let capAlignReady = false;
     const escHtml = (s: string) => s.replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
+    // Largest i where arr[i] <= target. Returns -1 if target is below arr[0].
+    function upperBoundLE(arr: number[], target: number): number {
+      let lo = 0, hi = arr.length - 1, ans = -1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (arr[mid] <= target) { ans = mid; lo = mid + 1; } else { hi = mid - 1; }
+      }
+      return ans;
+    }
+    // Append one ElevenLabs alignment chunk to the accumulating per-utterance timeline.
+    // Char start times in the chunk are relative to the chunk's audio start, so we offset
+    // by the total accumulated duration so far. wordIdx[i] tells us which capWords entry
+    // each char belongs to (cap-clamped if alignment text drifts slightly from the
+    // transcript). Silently no-ops on malformed input — the fallback path takes over.
+    function appendAlignment(chars: string[], starts: number[], durs: number[]) {
+      if (!capActive || !chars || chars.length === 0) return;
+      if (chars.length !== starts.length || chars.length !== durs.length) return;
+      if (!capAlign) capAlign = { starts: [], durs: [], wordIdx: [] };
+      const tl = capAlign;
+      const offset = tl.starts.length === 0 ? 0 : tl.starts[tl.starts.length - 1] + tl.durs[tl.durs.length - 1];
+      // Track whether the most recently accumulated char was whitespace, so we know when
+      // crossing into a non-whitespace char should advance the word index.
+      let prevWasSpace = true;   // start-of-utterance behaves as if preceded by whitespace
+      if (tl.wordIdx.length > 0) {
+        // Re-derive from the very last accumulated char (we don't keep the chars themselves;
+        // wordIdx changing across the boundary means the last char was a space-to-word break).
+        prevWasSpace = false;   // safe default: assume mid-word so a leading space in the new chunk advances correctly
+      }
+      let wIdx = tl.wordIdx.length === 0 ? -1 : tl.wordIdx[tl.wordIdx.length - 1];
+      const maxWord = Math.max(0, capWords.length - 1);
+      for (let i = 0; i < chars.length; i++) {
+        const isSpace = /\s/.test(chars[i]);
+        if (!isSpace && prevWasSpace) wIdx = Math.min(maxWord, wIdx + 1);
+        tl.starts.push(offset + starts[i]);
+        tl.durs.push(durs[i]);
+        tl.wordIdx.push(Math.max(0, wIdx));
+        prevWasSpace = isSpace;
+      }
+      capAlignReady = true;
+    }
     function buildCaption(text: string) {
       // an agent caption supersedes any transient typed-message echo
       if (echoTimer !== null) { clearTimeout(echoTimer); echoTimer = null; }
@@ -519,6 +565,7 @@
       capWords = text.split(/\s+/).filter(Boolean);
       capStart = performance.now();           // fallback start; onAudio will re-anchor when the first chunk lands
       pendingCapStart = true;                 // re-anchor capStart on the next onAudio
+      capAlign = null; capAlignReady = false;   // fresh utterance → fresh char timeline
       capEstimateMs = Math.max(2000, (capWords.length / lastWps) * 1000);   // EMA-learned TTS pace, self-tunes per utterance
       capActive = capWords.length > 0;
       if (!capActive) { capTrack = null; capSpans = []; msgEl.textContent = ''; return; }
@@ -538,14 +585,40 @@
     function capFinish() { if (capActive) capStart = performance.now() - capEstimateMs; }   // jump focus to the last word
     function revealCaption() {
       if (!capActive || !capTrack || !capSpans.length) return;
-      const prog = Math.max(0, Math.min(1, captionProgress()));
-      const fpos = prog * (capWords.length - 1);   // continuous focus position
-      const i0 = Math.floor(fpos), i1 = Math.min(capWords.length - 1, i0 + 1), frac = fpos - i0;
-      const focusX = capCenters[i0] + (capCenters[i1] - capCenters[i0]) * frac;
+      let fpos: number;
+      if (capAlignReady && capAlign && capAlign.starts.length > 0) {
+        // Drive directly off the TTS character timeline so the focus word tracks the
+        // spoken word frame-by-frame, including through pauses inside a sentence.
+        const elapsed = performance.now() - capStart;
+        const i = upperBoundLE(capAlign.starts, elapsed);
+        if (i < 0) {
+          fpos = 0;
+        } else {
+          const w = capAlign.wordIdx[i];
+          // Sub-word smoothness: linearly interpolate within the current word's char span
+          // so the rolling translate never jumps from word to word — it glides.
+          let firstChar = i;
+          while (firstChar > 0 && capAlign.wordIdx[firstChar - 1] === w) firstChar--;
+          let lastChar = i;
+          const N = capAlign.starts.length;
+          while (lastChar < N - 1 && capAlign.wordIdx[lastChar + 1] === w) lastChar++;
+          const wStart = capAlign.starts[firstChar];
+          const wEnd = capAlign.starts[lastChar] + capAlign.durs[lastChar];
+          const span = wEnd - wStart;
+          const frac = span > 0 ? Math.max(0, Math.min(1, (elapsed - wStart) / span)) : 0;
+          fpos = Math.min(capWords.length - 1, w + frac);
+        }
+      } else {
+        // Fallback: EMA-estimated time progress (used when the agent doesn't send alignment).
+        const prog = Math.max(0, Math.min(1, captionProgress()));
+        fpos = prog * (capWords.length - 1);
+      }
+      const i0 = Math.floor(fpos), i1 = Math.min(capWords.length - 1, i0 + 1), fracW = fpos - i0;
+      const focusX = capCenters[i0] + (capCenters[i1] - capCenters[i0]) * fracW;
       capTrack.style.transform = `translate3d(${(capViewW / 2 - focusX).toFixed(1)}px,0,0)`;
       for (let k = 0; k < capSpans.length; k++) {  // current word pops, neighbours stay legible enough to read ahead
         const dist = Math.abs(k - fpos);
-        capSpans[k].style.opacity = (dist < 0.5 ? 1 : Math.max(0.55, 0.92 - (dist - 0.5) * 0.16)).toFixed(2);
+        capSpans[k].style.opacity = (dist < 0.5 ? 1 : Math.max(0.65, 0.95 - (dist - 0.5) * 0.15)).toFixed(2);
       }
     }
 
@@ -936,6 +1009,7 @@
                 }
               }
               capFinish();   // snap the caption to the end when speech stops
+              capAlign = null; capAlignReady = false;   // drop the stale timeline so the next utterance starts clean
               if (qaActive) showResume();                    // answered a question → wait, surface Resume, never auto-advance
               else if (expectTimer === null) scheduleAdvance();   // don't advance while waiting on a question
             }
@@ -979,6 +1053,14 @@
             // transcript-arrival moment), so the highlighted word tracks the spoken word.
             if (pendingCapStart && capActive) { capStart = performance.now(); pendingCapStart = false; }
             if (import.meta.env.DEV) console.log('[guide] agent audio chunk received');
+          },
+          onAudioAlignment: (al: { chars: string[]; char_start_times_ms: number[]; char_durations_ms: number[] }) => {
+            // ElevenLabs sends per-character timing in each audio chunk. Accumulate them
+            // into a master per-utterance timeline so revealCaption can sync the focus
+            // word to the exact spoken character.
+            if (!capActive) return;
+            if (pendingCapStart) { capStart = performance.now(); pendingCapStart = false; }
+            appendAlignment(al.chars, al.char_start_times_ms, al.char_durations_ms);
           },
           onError: (m) => { console.warn('[guide] agent error:', m); },
           onDisconnect: (d) => {
@@ -1509,12 +1591,13 @@
      (no Astro scope attr). One clipped, edge-faded row that scrolls so the spoken word
      stays centred; JS sets the row transform + per-word opacity each frame. */
   .guide-cap {
-    display: block; width: 100%; max-width: 100%; overflow: hidden; height: 1.6em; position: relative;
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%);
+    display: block; width: 100%; max-width: 100%; overflow: hidden; height: 1.7em; position: relative;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%);
   }
   .guide-cap__track { position: relative; display: inline-block; white-space: nowrap; will-change: transform; }
-  .guide-cap__track > span { color: var(--ink); font-weight: 600; font-size: 16px; }
+  .guide-cap__track > span { color: var(--ink); font-weight: 650; font-size: 17px; letter-spacing: 0.005em; }
+  @supports not (font-variation-settings: normal) { .guide-cap__track > span { font-weight: 700; } }
   /* The agent's highlightProject tool pulses a project card (injected into the modal). */
   .tour-highlight { animation: tour-highlight 2.4s ease; border-radius: var(--radius-card); }
   @keyframes tour-highlight {
