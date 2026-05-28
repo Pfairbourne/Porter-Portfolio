@@ -56,6 +56,7 @@
   </div>
 
   <form class="guide-ask" data-guide-ask>
+    <span class="guide-ask__orb" data-guide-orb-slot aria-hidden="true"></span>
     <button class="guide-ask__mic" type="button" data-guide-mic aria-label="Enable microphone">
       <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" /><path d="M3 7.5a5 5 0 0 0 10 0" /><line x1="8" y1="12.5" x2="8" y2="14.5" />
@@ -94,6 +95,7 @@
     const micBtn = panel.querySelector('[data-guide-mic]') as HTMLButtonElement;
     const soundBtn = panel.querySelector('[data-guide-sound]') as HTMLButtonElement;
     const resumeBtn = panel.querySelector('[data-guide-resume]') as HTMLButtonElement;
+    const orbSlot = panel.querySelector('[data-guide-orb-slot]') as HTMLElement;
     const msgHome = msgEl.parentElement as HTMLElement;   // .guide-panel__body — where the caption lives outside the tour
 
     const desktop = () => (window as any).desktopOS as { open: (p: string) => void; close: () => void } | undefined;
@@ -243,20 +245,22 @@
     };
     window.addEventListener('resize', () => { dormantCache = null; }, { passive: true });
     const avatarAnchor = () => anchorOf(avatar);
-    // While the tour runs the orb sits at the bottom of the page, just to the left of the
-    // slim caption bar (the collapsed panel) — where the visitor asked for it — level with
-    // the bar, with a gentle bob.
+    // While the tour runs, the orb sits inside its frosted slot at the left edge of the
+    // caption bar. The slot is a real DOM element styled like the panel, so the orb has a
+    // clean visual case instead of floating loose. No bob: it stays put while pages
+    // navigate; the cursor is the only thing that moves around the page.
     const ORB_R = 28;
     function windowPin() {
-      const bob = Math.sin(performance.now() / 900) * 6;
+      if (orbSlot) {
+        const r = orbSlot.getBoundingClientRect();
+        if (r.width > 4) return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: Math.min(r.width, r.height) / 2 - 2 };
+      }
+      // Fallback if the slot isn't laid out yet (panel just opening): bottom-left corner.
       const bar = panel!.getBoundingClientRect();
       if (bar.width > 4 && bar.top < window.innerHeight - 8) {
-        const x = Math.max(ORB_R + 12, bar.left - (ORB_R + 30));   // just left of the caption bar
-        const y = bar.top + bar.height / 2;                         // level with the bar
-        return { x, y: y + bob, r: ORB_R };
+        return { x: Math.max(ORB_R + 12, bar.left + ORB_R + 8), y: bar.top + bar.height / 2, r: ORB_R };
       }
-      // fallback before the bar is laid out: bottom-left
-      return { x: ORB_R + 16, y: window.innerHeight - (ORB_R + 64) + bob, r: ORB_R };
+      return { x: ORB_R + 16, y: window.innerHeight - (ORB_R + 64), r: ORB_R };
     }
     if (stage) {
       orbFx = new GuideOrb(stage);
@@ -1402,6 +1406,23 @@
   .guide-btn--primary:hover, .guide-btn--primary:focus-visible { background: var(--accent); border-color: var(--accent); color: #fff; }
 
   .guide-ask { display: flex; align-items: center; gap: var(--s-2); border-top: 1px solid var(--rule); padding-top: var(--s-3); }
+  /* Frosted circular case for the orb at the left of the bar, matching the panel's glass
+     look so the orb has a clean background instead of floating loose over page content.
+     The orb canvas (a fullscreen overlay) paints its halftone particles centred on this
+     slot's centre, anchored via windowPin(). */
+  .guide-ask__orb {
+    width: 56px; height: 56px; flex-shrink: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    -webkit-backdrop-filter: blur(18px) saturate(170%);
+    backdrop-filter: blur(18px) saturate(170%);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.6) inset,
+      0 4px 14px -4px rgba(22, 21, 19, 0.18);
+    display: none;   /* hidden by default; shown only in tour-mode (slim bar) */
+  }
+  body.tour-mode .guide-ask__orb { display: block; }
   .guide-ask__mic {
     width: 34px; height: 34px; flex-shrink: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center;
     border: 1px solid var(--rule); border-radius: 50%; background: transparent; color: var(--ink-2); cursor: pointer;
