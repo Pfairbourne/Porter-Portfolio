@@ -64,6 +64,7 @@
     <div class="guide-ask__field" data-guide-field>
       <input class="guide-ask__input" type="text" data-guide-input placeholder="Ask me anything…" autocomplete="off" maxlength="500" />
     </div>
+    <button class="guide-ask__resume" type="button" data-guide-resume hidden>Resume tour ›</button>
     <button class="guide-ask__send" type="submit" aria-label="Send">↑</button>
   </form>
 </div>
@@ -92,6 +93,7 @@
     const fieldEl = panel.querySelector('[data-guide-field]') as HTMLElement;
     const micBtn = panel.querySelector('[data-guide-mic]') as HTMLButtonElement;
     const soundBtn = panel.querySelector('[data-guide-sound]') as HTMLButtonElement;
+    const resumeBtn = panel.querySelector('[data-guide-resume]') as HTMLButtonElement;
     const msgHome = msgEl.parentElement as HTMLElement;   // .guide-panel__body — where the caption lives outside the tour
 
     const desktop = () => (window as any).desktopOS as { open: (p: string) => void; close: () => void } | undefined;
@@ -102,6 +104,8 @@
     let resumeTimer: number | null = null;
     let advanceTimer: number | null = null;   // advance to the next tour step after a silence
     let expectTimer: number | null = null;     // grace window while the visitor might be asking
+    let qaActive = false;                       // a real question is being handled mid-tour → hold until explicit resume
+    let lastDirective = '';                     // last system-injected directive, so its echo isn't read as a question
     let tourStep = 0;                           // current index into TOUR_STEPS
     let orbFx: GuideOrb | null = null;   // the halftone particle orb (drawn on the overlay canvas)
     let cursorFx: GuideCursor | null = null;   // the tour's halftone "mouse pointer"
@@ -121,10 +125,14 @@
     let outputMuted = false;
     let userPaused = false;      // the visitor hit Pause: agent must stop listening AND talking
     let tourMode = false;        // connected via "Take the tour" → agent leads the walkthrough on connect
-    // Inject the code prompt only once the agent has "Overrides" enabled on its dashboard.
-    // ElevenLabs hard-rejects a disallowed override (kills the connection), so this stays
-    // off until the dashboard is ready; flip to true then to activate the scripted tour.
-    const useOverrides = false;
+    // Inject the code prompt (TOUR_GUIDE_PROMPT) into the agent. Requires "Overrides"
+    // enabled on the agent's dashboard Security settings. ElevenLabs hard-rejects a
+    // disallowed override, so if the connection throws while overrides are on we retry
+    // once without them (see the catch in connectGuide), falling back to the dashboard
+    // prompt rather than stranding the visitor offline.
+    const useOverrides = true;
+    let allowOverrides = useOverrides;   // cleared for a one-shot retry if the override is rejected
+    let overrideRetry = false;
     let audioSeen = false;       // any audio chunk arrived from the agent this session
     let voiceWarned = false;     // surfaced the "no voice from the agent" notice once
     let voiceWatchdog: number | null = null;
@@ -147,9 +155,9 @@
         src.start(0);
       } catch (_) {}
     }
-    type State = 'off' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'muted' | 'paused';
+    type State = 'off' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'muted' | 'paused' | 'qa';
     const LABELS: Record<State, string> = {
-      off: '', connecting: 'Connecting…', listening: 'Listening', thinking: 'Thinking…', speaking: 'Speaking', muted: 'Mic off', paused: 'Paused',
+      off: '', connecting: 'Connecting…', listening: 'Listening', thinking: 'Thinking…', speaking: 'Speaking', muted: 'Mic off', paused: 'Paused', qa: 'Ask away, or resume',
     };
     function setState(s: State) {
       if (voiceWarned && (s === 'speaking' || s === 'listening')) {
@@ -252,7 +260,7 @@
     // Map the panel's conversational state onto the orb's visual state.
     const ORB_STATE: Record<State, OrbState> = {
       off: 'idle', connecting: 'thinking', listening: 'listening',
-      thinking: 'thinking', speaking: 'talking', muted: 'idle', paused: 'idle',
+      thinking: 'thinking', speaking: 'talking', muted: 'idle', paused: 'idle', qa: 'listening',
     };
     // Fly the orb out and point its halftone hand at an element, then revert. Only while
     // the guide is open, and never under reduced motion.
@@ -352,7 +360,7 @@
       const token = ++browseToken;
       const body = bodyEl();
       if (!body) return;
-      const live = () => touring && !navigating && !humanActive && tourStep === myStep && token === browseToken;
+      const live = () => touring && !navigating && !humanActive && !qaActive && tourStep === myStep && token === browseToken;
       await sleep(650);
       if (!live()) return;
       const head = body.querySelector('h1, .project-title, h2, .project-card');
@@ -469,7 +477,7 @@
       resumeTimer = window.setTimeout(() => {
         resumeTimer = null;
         if (userPaused) return;                 // stay silenced while the visitor has it paused
-        if (!micMuted) setState('listening');
+        if (!micMuted) setState(qaActive ? 'qa' : 'listening');
       }, 600);
     }
 
@@ -483,6 +491,7 @@
     function clearExpect() { if (expectTimer !== null) { clearTimeout(expectTimer); expectTimer = null; } }
     function scheduleAdvance() {
       clearAdvance();
+      if (qaActive) return;   // a question is being handled → never auto-advance; resume is explicit
       if (!touring || userPaused || humanActive || !conversation) return;
       advanceTimer = window.setTimeout(() => {
         advanceTimer = null;
@@ -591,6 +600,7 @@
         else if (step.notes) directive = `The visitor is now looking at ${step.label}. Sell it using Porter's own talking points, delivered naturally and persuasively as a few short spoken sentences. Do not read them word for word and do not list them. Talking points: ${step.notes} Then stop.`;
         else if (step.intro) directive = `The visitor is now looking at ${step.label}. Give one short framing sentence, then stop.`;
         else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
+        lastDirective = directive;   // remember it so its transcript echo isn't read as a visitor question
         try { conversation.sendUserMessage(directive); } catch (_) {}
         browseStep();   // scroll through + gesture at the content while it's described
       } finally {
@@ -598,14 +608,16 @@
       }
     }
     function finishTour() {
-      touring = false; navigating = false;
+      touring = false; navigating = false; qaActive = false;
       clearAdvance(); clearExpect(); clearCursorTimers();
+      hideResume();
       setTourLayout(false);                 // back to the full panel for Q&A
       cursorFx?.hide();
       cursorFx?.stop();
       orbFx?.release();
       orbFx?.swooshTo(avatarAnchor());       // orb flies home into the panel header
-      try { conversation && conversation.sendUserMessage('The walkthrough is finished. Give one short line inviting them to open the résumé, book a meeting, or ask anything, then stop.'); } catch (_) {}
+      lastDirective = 'The walkthrough is finished. Give one short line inviting them to open the résumé, book a meeting, or ask anything, then stop.';
+      try { conversation && conversation.sendUserMessage(lastDirective); } catch (_) {}
     }
     // A real spoken interruption: hold off advancing until the agent has answered. If no
     // answer arrives (e.g. background noise tripped the mic), resume after a few seconds.
@@ -613,7 +625,29 @@
       if (!touring) return;
       clearAdvance();
       clearExpect();
-      expectTimer = window.setTimeout(() => { expectTimer = null; if (touring && !userPaused && !agentSpeaking) scheduleAdvance(); }, 7000);
+      expectTimer = window.setTimeout(() => { expectTimer = null; if (touring && !userPaused && !qaActive && !agentSpeaking) scheduleAdvance(); }, 7000);
+    }
+
+    // ---- Q&A hold: a question during the tour pauses the walkthrough until the visitor
+    // explicitly resumes (a "Resume tour" tap, or saying "continue"). The screen stays put
+    // while the agent answers, so the caption never desyncs and the orb keeps listening. ----
+    const RESUME_RE = /^(continue|keep going|go on|next|resume|carry on|let'?s continue|you can continue|continue the tour)\b/i;
+    function enterQa() {
+      if (!touring || qaActive) return;
+      qaActive = true;
+      clearAdvance();                 // kill any pending auto-advance + grace timers
+      clearExpect();
+      cursorFx?.hide();               // stand the auto-pilot pointer down; an explicit pointAt re-shows it
+      hideResume();                   // hidden until the answer finishes (shown on the next "stopped speaking")
+    }
+    function showResume() { if (touring && qaActive) { resumeBtn.hidden = false; if (!agentSpeaking && !micMuted) setState('qa'); } }
+    function hideResume() { resumeBtn.hidden = true; }
+    function resumeTour() {
+      if (!touring || !qaActive) return;
+      qaActive = false;
+      hideResume();
+      clearExpect();
+      runStep(tourStep + 1);          // pick the walkthrough back up at the next stop
     }
 
     // ---- client tools ----
@@ -664,6 +698,10 @@
         if (el) { cursorPointAt(el, 120); return 'Pointing at it.'; }
         return 'Could not find that on screen.';
       },
+      resumeTour: () => {
+        if (touring && qaActive) { resumeTour(); return 'Resuming the tour.'; }
+        return 'The tour is not paused.';
+      },
     };
 
     // ---- agent session ----
@@ -688,7 +726,7 @@
           // Inject the sales-guide brain from code. Requires "Overrides" enabled on the
           // agent's Security settings; if the agent rejects it the catch below reconnects
           // without overrides, so the guide still works (using its dashboard prompt).
-          ...(useOverrides ? { overrides: { agent: { prompt: { prompt: TOUR_GUIDE_PROMPT } } } } : {}),
+          ...(allowOverrides ? { overrides: { agent: { prompt: { prompt: TOUR_GUIDE_PROMPT } } } } : {}),
           onConnect: () => {
             connecting = false; voiceEnabled = true;
             if (userPaused) return;   // paused mid-connect: the post-await guard tears it down
@@ -715,13 +753,22 @@
               if (!audioSeen) voiceWatchdog = window.setTimeout(() => { if (!audioSeen) flagNoVoice(); }, 3000);
             } else {
               agentSpeaking = false; releaseAfterAgent(); capFinish();   // snap the caption to the end when speech stops
-              if (expectTimer === null) scheduleAdvance();   // don't advance while waiting on a question
+              if (qaActive) showResume();                    // answered a question → wait, surface Resume, never auto-advance
+              else if (expectTimer === null) scheduleAdvance();   // don't advance while waiting on a question
             }
           },
           onMessage: ({ message, role }) => {
             armIdle();
-            if (role === 'user') { holdForAgent(); clearAdvance(); if (!micMuted) setState('thinking'); }
-            else if (role === 'agent' && message) { buildCaption(message); }
+            if (role === 'user') {
+              const text = (message || '').trim();
+              if (text && text === lastDirective) { lastDirective = ''; return; }   // our own injected directive, not a question
+              holdForAgent(); clearAdvance();
+              if (touring) {
+                if (qaActive && RESUME_RE.test(text)) { resumeTour(); return; }      // "continue" → pick the tour back up
+                enterQa();                                                           // a real question → hold the tour
+              }
+              if (!micMuted) setState('thinking');
+            } else if (role === 'agent' && message) { buildCaption(message); }
           },
           onVadScore: ({ vadScore }) => { if (vadScore > 0.6) { holdForAgent(); armIdle(); pauseForUser(); } },
           onAudio: () => {
@@ -747,9 +794,17 @@
         // straight back down so the ElevenLabs agent + mic never linger in the background.
         if (!panelOpen || userPaused || document.hidden) { endSession(); return; }
       } catch (e) {
-        connecting = false; conversation = null; voiceEnabled = false; pendingText = null;
+        connecting = false; conversation = null; voiceEnabled = false;
         const msg = e instanceof Error ? e.name + ': ' + e.message : String(e);
         const micBlocked = /not\s*allowed|permission|denied/i.test(msg);   // VoiceConversation needs the mic
+        if (allowOverrides && !overrideRetry && !micBlocked) {
+          // Likely the override was rejected (dashboard "Overrides" off). Retry once on the
+          // dashboard prompt so the guide still works; keep any queued question to flush then.
+          overrideRetry = true; allowOverrides = false;
+          connectGuide();
+          return;
+        }
+        pendingText = null;
         flagOffline(micBlocked ? 'Mic blocked' : 'Guide offline', msg);
         bailTourOffline();
       }
@@ -767,8 +822,9 @@
     // state is already shown) so they can retry, explore, or type. No-op outside a tour.
     function bailTourOffline() {
       if (!touring) return;
-      touring = false; tourMode = false; navigating = false;
+      touring = false; tourMode = false; navigating = false; qaActive = false;
       clearAdvance(); clearExpect(); clearCursorTimers();
+      hideResume();
       setTourLayout(false);
       setMsg("The voice guide can't connect right now. You can still explore on your own, or ask me anything by text.");
       cursorFx?.hide(); cursorFx?.stop();
@@ -833,7 +889,8 @@
     }
     function closeGuide() {
       if (!panelOpen) return;
-      panelOpen = false; touring = false; agentSpeaking = false; userPaused = false; tourMode = false; navigating = false;
+      panelOpen = false; touring = false; agentSpeaking = false; userPaused = false; tourMode = false; navigating = false; qaActive = false;
+      hideResume();
       setTourLayout(false);
       cursorFx?.hide();
       cursorFx?.stop();
@@ -854,6 +911,8 @@
     }
     function takeTour() {
       userPaused = false;
+      qaActive = false;
+      hideResume();
       tourMode = true;          // agent leads the walkthrough as soon as it connects
       touring = true;
       choicesEl.hidden = true;
@@ -872,8 +931,10 @@
       const text = inputEl.value.trim();
       if (!text) return;
       inputEl.value = '';
+      if (touring && qaActive && RESUME_RE.test(text)) { resumeTour(); return; }   // typed "continue" → resume, don't ask the agent
       setState('thinking');
       armIdle();
+      if (touring) enterQa();   // a typed question mid-tour holds the walkthrough until resume
       if (document.body.classList.contains('tour-mode')) showEcho(text);   // flash the question, then free the space
       if (conversation && voiceEnabled) { try { conversation.sendUserMessage(text); } catch (_) {} }
       else { pendingText = text; connectGuide(); }   // submit is a gesture → connect, then send on onConnect
@@ -900,6 +961,7 @@
     orb.addEventListener('click', () => openGuide());
     closeBtn.addEventListener('click', closeGuide);
     dismissBtn.addEventListener('click', closeGuide);
+    resumeBtn.addEventListener('click', () => resumeTour());
     // Hard stop the agent + mic if the page is unloaded with a session live.
     window.addEventListener('pagehide', () => endSession());
     // Tab backgrounded / app minimised → end the metered session + mic shortly after
@@ -1110,6 +1172,14 @@
     transition: background 160ms ease, border-color 160ms ease;
   }
   .guide-ask__send:hover, .guide-ask__send:focus-visible { outline: none; background: var(--accent); border-color: var(--accent); color: #fff; }
+  /* shown only while a question has paused the tour (see showResume) */
+  .guide-ask__resume {
+    flex-shrink: 0; padding: 7px 13px; border: 1px solid var(--ink); border-radius: var(--radius-pill);
+    background: var(--ink); color: var(--bg); font-family: var(--font-sans); font-size: 13px; font-weight: 500;
+    white-space: nowrap; cursor: pointer; transition: background 160ms ease, border-color 160ms ease;
+  }
+  .guide-ask__resume:hover, .guide-ask__resume:focus-visible { outline: none; background: var(--accent); border-color: var(--accent); color: #fff; }
+  .guide-ask__resume[hidden] { display: none; }
 
   /* ---- tour mode: the panel collapses to a slim caption bar; the orb floats free ---- */
   body.tour-mode .guide-panel {
