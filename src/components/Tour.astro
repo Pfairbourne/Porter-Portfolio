@@ -339,7 +339,8 @@
       const tag = el.tagName.toLowerCase();
       if (el.matches('img, figure, video, svg, picture, .project-card, [class*="screenshot"], [class*="image"]')) {
         const r = (el as HTMLElement).getBoundingClientRect();
-        return { kind: r.width > 320 ? 'doubleCircle' : 'circle' };
+        // Big screenshots get a slow perimeter loop; mid-size cards get a single loop.
+        return { kind: r.width > 260 || r.height > 220 ? 'doubleCircle' : 'circle' };
       }
       if (['h1', 'h2', 'h3', 'blockquote'].includes(tag) || el.matches('strong, .stat, [class*="metric"], [class*="number"]')) {
         return { kind: 'sweep' };
@@ -349,17 +350,21 @@
     async function gestureForEl(el: Element) {
       if (!cursorFx || humanActive) return;
       const r = (el as HTMLElement).getBoundingClientRect();
-      const cx = r.left + Math.min(r.width / 2, 160);
-      const cy = r.top + Math.min(r.height / 2, 60);
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
       const g = pickGesture(el);
-      if (g.kind === 'circle') {
-        const radius = Math.min(48, Math.max(20, Math.min(r.width, r.height) / 5));
-        await cursorFx.traceLoop(cx, cy, radius, 1);
-      } else if (g.kind === 'doubleCircle') {
-        const radius = Math.min(64, Math.max(28, Math.min(r.width, r.height) / 5));
-        await cursorFx.traceLoop(cx, cy, radius, 2);
+      if (g.kind === 'circle' || g.kind === 'doubleCircle') {
+        // For big screenshots/cards trace the perimeter (with a small inset so the cursor
+        // hugs the edge rather than crossing the content). For smaller elements, a tight
+        // emphasis loop near the centre.
+        const big = r.width > 220 || r.height > 180;
+        const radius = big
+          ? Math.max(60, Math.min(r.width / 2 - 14, r.height / 2 - 14))
+          : Math.min(64, Math.max(22, Math.min(r.width, r.height) / 4));
+        const loops = g.kind === 'doubleCircle' ? 2 : 1;
+        await cursorFx.traceLoop(cx, cy, radius, loops);
       } else if (g.kind === 'sweep') {
-        const amp = Math.min(48, Math.max(18, r.width / 4));
+        const amp = Math.min(120, Math.max(24, r.width / 3));
         await cursorFx.traceSideToSide(cx, cy, amp, 2);
       }
     }
@@ -380,15 +385,26 @@
         await gestureForEl(el);
       }, delay);
     }
-    // A prominent element currently in the body's viewport, to point at while browsing.
-    function pickBrowseTarget(body: HTMLElement): Element | null {
+    // Up to 3 prominent elements currently in the body's viewport, in document order, for
+    // the cursor to walk through and gesture at while the agent talks about the section.
+    function pickBrowseTargets(body: HTMLElement): Element[] {
       const br = body.getBoundingClientRect();
-      const cands = Array.from(body.querySelectorAll('h2, h3, img, figure, .project-card, blockquote'));
-      const visible = cands.filter((el) => {
+      const cands = Array.from(body.querySelectorAll('img, figure, video, picture, svg, .project-card, h2, h3, blockquote, strong, .stat, [class*="metric"], [class*="screenshot"]'));
+      const seen = new Set<Element>();
+      const visible: Element[] = [];
+      for (const el of cands) {
         const r = el.getBoundingClientRect();
-        return r.width > 8 && r.top < br.bottom - 40 && r.bottom > br.top + 60;
-      });
-      return visible.length ? visible[Math.floor(visible.length / 2)] : null;
+        if (r.width < 24 || r.height < 14) continue;
+        if (r.top >= br.bottom - 40 || r.bottom <= br.top + 60) continue;
+        // Dedup: if a child of an already-picked card is visible, skip it.
+        let skip = false;
+        for (const s of seen) { if (s.contains(el) || el.contains(s)) { skip = true; break; } }
+        if (skip) continue;
+        seen.add(el);
+        visible.push(el);
+        if (visible.length >= 3) break;
+      }
+      return visible;
     }
     // After a page opens, browse it: dwell on the top, then scroll down in stages, moving
     // the cursor to point at what's in view at each stop — until the step advances. A token
@@ -407,20 +423,22 @@
       if (head) { moveCursorToEl(head); pulseEl(head); }
       await sleep(1700);
       let guard = 0;
-      while (live() && guard++ < 6) {
+      while (live() && guard++ < 4) {
         const max = body.scrollHeight - body.clientHeight;
         if (max <= 8 || body.scrollTop >= max - 8) break;
-        await smoothScrollTo(body, Math.min(max, body.scrollTop + body.clientHeight * 0.72), 1000);
+        await smoothScrollTo(body, Math.min(max, body.scrollTop + body.clientHeight * 0.75), 1100);
         if (!live()) return;
-        const tgt = pickBrowseTarget(body);
-        if (tgt) {
+        const tgts = pickBrowseTargets(body);
+        for (const tgt of tgts) {
+          if (!live()) return;
           moveCursorToEl(tgt);
           pulseEl(tgt);
-          await sleep(280);
+          await sleep(240);
           if (!live()) return;
-          await gestureForEl(tgt);   // circle images, sweep headings, etc.
+          await gestureForEl(tgt);   // circle big screenshots, sweep headings, etc.
+          await sleep(280);
         }
-        await sleep(900);
+        await sleep(500);
       }
     }
     // Resolve an element the agent named (for the pointAt client tool).
@@ -558,10 +576,20 @@
     function cardEl(path: string): HTMLElement | null {
       const body = document.getElementById('desktop-window-body');
       if (!body) return null;
-      // a real listing card, not a prev/next link on an item page (so "is the listing
-      // showing?" is answered correctly and we pop back to the folder when it isn't)
-      const links = body.querySelectorAll<HTMLElement>(`a[href$="${path}"], a[href*="${path}"]`);
-      for (const el of Array.from(links)) {
+      // Prefer an exact-href link inside a card container, and return the CARD itself so
+      // the cursor visibly lands on the card (not a tiny sub-link). Falls back to any
+      // exact-href link, then a loose match. Skips prev/next nav links in any case.
+      const cardLink = body.querySelector<HTMLElement>(`.project-card a[href="${path}"], [class*="card"] a[href="${path}"], [class*="Card"] a[href="${path}"]`);
+      if (cardLink) {
+        const card = cardLink.closest('.project-card, [class*="card"], [class*="Card"]') as HTMLElement | null;
+        return card || cardLink;
+      }
+      const exact = body.querySelectorAll<HTMLElement>(`a[href="${path}"]`);
+      for (const el of Array.from(exact)) {
+        if (!el.closest('.case-nav')) return el;
+      }
+      const loose = body.querySelectorAll<HTMLElement>(`a[href$="${path}"], a[href*="${path}"]`);
+      for (const el of Array.from(loose)) {
         if (!el.closest('.case-nav')) return el;
       }
       return null;
@@ -594,7 +622,10 @@
       if (!touring || userPaused || humanActive) return;
       const r = el.getBoundingClientRect();
       cursorFx.show();
-      await cursorFx.moveTo(r.left + Math.min(r.width / 2, 64), r.top + Math.min(r.height / 2, 22));
+      // Land on the element's centre so the click visibly sits on the target — used to clamp
+      // at (64, 22) from the corner, which on a big screenshot or card landed up near the
+      // edge and read as "clicked the wrong thing."
+      await cursorFx.moveTo(r.left + r.width / 2, r.top + r.height / 2);
       if (!touring || userPaused || humanActive) return;
       await cursorFx.click();
       act();
