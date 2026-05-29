@@ -111,6 +111,41 @@ export type ChoreographyStep =
  */
 export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {};
 
+/**
+ * One-time desktop orientation pass that runs at the start of every tour (before the
+ * Full App Prototype folder is opened). Mirrors the "Desktop" section of
+ * tour-guide-cursor-spec.md: land on the sign, walk across both icon rows, sweep the
+ * dock, then settle back on "full-app-prototype" ready for the tour proper to advance.
+ *
+ * Approximate duration at default cursor speeds: ~22 seconds. The agent's narration
+ * directive sent alongside it should match that window.
+ */
+export const DESKTOP_PREAMBLE: ChoreographyStep[] = [
+  // Opening: land on the name card, sweep the tagline.
+  { kind: 'move', target: 'desktopSelector:.hero-figure__name', dwellMs: 1000 },
+  { kind: 'underline', target: 'desktopSelector:.hero-figure__tagline' },
+  { kind: 'pause', ms: 500 },
+  // Row 1 folders: full-app-prototype, ai-agents, internal-tools.
+  { kind: 'hover', target: 'icon:/projects', dwellMs: 1400 },
+  { kind: 'hover', target: 'icon:/agents', dwellMs: 1400 },
+  { kind: 'hover', target: 'icon:/fun', dwellMs: 1400 },
+  // Row 2 files: résumé, about, now.
+  { kind: 'hover', target: 'icon:/resume', dwellMs: 1000 },
+  { kind: 'hover', target: 'icon:/about', dwellMs: 1000 },
+  { kind: 'hover', target: 'icon:/now', dwellMs: 1000 },
+  // Dock sweep, left to right.
+  { kind: 'hover', target: 'dock:photos', dwellMs: 700 },
+  { kind: 'hover', target: 'dock:quote', dwellMs: 700 },
+  { kind: 'hover', target: 'dock:reader', dwellMs: 700 },
+  { kind: 'hover', target: 'dock:movies', dwellMs: 700 },
+  { kind: 'hover', target: 'dock:calendar', dwellMs: 700 },
+  { kind: 'hover', target: 'dock:mail', dwellMs: 700 },
+  { kind: 'hover', target: 'dock:linkedin', dwellMs: 700 },
+  { kind: 'hover', target: 'dock:settings', dwellMs: 700 },
+  // Settle back on Full App Prototype, ready for runStep(0) to open it.
+  { kind: 'move', target: 'icon:/projects', dwellMs: 500 },
+];
+
 export const TOUR_STEPS: TourStep[] = [
   { path: '/projects', label: "Porter's full app prototype, his flagship product work", intro: true },
   {

@@ -80,7 +80,7 @@
 
 <script>
   import { Conversation } from '@elevenlabs/client';
-  import { TOUR_GUIDE_PROMPT, TOUR_STEPS, TOUR_CHOREOGRAPHY, type ChoreographyStep } from '../lib/tour';
+  import { TOUR_GUIDE_PROMPT, TOUR_STEPS, TOUR_CHOREOGRAPHY, DESKTOP_PREAMBLE, type ChoreographyStep } from '../lib/tour';
   import { GuideOrb, type OrbState } from '../lib/guide-orb';
   import { GuideCursor } from '../lib/guide-cursor';
 
@@ -340,6 +340,7 @@
     function centerInBody(el: Element): Promise<void> {
       const body = bodyEl();
       if (!body) return Promise.resolve();
+      if (!body.contains(el)) return Promise.resolve();   // target lives on the desktop, not inside the window — no scroll needed
       const br = body.getBoundingClientRect();
       const er = (el as HTMLElement).getBoundingClientRect();
       return smoothScrollTo(body, body.scrollTop + (er.top - br.top) - (body.clientHeight / 2 - er.height / 2));
@@ -466,6 +467,31 @@
         await sleep(500);
       }
     }
+    // Walks the visitor through the desktop (sign + folder rows + dock) before runStep(0)
+    // opens the Full App Prototype folder. Agent narration goes out as a single directive
+    // matched to the choreography's running time.
+    async function runDesktopPreamble(fromExploring: boolean) {
+      if (!touring || !conversation || !voiceEnabled) return;
+      const directive = fromExploring
+        ? `Now narrate as the cursor walks Porter's desktop. Hit these beats in order, one short spoken phrase each: the hero sign with his name and role, the three folders that hold his work (full-app-prototype, ai-agents, internal-tools), the three files (résumé, about, now), and the dock at the bottom for quick links and contact. Aim for about 18 seconds total. Don't list every single name; speak in groups. Then stop and wait for the system to advance.`
+        : `Open by saying word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then narrate as the cursor walks Porter's desktop: the hero sign with his name and role, the three folders that hold his work, the three files (résumé, about, now), and the dock at the bottom for quick links and contact. Aim for about 20 seconds total. Don't list every single name; speak in groups. Then stop and wait for the system to advance.`;
+      lastDirective = directive; lastDirectiveAt = Date.now();
+      try { conversation.sendUserMessage(directive); } catch (_) {}
+      // Keep the dock visible just for the preamble so the cursor can sweep its icons.
+      document.body.classList.add('tour-preamble');
+      try { await runChoreography(DESKTOP_PREAMBLE); }
+      finally { document.body.classList.remove('tour-preamble'); }
+    }
+    // The full tour-start flow: agent-led desktop orientation (DESKTOP_PREAMBLE), then
+    // kicks off runStep(0) which opens the Full App Prototype folder. takeTour and the
+    // tourMode path in onConnect both call this so the preamble fires exactly once per tour.
+    async function startTourFlow() {
+      if (!touring) return;
+      const fromExploring = tourFromExploring;
+      tourFromExploring = true;   // consumed; also suppresses the cold-start greeting line in runStep(0) since we'll have already greeted
+      if (DESKTOP_PREAMBLE.length > 0) await runDesktopPreamble(fromExploring);
+      if (touring) runStep(0);
+    }
     // ---- Cursor choreography: scripted per-page sequences from tour-guide-cursor-spec.md.
     // When TOUR_CHOREOGRAPHY has an entry for a step's path, runStep calls runChoreography
     // instead of the generic browseStep auto-picker.
@@ -477,6 +503,15 @@
       if (t.startsWith('card:')) return cardEl(t.slice(5));
       if (t.startsWith('selector:') && body) {
         try { return body.querySelector(t.slice(9)); } catch (_) { return null; }
+      }
+      if (t.startsWith('desktopSelector:')) {
+        // For elements that live on the desktop itself (hero sign, etc.), not inside a window.
+        try { return document.querySelector(t.slice(16)); } catch (_) { return null; }
+      }
+      if (t.startsWith('dock:')) {
+        // Dock icons by their data-dock-icon-id (photos/quote/reader/movies/calendar/mail/linkedin/settings).
+        const id = t.slice(5).trim();
+        return document.querySelector(`.dock__icon[data-dock-icon-id="${id}"]`);
       }
       if (t.startsWith('next:')) {
         if (!body) return null;
@@ -1184,9 +1219,10 @@
             armIdle();
             try { conversation && conversation.setVolume({ volume: outputMuted ? 0 : 1 }); } catch (_) {}
             if (tourMode) {
-              // Agent-led tour: the client now drives the page-by-page walkthrough.
+              // Agent-led tour: the client now drives the page-by-page walkthrough,
+              // starting with the desktop preamble and then opening /projects.
               tourMode = false;   // one-shot: only kick off on this connect, not on later reconnects
-              runStep(0);
+              startTourFlow();
             } else if (pendingText) {
               // flush a queued question now that the socket is open (typed before connect)
               try { conversation && conversation.sendUserMessage(pendingText); } catch (_) {} pendingText = null;
@@ -1467,12 +1503,12 @@
       setMsg('Starting the tour…');   // captions then fill in from the agent's speech
       if (conversation && voiceEnabled) {
         // Already connected (e.g. agent called startTour from the opening greeting);
-        // skip the cold-start greeting line and jump straight to step 0.
+        // run the desktop preamble, then jump into step 0 (which opens /projects).
         tourFromExploring = wasExploring;
-        runStep(0);
+        startTourFlow();
       } else {
         tourMode = true;          // agent leads the walkthrough as soon as it connects
-        connectGuide();           // first connect; onConnect will fire runStep(0)
+        connectGuide();           // first connect; onConnect will fire startTourFlow
       }
     }
     // ---- text + mic ----
@@ -1851,6 +1887,10 @@
   /* The slim guide bar sits right where the dock lives, and the dock isn't useful while
      the agent is running anyway. Tuck it away the whole time the guide is open. */
   body.tour-active .dock { opacity: 0; pointer-events: none; transition: opacity 240ms ease; }
+  /* During the desktop-preamble (tour-start orientation pass), bring the dock back so
+     the cursor can sweep its icons. Pointer-events stay off so the visitor can't click
+     it out from under the tour. */
+  body.tour-preamble .dock { opacity: 1; pointer-events: none; }
   /* When a desktop window is open (a /projects/... page, /about, etc.), the dormant orb at
      top-right would overlap the window's X close button. Hide it so the X stays reachable. */
   body:has(#desktop-window:not([hidden])) .guide-orb { opacity: 0; pointer-events: none; transition: opacity 200ms ease; }
