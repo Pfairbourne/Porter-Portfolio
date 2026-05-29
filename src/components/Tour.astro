@@ -119,6 +119,7 @@
     let exploringGreeted = false;               // sent the opening "tour or question?" directive once this panel-open
     let tourFromExploring = false;              // takeTour was called while already connected → skip the cold-start greeting
     let qaActive = false;                       // a real question is being handled mid-tour → hold until explicit resume
+    let choreographyActive = false;             // scripted cursor sequence is mid-flight; pause auto-advance until it lands
     // Push-to-talk: mic is muted by default; visitor taps the mic to speak, mic auto-mutes
     // after a short tail of silence. Stops background noise + ambient talking from tripping
     // the agent every time someone in the room speaks.
@@ -567,6 +568,8 @@
       const token = ++browseToken;
       const live = () => touring && !navigating && !humanActive && !qaActive && tourStep === myStep && token === browseToken;
       const body = bodyEl();
+      choreographyActive = true;
+      try {
       for (const step of steps) {
         if (!live()) return;
         switch (step.kind) {
@@ -666,6 +669,13 @@
             await cursorFx.glide(pts, step.pxPerSec ?? 700);
             break;
           }
+        }
+      }
+      } finally {
+        choreographyActive = false;
+        // If the agent already stopped while we were still walking, kick off the next step now.
+        if (touring && !qaActive && !agentSpeaking && tourStep === myStep && token === browseToken) {
+          scheduleAdvance();
         }
       }
     }
@@ -923,6 +933,7 @@
     function scheduleAdvance() {
       clearAdvance();
       if (qaActive) return;   // a question is being handled → never auto-advance; resume is explicit
+      if (choreographyActive) return;   // wait for the scripted cursor walk to finish before moving on
       if (!touring || userPaused || humanActive || !conversation) return;
       advanceTimer = window.setTimeout(() => {
         advanceTimer = null;
@@ -1050,7 +1061,9 @@
           directive = hasChoreography
             ? `Tour starting (you already greeted). First stop: ${step.label}. Narrate in about 12 to 14 seconds as the cursor walks the section: introduce what's here in groups, not individual names. Then stop and wait for the system to advance.`
             : `Tour starting (you already greeted). First stop: ${step.label}. Say ONE short sentence framing it (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
-        } else if (step.notes) directive = `The visitor is now looking at ${step.label}. Sell it using Porter's own talking points, delivered naturally and persuasively as a few short spoken sentences. Do not read them word for word and do not list them. Talking points: ${step.notes} Then stop.`;
+        } else if (step.notes) directive = hasChoreography
+          ? `The visitor is now looking at ${step.label}. Take about 45 seconds to narrate naturally, in flowing spoken sentences, using Porter's own talking points. Pace the narration to cover the structure of a case study: the problem, what was built, why it matters (impact), and the result, in that arc. Do not read the points word for word and do not list them. Talking points: ${step.notes} Then stop and wait.`
+          : `The visitor is now looking at ${step.label}. Sell it using Porter's own talking points, delivered naturally and persuasively as a few short spoken sentences. Do not read them word for word and do not list them. Talking points: ${step.notes} Then stop.`;
         else if (step.intro) directive = hasChoreography
           ? `The visitor is now looking at ${step.label}. In about 12 to 14 seconds, briefly introduce what this section contains, in groups not individual names. Then stop and wait for the system to advance.`
           : `The visitor is now looking at ${step.label}. ONE short framing sentence (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;

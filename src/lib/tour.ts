@@ -130,6 +130,41 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     //    lands on a visible target (the system will fire driveTo + gestureClick next).
     { kind: 'scroll', ticks: 10, dir: 'up' },
   ],
+  '/projects/ember-onboarding-agent': [
+    // 1. INTRO — section label + tagline heading (~3s)
+    { kind: 'move', target: 'selector:.t-label', dwellMs: 900 },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1800 },
+    // 2. SCROLL to the hero screenshot
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    // 3. SCREENSHOT — big oval framing the whole image, then settle (~10s)
+    { kind: 'oval', target: 'selector:.img-frame' },
+    { kind: 'pause', ms: 4000 },
+    // 4. Body sections, ~3s each — pace the cursor through the case-study structure
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'point', target: 'The problem', dwellMs: 2800 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'point', target: 'What ships when an onboarding session ends', dwellMs: 2800 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'point', target: 'What I built', dwellMs: 2800 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'point', target: 'Challenges it solves', dwellMs: 2800 },
+    // 5. "Why it matters" — point at each bold label as the agent reads the impact beats
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'pause', ms: 400 },
+    { kind: 'point', target: 'Bounce reduction', dwellMs: 2600 },
+    { kind: 'point', target: 'Services capacity recovered', dwellMs: 2600 },
+    { kind: 'point', target: 'Cleaner first-data ingestion', dwellMs: 2600 },
+    { kind: 'point', target: 'Free-tier unlock', dwellMs: 2600 },
+    // 6. Key metrics section
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'point', target: 'Key metrics for success', dwellMs: 2800 },
+    // 7. "Why this is successful" — double underline pass on the heading
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'underline', target: 'Why this is successful', passes: 2 },
+    { kind: 'pause', ms: 800 },
+    { kind: 'scroll', ticks: 2, dir: 'down' },
+    { kind: 'pause', ms: 1800 },
+  ],
 };
 
 /**
