@@ -844,6 +844,33 @@
       return 0;
     }
     function frame() {
+      const now = performance.now();
+      const dt = capLastFrame ? Math.min(100, now - capLastFrame) : 16;
+      capLastFrame = now;
+      // Ground truth for "is the agent actually making sound right now" — the raw output level,
+      // the same source the orb pulses on. Used to anchor + correct the caption clock.
+      let rawVol = 0;
+      if (conversation && agentSpeaking) { try { rawVol = conversation.getOutputVolume() || 0; } catch (_) {} }
+      const audible = rawVol > CAP_AUDIBLE;
+      if (audible) capLastAudible = now;
+      if (capActive) {
+        if (pendingCapStart) {
+          // Anchor the caption clock to the first AUDIBLE frame (true playback start) rather than
+          // chunk arrival, holding on the first word until then so the line can't run ahead of the
+          // voice. Muted output can't be measured, so that path anchors on arrival (onAudio).
+          if (!outputMuted) {
+            const haveChunk = capFirstChunkAt > 0;
+            if (audible || (haveChunk && now - capFirstChunkAt > CAP_ANCHOR_FALLBACK_MS)) { pendingCapStart = false; capStart = now; }
+            else capStart = now;   // not sounding yet → keep elapsed ~0 (highlight pinned to word 0)
+          }
+        } else if (capAlignReady && !outputMuted) {
+          // Buffer-stall guard: if output has been silent for a sustained beat WHILE the char
+          // timeline says a word should still be sounding, the audio stalled — hold the clock so
+          // the highlight waits for playback to resume. Natural pauses (gaps between words in the
+          // timeline) are NOT held, so the next word still lights up on time.
+          if (!audible && now - capLastAudible > CAP_STALL_MS && timelineExpectsSound(now - capStart)) capStart += dt;
+        }
+      }
       const target = targetAmp();
       ampCur += (target - ampCur) * (target > ampCur ? 0.5 : 0.18);   // fast attack, gentle release → voice-shaped
       orbFx?.setAmplitude(ampCur);
@@ -882,6 +909,16 @@
     // the EMA wps estimate above.
     let capAlign: { starts: number[]; durs: number[]; wordIdx: number[] } | null = null;
     let capAlignReady = false;
+    // Audio-output-driven clock correction. The SDK buffers before playback, so chunk arrival is
+    // too early an anchor (the line ran ahead of the voice) and network bursts/stalls make a plain
+    // wall-clock drift. We anchor and gate the caption clock on the ACTUAL output level
+    // (getOutputVolume — the same signal the orb pulses on), so the highlight tracks what's heard.
+    const CAP_AUDIBLE = 0.02;             // output level above which audio counts as audible
+    const CAP_STALL_MS = 320;             // sustained output silence while a word should still be sounding => buffer stall: hold the clock
+    const CAP_ANCHOR_FALLBACK_MS = 700;   // if no audible output is seen this long after the first chunk, anchor anyway (never get stuck)
+    let capLastFrame = 0;                 // perf time of the previous frame (for dt)
+    let capLastAudible = 0;               // perf time output was last audible
+    let capFirstChunkAt = 0;              // perf time the first audio chunk arrived this utterance (anchor-fallback timer)
     // ---- Per-visitor daily character budget ----
     // ElevenLabs charges per TTS character (agent voice output), and there's no login on
     // the site, so cap each browser's daily agent-speech bytes via localStorage. Pre-flight
@@ -986,6 +1023,8 @@
       capAlign = null; capAlignReady = false;   // fresh utterance → fresh char timeline
       smoothFocusX = Number.NaN;              // reset the visual smoothing so it doesn't lerp from the previous line
       capPrevFocus = -1;                      // new line, new spans → forget the previous highlighted word
+      capLastAudible = performance.now();     // don't trip the stall guard before any audio has played
+      capFirstChunkAt = 0;                    // anchor-fallback timer; re-armed by the first audio chunk
       capEstimateMs = Math.max(2000, (capWords.length / lastWps) * 1000);   // EMA-learned TTS pace, self-tunes per utterance
       capActive = capWords.length > 0;
       if (!capActive) { capTrack = null; capSpans = []; msgEl.textContent = ''; return; }
@@ -1003,6 +1042,15 @@
       return (performance.now() - capStart) / capEstimateMs;   // timed estimate from the agent message length
     }
     function capFinish() { if (capActive) capStart = performance.now() - capEstimateMs; }   // jump focus to the last word
+    // True when the char timeline says a word should be sounding at `elapsed` (we're inside a
+    // char's span, not in a gap between words). Lets the stall guard tell a buffer stall (silent
+    // mid-word) apart from a natural pause (silent in a timeline gap, which should keep advancing).
+    function timelineExpectsSound(elapsed: number): boolean {
+      if (!capAlign || capAlign.starts.length === 0) return true;
+      const i = upperBoundLE(capAlign.starts, elapsed);
+      if (i < 0) return false;
+      return elapsed <= capAlign.starts[i] + capAlign.durs[i] + 40;
+    }
     function revealCaption() {
       if (!capActive || !capTrack || !capSpans.length) return;
       let fpos: number;
@@ -1634,9 +1682,14 @@
             armIdle();
             if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
             if (voiceWarned) { voiceWarned = false; setState(agentSpeaking ? 'speaking' : micMuted ? 'muted' : 'listening'); }   // slow first chunk: undo the false alarm
-            // Re-anchor the caption clock to the actual audio start (instead of the
-            // transcript-arrival moment), so the highlighted word tracks the spoken word.
-            if (pendingCapStart && capActive) { capStart = performance.now(); pendingCapStart = false; }
+            // Record the first chunk's arrival (anchor-fallback timer). With audible output the
+            // frame loop anchors to the first SOUND — far more accurate than arrival, which the
+            // SDK's buffer makes precede playback. Only when OUTPUT is muted (no audible signal to
+            // detect) do we anchor on arrival here.
+            if (capActive && pendingCapStart) {
+              if (capFirstChunkAt === 0) capFirstChunkAt = performance.now();
+              if (outputMuted) { capStart = performance.now(); pendingCapStart = false; }
+            }
             if (import.meta.env.DEV) console.log('[guide] agent audio chunk received');
           },
           onAudioAlignment: (al: { chars: string[]; char_start_times_ms: number[]; char_durations_ms: number[] }) => {
@@ -1644,7 +1697,7 @@
             // into a master per-utterance timeline so revealCaption can sync the focus
             // word to the exact spoken character.
             if (!capActive) return;
-            if (pendingCapStart) { capStart = performance.now(); pendingCapStart = false; }
+            // (clock anchoring is handled by the frame loop on first audible output, not here)
             appendAlignment(al.chars, al.char_start_times_ms, al.char_durations_ms);
             if (import.meta.env.DEV && capAlign) console.log('[guide] align chunk +', al.chars.length, 'chars; tl=', capAlign.starts.length, 'lastEnd=', (capAlign.starts[capAlign.starts.length - 1] + capAlign.durs[capAlign.durs.length - 1]).toFixed(0), 'ms');
           },
