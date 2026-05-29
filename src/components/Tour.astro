@@ -176,6 +176,35 @@
     // start suspended (text shows, no voice). Resuming one here in-gesture unlocks
     // page audio so the SDK's context inherits the running state.
     let audioCtx: AudioContext | null = null;
+    // Browsers block audio until a real user gesture. The ElevenLabs SDK builds its OUTPUT
+    // AudioContext deep inside startSession (after awaiting mic permission + the socket) and
+    // only reuses an externally-unlocked context on iOS — so on desktop, if the guide connects
+    // without a prior click (e.g. the mousemove auto-pop below), that context starts 'suspended'
+    // and the agent is silent (the console logs "AudioContext was not allowed to start"). The SDK
+    // exposes no handle to it, so wrap the AudioContext constructor to keep a reference to every
+    // context the page (and the bundled SDK) create, then resume them all on the first gesture.
+    const audioContexts = new Set<AudioContext>();
+    try {
+      const w = window as unknown as Record<string, any>;
+      for (const key of ['AudioContext', 'webkitAudioContext']) {
+        const Native = w[key];
+        if (typeof Native !== 'function' || Native.__guideWrapped) continue;
+        const Wrapped = function (...args: any[]) {
+          const ctx = new Native(...args);
+          try { audioContexts.add(ctx); } catch (_) {}
+          return ctx;
+        };
+        Wrapped.prototype = Native.prototype;
+        (Wrapped as any).__guideWrapped = true;
+        try { Object.setPrototypeOf(Wrapped, Native); } catch (_) {}
+        w[key] = Wrapped;
+      }
+    } catch (_) {}
+    function resumeAllAudio() {
+      for (const ctx of audioContexts) {
+        if (ctx.state === 'suspended') { try { void ctx.resume().catch(() => {}); } catch (_) {} }
+      }
+    }
     function unlockAudio() {
       try {
         const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
@@ -186,6 +215,7 @@
         src.buffer = audioCtx!.createBuffer(1, 1, 22050);
         src.connect(audioCtx!.destination);
         src.start(0);
+        resumeAllAudio();   // also kick any SDK output context that was created suspended
       } catch (_) {}
     }
     type State = 'off' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'muted' | 'paused' | 'qa';
@@ -1811,6 +1841,15 @@
         if (touring && !userPaused && conversation) { cursorFx?.show(); repinOrb(); if (tourStep < 0) runStep(0); else scheduleAdvance(); }
       }, 5000);
     }, true);
+
+    // Audio can only start after a real user gesture. If the guide ever connected without one
+    // (the mousemove auto-pop), the SDK's output context is suspended and the agent is silent —
+    // so resume every captured context on the first genuine interaction, and the voice kicks in
+    // the moment the visitor does anything (e.g. clicking "Take tour"). Capture phase so it runs
+    // before app handlers; left attached so a later reconnect's context is covered too.
+    for (const ev of ['pointerdown', 'touchend', 'keydown', 'click']) {
+      document.addEventListener(ev, resumeAllAudio, { capture: true });
+    }
 
     // Show the dormant orb (desktop only) and snap the canvas orb onto it.
     orb.hidden = false;
