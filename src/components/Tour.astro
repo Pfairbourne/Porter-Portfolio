@@ -123,6 +123,7 @@
     let resumeTimer: number | null = null;
     let advanceTimer: number | null = null;   // advance to the next tour step after a silence
     let expectTimer: number | null = null;     // grace window while the visitor might be asking
+    let stepWatchdog: number | null = null;    // per-step safety net: force the tour forward if a step never advances on its own
     let exploring = false;                      // free-form Q&A mode: slim bar layout, no tour script, agent answers freely
     let exploringGreeted = false;               // sent the opening "tour or question?" directive once this panel-open
     let tourFromExploring = false;              // takeTour was called while already connected → skip the cold-start greeting
@@ -535,6 +536,11 @@
       if (folders[0]) steps.push({ kind: 'move', target: 'icon:' + folders[0].p, dwellMs: 500 });
       return steps;
     }
+    // Appended to every scripted-tour directive. During the walkthrough the system drives
+    // navigation and pacing, so the agent must never turn a stop into a menu: the moment it asks
+    // "which would you like to see?" or "what next?" and waits, the tour reads as stalled. It
+    // narrates the current stop, then stops talking, and the system advances on its own.
+    const NO_ASK = ' Do not ask the visitor anything, do not offer choices, and do not invite them to pick what to see next. Just narrate, then stop talking; the system moves on automatically.';
     // Walks the visitor through the desktop (sign + folder/file rows; no dock — the bar
     // covers it) before runStep(0) opens the Full App Prototype folder.
     async function runDesktopPreamble(fromExploring: boolean): Promise<boolean> {
@@ -544,9 +550,10 @@
       const folderCount = steps.filter((s) => s.kind === 'hover' && (s as { dwellMs?: number }).dwellMs === 1700).length;
       const fileCount = steps.filter((s) => s.kind === 'hover' && (s as { dwellMs?: number }).dwellMs === 600).length;
       const targetSec = Math.max(8, Math.round(folderCount * 2.2 + fileCount * 0.8 + (fromExploring ? 4 : 6)));
-      const directive = fromExploring
+      let directive = fromExploring
         ? `Now narrate as the cursor walks Porter's desktop. Hit these beats in order: the hero sign with his name and role, then the work folders (those are the main thing), then a quicker pass over the small files. You can mention the dock at the bottom has quick links and contact without dwelling on it. Aim for about ${targetSec} seconds total. Speak in groups, not individual names. Then stop and wait.`
         : `Open by saying word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then narrate as the cursor walks Porter's desktop: the hero sign with his name and role, then the work folders (those are the main thing), then a quicker pass over the small files. You can mention the dock at the bottom has quick links and contact without dwelling on it. Aim for about ${targetSec} seconds total. Speak in groups, not individual names. Then stop and wait.`;
+      directive += NO_ASK;
       lastDirective = directive; lastDirectiveAt = Date.now();
       spokeThisStep = false;   // waiting on the agent to start narrating the preamble
       try { conversation.sendUserMessage(directive); } catch (_) {}
@@ -1045,6 +1052,7 @@
     const NO_SPEECH_MS = 9000;
     function clearAdvance() { if (advanceTimer !== null) { clearTimeout(advanceTimer); advanceTimer = null; } }
     function clearExpect() { if (expectTimer !== null) { clearTimeout(expectTimer); expectTimer = null; } }
+    function clearStepWatchdog() { if (stepWatchdog !== null) { clearTimeout(stepWatchdog); stepWatchdog = null; } }
     function scheduleAdvance(delay = SILENCE_MS) {
       clearAdvance();
       if (tourStep < 0) return;   // desktop preamble ("step -1"): the handoff into runStep(0) is explicit (startTourFlow), never auto-advanced — keeps a stray agent question or unclean mode flip from racing OR stranding the tour
@@ -1159,6 +1167,7 @@
       if (i >= TOUR_STEPS.length) { finishTour(); return; }
       navigating = true;
       clearAdvance();
+      clearStepWatchdog();   // drop the previous step's safety-net timer
       try {
         tourStep = i;
         const step = TOUR_STEPS[i];
@@ -1184,6 +1193,7 @@
           ? `The visitor is now looking at ${step.label}. In about 12 to 14 seconds, briefly introduce what this section contains, in groups not individual names. Then stop and wait for the system to advance.`
           : `The visitor is now looking at ${step.label}. ONE short framing sentence (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
         else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
+        directive += NO_ASK;   // scripted tour: never invite questions/choices, the system advances
         lastDirective = directive; lastDirectiveAt = Date.now();   // remember it (and when) so its echo + timing distinguish scripted speech from a Q&A reply
         spokeThisStep = false;   // reset per step: auto-advance waits until the agent actually narrates this one
         try { conversation.sendUserMessage(directive); } catch (_) {}
@@ -1192,13 +1202,28 @@
         const choreography = TOUR_CHOREOGRAPHY[step.path];
         if (choreography && choreography.length > 0) runChoreography(choreography);
         else browseStep();   // scroll through + gesture at the content while it's described
+        // Safety net: if this step never advances on its own (the agent keeps chattering, or asks
+        // the visitor something and lingers without a clean pause, so the silence-based
+        // scheduleAdvance never lands), force the tour forward after a generous per-step cap. The
+        // normal advance fires long before this; the cap only catches a misbehaving agent. Guarded
+        // so it only fires while still on THIS step and the agent actually narrated it. runStep's
+        // own clearAdvance/navigating guards make a same-tick double-advance impossible.
+        const capMs = step.notes ? 80000 : 28000;   // case studies narrate ~45s; intros ~12 to 14s
+        const myStepIdx = i;
+        clearStepWatchdog();
+        stepWatchdog = window.setTimeout(() => {
+          stepWatchdog = null;
+          if (touring && !userPaused && !humanActive && !qaActive && conversation && !navigating && tourStep === myStepIdx && spokeThisStep) {
+            runStep(myStepIdx + 1);
+          }
+        }, capMs);
       } finally {
         navigating = false;
       }
     }
     function finishTour() {
       touring = false; navigating = false; qaActive = false;
-      clearAdvance(); clearExpect(); clearCursorTimers();
+      clearAdvance(); clearExpect(); clearStepWatchdog(); clearCursorTimers();
       hideResume();
       setTourLayout(false);                 // back to the full panel for Q&A
       cursorFx?.hide();
@@ -1242,6 +1267,7 @@
       qaActive = true;
       clearAdvance();                 // kill any pending auto-advance + grace timers
       clearExpect();
+      clearStepWatchdog();            // a real question holds the tour: cancel the force-advance net too
       cursorFx?.hide();               // stand the auto-pilot pointer down; an explicit pointAt re-shows it
       hideResume();                   // hidden until the answer finishes (shown on the next "stopped speaking")
     }
@@ -1563,7 +1589,7 @@
     function bailTourOffline() {
       if (!touring && !exploring) return;
       touring = false; tourMode = false; navigating = false; qaActive = false; exploring = false;
-      clearAdvance(); clearExpect(); clearCursorTimers();
+      clearAdvance(); clearExpect(); clearStepWatchdog(); clearCursorTimers();
       hideResume();
       setTourLayout(false);
       setMsg("The voice guide can't connect right now. You can still explore on your own, or ask me anything by text.");
