@@ -1262,6 +1262,7 @@
         else if (step.intro) directive = hasChoreography
           ? `The visitor is now looking at ${step.label}. In about 7 to 9 seconds, briefly introduce what this section contains, in groups not individual names. Then stop and wait for the system to advance.`
           : `The visitor is now looking at ${step.label}. ONE short framing sentence (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
+        else if (step.path === '/books' || step.path === '/movies') directive = `The visitor is now looking at ${step.label}. This is personal, not product work: in one or two warm, conversational sentences give a quick glimpse of the kind of ${step.path === '/movies' ? 'films' : 'books'} Porter gravitates toward, and you may name one favorite and why. A bit of personality, never a sales pitch and never a long list. Then stop.`;
         else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
         directive += NO_ASK;   // scripted tour: never invite questions/choices, the system advances
         lastDirective = directive; lastDirectiveAt = Date.now();   // remember it (and when) so its echo + timing distinguish scripted speech from a Q&A reply
