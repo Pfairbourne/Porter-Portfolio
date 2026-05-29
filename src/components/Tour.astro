@@ -870,6 +870,7 @@
     let pendingCapStart = false;       // buildCaption ran; waiting for first audio chunk to re-anchor the clock
     let lastWps = 3.7;                 // EMA of actual TTS words/sec — used as the fallback when alignment isn't sent
     let smoothFocusX = Number.NaN;     // visually-smoothed focusX so the rolling translate is always continuous
+    let capPrevFocus = -1;             // index of the word currently lit in the accent colour (only re-paint on change)
     // Visitor-controlled CC toggle. Default off (rolling teleprompter is opt-in); preference
     // persists across sessions in localStorage.
     const CAPTIONS_KEY = 'porter-voice-captions';
@@ -984,6 +985,7 @@
       pendingCapStart = true;                 // re-anchor capStart on the next onAudio
       capAlign = null; capAlignReady = false;   // fresh utterance → fresh char timeline
       smoothFocusX = Number.NaN;              // reset the visual smoothing so it doesn't lerp from the previous line
+      capPrevFocus = -1;                      // new line, new spans → forget the previous highlighted word
       capEstimateMs = Math.max(2000, (capWords.length / lastWps) * 1000);   // EMA-learned TTS pace, self-tunes per utterance
       capActive = capWords.length > 0;
       if (!capActive) { capTrack = null; capSpans = []; msgEl.textContent = ''; return; }
@@ -1054,9 +1056,18 @@
       if (Number.isNaN(smoothFocusX)) smoothFocusX = targetFocusX;
       else smoothFocusX += (targetFocusX - smoothFocusX) * 0.5;
       capTrack.style.transform = `translate3d(${(capViewW / 2 - smoothFocusX).toFixed(1)}px,0,0)`;
-      for (let k = 0; k < capSpans.length; k++) {  // current word pops, neighbours stay legible enough to read ahead
-        const dist = Math.abs(k - fpos);
-        capSpans[k].style.opacity = (dist < 0.5 ? 1 : Math.max(0.65, 0.95 - (dist - 0.5) * 0.15)).toFixed(2);
+      // The spoken word lights up in the accent colour (CSS transitions the colour, so it
+      // crossfades between words); neighbours stay legible so the eye can read a few words ahead
+      // and behind, fading gently to a 0.5 floor. Only colour + opacity change per frame, never
+      // weight, so the row never reflows and the centring math stays valid.
+      const focus = Math.round(fpos);
+      if (focus !== capPrevFocus) {
+        if (capPrevFocus >= 0 && capSpans[capPrevFocus]) capSpans[capPrevFocus].style.color = '';
+        if (capSpans[focus]) capSpans[focus].style.color = 'var(--accent)';
+        capPrevFocus = focus;
+      }
+      for (let k = 0; k < capSpans.length; k++) {
+        capSpans[k].style.opacity = Math.max(0.5, 1 - Math.abs(k - fpos) * 0.16).toFixed(2);
       }
     }
 
@@ -2230,13 +2241,14 @@
      (no Astro scope attr). One clipped, edge-faded row that scrolls so the spoken word
      stays centred; JS sets the row transform + per-word opacity each frame. */
   .guide-cap {
-    display: block; width: 100%; max-width: 100%; overflow: hidden; height: 1.7em; position: relative;
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0, #000 6%, #000 94%, transparent 100%);
+    display: block; width: 100%; max-width: 100%; overflow: hidden; height: 1.8em; position: relative;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 5%, #000 95%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 5%, #000 95%, transparent 100%);
   }
   .guide-cap__track { position: relative; display: inline-block; white-space: nowrap; will-change: transform; }
-  .guide-cap__track > span { color: var(--ink); font-weight: 650; font-size: 17px; letter-spacing: 0.005em; }
+  .guide-cap__track > span { color: var(--ink); font-weight: 650; font-size: 18px; letter-spacing: 0.005em; transition: color 140ms ease; }
   @supports not (font-variation-settings: normal) { .guide-cap__track > span { font-weight: 700; } }
+  @media (prefers-reduced-motion: reduce) { .guide-cap__track > span { transition: none; } }
   /* The agent's highlightProject tool pulses a project card (injected into the modal). */
   .tour-highlight { animation: tour-highlight 2.4s ease; border-radius: var(--radius-card); }
   @keyframes tour-highlight {
