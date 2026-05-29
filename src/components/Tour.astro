@@ -473,8 +473,8 @@
     async function runDesktopPreamble(fromExploring: boolean) {
       if (!touring || !conversation || !voiceEnabled) return;
       const directive = fromExploring
-        ? `Now narrate as the cursor walks Porter's desktop. Hit these beats in order, one short spoken phrase each: the hero sign with his name and role, the three folders that hold his work (full-app-prototype, ai-agents, internal-tools), the three files (résumé, about, now), and the dock at the bottom for quick links and contact. Aim for about 18 seconds total. Don't list every single name; speak in groups. Then stop and wait for the system to advance.`
-        : `Open by saying word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then narrate as the cursor walks Porter's desktop: the hero sign with his name and role, the three folders that hold his work, the three files (résumé, about, now), and the dock at the bottom for quick links and contact. Aim for about 20 seconds total. Don't list every single name; speak in groups. Then stop and wait for the system to advance.`;
+        ? `Now narrate as the cursor walks Porter's desktop. Hit these beats in order: the hero sign with his name and role, then the three folders that hold his work (those are the main thing) — full-app-prototype, ai-agents, internal-tools — then a quick pass over the three files (résumé, about, now). You can mention the dock at the bottom has quick links without dwelling on it. Aim for about 14 seconds total. Speak in groups, not individual names. Then stop and wait.`
+        : `Open by saying word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then narrate as the cursor walks Porter's desktop: the hero sign with his name and role, then the three folders that hold his work (those are the main thing), then a quick pass over the three files (résumé, about, now). You can mention the dock at the bottom has quick links without dwelling on it. Aim for about 16 seconds total. Speak in groups, not individual names. Then stop and wait.`;
       lastDirective = directive; lastDirectiveAt = Date.now();
       try { conversation.sendUserMessage(directive); } catch (_) {}
       // Keep the dock visible just for the preamble so the cursor can sweep its icons.
@@ -1009,13 +1009,20 @@
         if (!touring || userPaused || humanActive || !conversation) return;   // bailed mid-navigation
         repinOrb();                            // float the orb beside the freshly opened window
         let directive: string;
+        const hasChoreography = !!TOUR_CHOREOGRAPHY[step.path]?.length;
         if (i === 0 && !tourFromExploring) {
-          directive = `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then ONE short sentence framing ${step.label} (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
+          directive = hasChoreography
+            ? `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then narrate in about 12 to 14 seconds as the cursor walks ${step.label}: introduce what's here in groups, not individual names. Then stop and wait for the system to advance.`
+            : `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then ONE short sentence framing ${step.label} (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
         } else if (i === 0 && tourFromExploring) {
           tourFromExploring = false;
-          directive = `Tour starting (you already greeted). First stop: ${step.label}. Say ONE short sentence framing it (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
+          directive = hasChoreography
+            ? `Tour starting (you already greeted). First stop: ${step.label}. Narrate in about 12 to 14 seconds as the cursor walks the section: introduce what's here in groups, not individual names. Then stop and wait for the system to advance.`
+            : `Tour starting (you already greeted). First stop: ${step.label}. Say ONE short sentence framing it (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
         } else if (step.notes) directive = `The visitor is now looking at ${step.label}. Sell it using Porter's own talking points, delivered naturally and persuasively as a few short spoken sentences. Do not read them word for word and do not list them. Talking points: ${step.notes} Then stop.`;
-        else if (step.intro) directive = `The visitor is now looking at ${step.label}. ONE short framing sentence (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
+        else if (step.intro) directive = hasChoreography
+          ? `The visitor is now looking at ${step.label}. In about 12 to 14 seconds, briefly introduce what this section contains, in groups not individual names. Then stop and wait for the system to advance.`
+          : `The visitor is now looking at ${step.label}. ONE short framing sentence (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
         else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
         lastDirective = directive; lastDirectiveAt = Date.now();   // remember it (and when) so its echo + timing distinguish scripted speech from a Q&A reply
         try { conversation.sendUserMessage(directive); } catch (_) {}

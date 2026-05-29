@@ -109,7 +109,28 @@ export type ChoreographyStep =
  * an empty record so existing tour steps keep using browseStep; subsequent phases will
  * populate per-page sequences from the spec.
  */
-export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {};
+export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
+  '/projects': [
+    // 1. Land on and sweep the italic description line.
+    { kind: 'move', target: 'selector:.ethos', dwellMs: 700 },
+    { kind: 'underline', target: 'selector:.ethos' },
+    { kind: 'pause', ms: 500 },
+    // 2. Scroll down to bring the project cards into the visible region of the window.
+    { kind: 'scroll', ticks: 2, dir: 'down' },
+    // 3. Walk through the five cards in document order, ~1.4s each.
+    { kind: 'hover', target: 'card:/projects/ember-onboarding-agent', dwellMs: 1400 },
+    { kind: 'hover', target: 'card:/projects/ember-agent-platform', dwellMs: 1400 },
+    { kind: 'scroll', ticks: 2, dir: 'down' },
+    { kind: 'hover', target: 'card:/projects/ember-data-agents', dwellMs: 1400 },
+    { kind: 'hover', target: 'card:/projects/ember-analytics', dwellMs: 1400 },
+    { kind: 'scroll', ticks: 2, dir: 'down' },
+    { kind: 'hover', target: 'card:/projects/ember-workflows', dwellMs: 1400 },
+    { kind: 'pause', ms: 400 },
+    // 4. Scroll back to the top so the auto-advance click on the Onboarding Agent card
+    //    lands on a visible target (the system will fire driveTo + gestureClick next).
+    { kind: 'scroll', ticks: 10, dir: 'up' },
+  ],
+};
 
 /**
  * One-time desktop orientation pass that runs at the start of every tour (before the
@@ -122,26 +143,19 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {};
  */
 export const DESKTOP_PREAMBLE: ChoreographyStep[] = [
   // Opening: land on the name card, sweep the tagline.
-  { kind: 'move', target: 'desktopSelector:.hero-figure__name', dwellMs: 1000 },
+  { kind: 'move', target: 'desktopSelector:.hero-figure__name', dwellMs: 900 },
   { kind: 'underline', target: 'desktopSelector:.hero-figure__tagline' },
-  { kind: 'pause', ms: 500 },
-  // Row 1 folders: full-app-prototype, ai-agents, internal-tools.
-  { kind: 'hover', target: 'icon:/projects', dwellMs: 1400 },
-  { kind: 'hover', target: 'icon:/agents', dwellMs: 1400 },
-  { kind: 'hover', target: 'icon:/fun', dwellMs: 1400 },
-  // Row 2 files: résumé, about, now.
-  { kind: 'hover', target: 'icon:/resume', dwellMs: 1000 },
-  { kind: 'hover', target: 'icon:/about', dwellMs: 1000 },
-  { kind: 'hover', target: 'icon:/now', dwellMs: 1000 },
-  // Dock sweep, left to right.
-  { kind: 'hover', target: 'dock:photos', dwellMs: 700 },
-  { kind: 'hover', target: 'dock:quote', dwellMs: 700 },
-  { kind: 'hover', target: 'dock:reader', dwellMs: 700 },
-  { kind: 'hover', target: 'dock:movies', dwellMs: 700 },
-  { kind: 'hover', target: 'dock:calendar', dwellMs: 700 },
-  { kind: 'hover', target: 'dock:mail', dwellMs: 700 },
-  { kind: 'hover', target: 'dock:linkedin', dwellMs: 700 },
-  { kind: 'hover', target: 'dock:settings', dwellMs: 700 },
+  { kind: 'pause', ms: 400 },
+  // Row 1 folders — the main event. Linger here so the visitor groks the structure.
+  { kind: 'hover', target: 'icon:/projects', dwellMs: 1700 },
+  { kind: 'hover', target: 'icon:/agents', dwellMs: 1700 },
+  { kind: 'hover', target: 'icon:/fun', dwellMs: 1700 },
+  // Row 2 files — quick pass; the visitor doesn't need to dwell on each.
+  { kind: 'hover', target: 'icon:/resume', dwellMs: 600 },
+  { kind: 'hover', target: 'icon:/about', dwellMs: 600 },
+  { kind: 'hover', target: 'icon:/now', dwellMs: 600 },
+  // (Dock intentionally skipped: the guide bar sits right over the dock, so a sweep there
+  // would be visually covered by the bar/orb. The agent mentions it briefly instead.)
   // Settle back on Full App Prototype, ready for runStep(0) to open it.
   { kind: 'move', target: 'icon:/projects', dwellMs: 500 },
 ];
