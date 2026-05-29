@@ -514,7 +514,7 @@
     function buildDesktopPreamble(): ChoreographyStep[] {
       const steps: ChoreographyStep[] = [];
       if (document.querySelector('.hero-figure__name')) {
-        steps.push({ kind: 'move', target: 'desktopSelector:.hero-figure__name', dwellMs: 900 });
+        steps.push({ kind: 'move', target: 'desktopSelector:.hero-figure__name', dwellMs: 650 });
       }
       if (document.querySelector('.hero-figure__tagline')) {
         steps.push({ kind: 'underline', target: 'desktopSelector:.hero-figure__tagline' });
@@ -530,10 +530,10 @@
       };
       folders.sort(docOrder);
       files.sort(docOrder);
-      for (const f of folders) steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 1700 });
-      for (const f of files) steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 600 });
+      for (const f of folders) steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 1050 });
+      for (const f of files) steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 450 });
       // Settle back on the first folder so runStep(0)'s gestureClick lands on a known spot.
-      if (folders[0]) steps.push({ kind: 'move', target: 'icon:' + folders[0].p, dwellMs: 500 });
+      if (folders[0]) steps.push({ kind: 'move', target: 'icon:' + folders[0].p, dwellMs: 350 });
       return steps;
     }
     // Appended to every scripted-tour directive. During the walkthrough the system drives
@@ -547,9 +547,9 @@
       if (!touring || !conversation || !voiceEnabled) return false;
       const steps = buildDesktopPreamble();
       // Count what's actually present so the narration can adapt instead of over-promising.
-      const folderCount = steps.filter((s) => s.kind === 'hover' && (s as { dwellMs?: number }).dwellMs === 1700).length;
-      const fileCount = steps.filter((s) => s.kind === 'hover' && (s as { dwellMs?: number }).dwellMs === 600).length;
-      const targetSec = Math.max(8, Math.round(folderCount * 2.2 + fileCount * 0.8 + (fromExploring ? 4 : 6)));
+      const folderCount = steps.filter((s) => s.kind === 'hover' && (s as { dwellMs?: number }).dwellMs === 1050).length;
+      const fileCount = steps.filter((s) => s.kind === 'hover' && (s as { dwellMs?: number }).dwellMs === 450).length;
+      const targetSec = Math.max(6, Math.round(folderCount * 1.3 + fileCount * 0.5 + (fromExploring ? 2 : 4)));
       let directive = fromExploring
         ? `Now narrate as the cursor walks Porter's desktop. Hit these beats in order: the hero sign with his name and role, then the work folders (those are the main thing), then a quicker pass over the small files. You can mention the dock at the bottom has quick links and contact without dwelling on it. Aim for about ${targetSec} seconds total. Speak in groups, not individual names. Then stop and wait.`
         : `Open by saying word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then narrate as the cursor walks Porter's desktop: the hero sign with his name and role, then the work folders (those are the main thing), then a quicker pass over the small files. You can mention the dock at the bottom has quick links and contact without dwelling on it. Aim for about ${targetSec} seconds total. Speak in groups, not individual names. Then stop and wait.`;
@@ -1174,23 +1174,30 @@
         const prev = i > 0 ? TOUR_STEPS[i - 1] : null;
         await driveTo(step, prev);             // pointer clicks through to the page (or opens it)
         if (!touring || userPaused || humanActive || !conversation) return;   // bailed mid-navigation
+        // Navigation is done and the page is open. Drop the navigating guard NOW: the scripted
+        // cursor walk below is gated by choreographyActive + its own browseToken, not navigating.
+        // runChoreography checks live() (which requires !navigating) synchronously on its first
+        // step, before this function's finally would clear navigating — so leaving it set made
+        // every codified-page choreography no-op instantly (the cursor never moved on those steps;
+        // only the generic browseStep, which sleeps first, slipped through).
+        navigating = false;
         repinOrb();                            // float the orb beside the freshly opened window
         let directive: string;
         const hasChoreography = !!TOUR_CHOREOGRAPHY[step.path]?.length;
         if (i === 0 && !tourFromExploring) {
           directive = hasChoreography
-            ? `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then narrate in about 12 to 14 seconds as the cursor walks ${step.label}: introduce what's here in groups, not individual names. Then stop and wait for the system to advance.`
+            ? `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then narrate in about 7 to 9 seconds as the cursor walks ${step.label}: introduce what's here in groups, not individual names. Then stop and wait for the system to advance.`
             : `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then ONE short sentence framing ${step.label} (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
         } else if (i === 0 && tourFromExploring) {
           tourFromExploring = false;
           directive = hasChoreography
-            ? `Tour starting (you already greeted). First stop: ${step.label}. Narrate in about 12 to 14 seconds as the cursor walks the section: introduce what's here in groups, not individual names. Then stop and wait for the system to advance.`
+            ? `Tour starting (you already greeted). First stop: ${step.label}. Narrate in about 7 to 9 seconds as the cursor walks the section: introduce what's here in groups, not individual names. Then stop and wait for the system to advance.`
             : `Tour starting (you already greeted). First stop: ${step.label}. Say ONE short sentence framing it (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
         } else if (step.notes) directive = hasChoreography
           ? `The visitor is now looking at ${step.label}. Take about 45 seconds to narrate naturally, in flowing spoken sentences, using Porter's own talking points. Pace the narration to cover the structure of a case study: the problem, what was built, why it matters (impact), and the result, in that arc. Do not read the points word for word and do not list them. Talking points: ${step.notes} Then stop and wait.`
           : `The visitor is now looking at ${step.label}. Sell it using Porter's own talking points, delivered naturally and persuasively as a few short spoken sentences. Do not read them word for word and do not list them. Talking points: ${step.notes} Then stop.`;
         else if (step.intro) directive = hasChoreography
-          ? `The visitor is now looking at ${step.label}. In about 12 to 14 seconds, briefly introduce what this section contains, in groups not individual names. Then stop and wait for the system to advance.`
+          ? `The visitor is now looking at ${step.label}. In about 7 to 9 seconds, briefly introduce what this section contains, in groups not individual names. Then stop and wait for the system to advance.`
           : `The visitor is now looking at ${step.label}. ONE short framing sentence (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
         else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
         directive += NO_ASK;   // scripted tour: never invite questions/choices, the system advances

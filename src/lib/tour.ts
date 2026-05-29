@@ -112,20 +112,20 @@ export type ChoreographyStep =
 export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
   '/projects': [
     // 1. Land on and sweep the italic description line.
-    { kind: 'move', target: 'selector:.ethos', dwellMs: 700 },
+    { kind: 'move', target: 'selector:.ethos', dwellMs: 500 },
     { kind: 'underline', target: 'selector:.ethos' },
-    { kind: 'pause', ms: 500 },
+    { kind: 'pause', ms: 250 },
     // 2. Scroll down to bring the project cards into the visible region of the window.
     { kind: 'scroll', ticks: 2, dir: 'down' },
-    // 3. Walk through the five cards in document order, ~1.4s each.
-    { kind: 'hover', target: 'card:/projects/ember-onboarding-agent', dwellMs: 1400 },
-    { kind: 'hover', target: 'card:/projects/ember-agent-platform', dwellMs: 1400 },
+    // 3. Quick pass over the five cards in document order, ~0.8s each (the folder view is brief).
+    { kind: 'hover', target: 'card:/projects/ember-onboarding-agent', dwellMs: 800 },
+    { kind: 'hover', target: 'card:/projects/ember-agent-platform', dwellMs: 800 },
     { kind: 'scroll', ticks: 2, dir: 'down' },
-    { kind: 'hover', target: 'card:/projects/ember-data-agents', dwellMs: 1400 },
-    { kind: 'hover', target: 'card:/projects/ember-analytics', dwellMs: 1400 },
+    { kind: 'hover', target: 'card:/projects/ember-data-agents', dwellMs: 800 },
+    { kind: 'hover', target: 'card:/projects/ember-analytics', dwellMs: 800 },
     { kind: 'scroll', ticks: 2, dir: 'down' },
-    { kind: 'hover', target: 'card:/projects/ember-workflows', dwellMs: 1400 },
-    { kind: 'pause', ms: 400 },
+    { kind: 'hover', target: 'card:/projects/ember-workflows', dwellMs: 800 },
+    { kind: 'pause', ms: 250 },
     // 4. Scroll back to the top so the auto-advance click on the Onboarding Agent card
     //    lands on a visible target (the system will fire driveTo + gestureClick next).
     { kind: 'scroll', ticks: 10, dir: 'up' },
