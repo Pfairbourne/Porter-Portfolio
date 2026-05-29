@@ -1623,6 +1623,7 @@
       0 1px 0 0 rgba(255, 255, 255, 0.6) inset,
       0 4px 14px -4px rgba(22, 21, 19, 0.18);
     display: none;   /* hidden by default; shown only in tour-mode (slim bar) */
+    pointer-events: none;   /* purely a visual case; clicks pass through */
   }
   body.tour-mode .guide-ask__orb { display: block; }
   .guide-ask__mic {
@@ -1709,6 +1710,9 @@
   /* The slim guide bar sits right where the dock lives, and the dock isn't useful while
      the agent is running anyway. Tuck it away the whole time the guide is open. */
   body.tour-active .dock { opacity: 0; pointer-events: none; transition: opacity 240ms ease; }
+  /* When a desktop window is open (a /projects/... page, /about, etc.), the dormant orb at
+     top-right would overlap the window's X close button. Hide it so the X stays reachable. */
+  body:has(#desktop-window:not([hidden])) .guide-orb { opacity: 0; pointer-events: none; transition: opacity 200ms ease; }
   /* The open intro panel takes the hero sign's place, so fade the sign's own name +
      tagline out while the guide is up (restored on close, or when the tour starts). */
   body.tour-active:not(.tour-mode) .hero-figure__name,
