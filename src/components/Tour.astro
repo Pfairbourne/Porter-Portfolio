@@ -625,6 +625,14 @@
       if (t.startsWith('selector:') && body) {
         try { return body.querySelector(t.slice(9)); } catch (_) { return null; }
       }
+      if (t.startsWith('shot:') && body) {
+        // Nth screenshot in document order: the hero .img-frame first, then any inline images in
+        // the case-study body (.prose). 1-indexed (shot:1 = hero). Lets a page's choreography
+        // frame each screenshot the spec calls out, not just the first one.
+        const n = parseInt(t.slice(5), 10) || 1;
+        const shots = Array.from(body.querySelectorAll('.img-frame, .prose img'));
+        return (shots[n - 1] as Element) ?? null;
+      }
       if (t.startsWith('desktopSelector:')) {
         // For elements that live on the desktop itself (hero sign, etc.), not inside a window.
         try { return document.querySelector(t.slice(16)); } catch (_) { return null; }
