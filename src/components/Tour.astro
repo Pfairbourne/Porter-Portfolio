@@ -581,7 +581,7 @@
       // product folders (with their one-line purpose), then the files, then hand off to the App
       // Prototype. The cursor walk hovers each folder/file as it's named.
       const body =
-        `narrate Porter's desktop in exactly this order, conversational, a sentence or two per group and no lists, then stop. Do NOT mention Porter's name or his title. First, his three core product folders here: his Full App Prototype, the app he built for Ember, the startup he co-founded; then his full suite of AI agents, built for a range of purposes and clients; and his personal internal tools, built for his own workflows. Next, the files on the right: his resume, more about him, and what he is currently working on. Finally, in one short line, say that first you'll cover the App Prototype.`;
+        `narrate Porter's desktop in exactly this order, conversational, a sentence or two per group and no lists, then stop. Do NOT mention Porter's name or his title. First, on the left, his three core product folders: his Full App Prototype, the app he built for Ember, the startup he co-founded; then his full suite of AI agents, built for a range of purposes and clients; and his personal internal tools, built for his own workflows. Next, on the right, the files: his resume, more about him, and what he is currently working on. Finally, in one short line, say that first you'll cover the App Prototype.`;
       let directive = fromExploring
         ? `Now ${body}`
         : `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then ${body}`;
