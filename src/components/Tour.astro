@@ -550,15 +550,8 @@
     // Settings CMS, renamed, reordered, or new ones are added — no code edit needed.
     function buildDesktopPreamble(): ChoreographyStep[] {
       const steps: ChoreographyStep[] = [];
-      if (document.querySelector('.hero-figure__name')) {
-        steps.push({ kind: 'move', target: 'desktopSelector:.hero-figure__name', dwellMs: 650 });
-      }
-      if (document.querySelector('.hero-figure__tagline')) {
-        steps.push({ kind: 'underline', target: 'desktopSelector:.hero-figure__tagline' });
-        steps.push({ kind: 'pause', ms: 400 });
-      }
-      // Walk every visible folder first (the main event), then every visible file. Each
-      // bucket honours its document order, so a Tidy-icons rearrangement is preserved.
+      // The narration skips Porter's name and title (per the script), so the cursor does too: go
+      // straight to the folders, no hero-sign sweep.
       const folders = DESKTOP_PREAMBLE_FOLDER_PATHS.map((p) => ({ p, el: iconEl(p) })).filter((x) => !!x.el);
       const files = DESKTOP_PREAMBLE_FILE_PATHS.map((p) => ({ p, el: iconEl(p) })).filter((x) => !!x.el);
       const docOrder = (a: { el: HTMLElement | null }, b: { el: HTMLElement | null }) => {
@@ -567,10 +560,11 @@
       };
       folders.sort(docOrder);
       files.sort(docOrder);
-      for (const f of folders) steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 1050 });
-      for (const f of files) steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 450 });
-      // Settle back on the first folder so runStep(0)'s gestureClick lands on a known spot.
-      if (folders[0]) steps.push({ kind: 'move', target: 'icon:' + folders[0].p, dwellMs: 350 });
+      // Dwell on each folder while the agent describes it (about a sentence each), then a quicker
+      // pass over the files, then settle on the first folder for runStep(0)'s opening click.
+      for (const f of folders) steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 2800 });
+      for (const f of files) steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 1100 });
+      if (folders[0]) steps.push({ kind: 'move', target: 'icon:' + folders[0].p, dwellMs: 400 });
       return steps;
     }
     // Appended to every scripted-tour directive. During the walkthrough the system drives
@@ -583,13 +577,14 @@
     async function runDesktopPreamble(fromExploring: boolean): Promise<boolean> {
       if (!touring || !conversation || !voiceEnabled) return false;
       const steps = buildDesktopPreamble();
-      // Count what's actually present so the narration can adapt instead of over-promising.
-      const folderCount = steps.filter((s) => s.kind === 'hover' && (s as { dwellMs?: number }).dwellMs === 1050).length;
-      const fileCount = steps.filter((s) => s.kind === 'hover' && (s as { dwellMs?: number }).dwellMs === 450).length;
-      const targetSec = Math.max(6, Math.round(folderCount * 1.3 + fileCount * 0.5 + (fromExploring ? 2 : 4)));
+      // Scripted desktop orientation. Do NOT touch Porter's name or title; describe the three
+      // product folders (with their one-line purpose), then the files, then hand off to the App
+      // Prototype. The cursor walk hovers each folder/file as it's named.
+      const body =
+        `narrate Porter's desktop in exactly this order, conversational, a sentence or two per group and no lists, then stop. Do NOT mention Porter's name or his title. First, his three core product folders here: his Full App Prototype, the app he built for Ember, the startup he co-founded; then his full suite of AI agents, built for a range of purposes and clients; and his personal internal tools, built for his own workflows. Next, the files on the right: his resume, more about him, and what he is currently working on. Finally, in one short line, say that first you'll cover the App Prototype.`;
       let directive = fromExploring
-        ? `Now narrate as the cursor walks Porter's desktop. Hit these beats in order: the hero sign with his name and role, then the work folders (those are the main thing), then a quicker pass over the small files. You can mention the dock at the bottom has quick links and contact without dwelling on it. Aim for about ${targetSec} seconds total. Speak in groups, not individual names. Then stop and wait.`
-        : `Open by saying word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then narrate as the cursor walks Porter's desktop: the hero sign with his name and role, then the work folders (those are the main thing), then a quicker pass over the small files. You can mention the dock at the bottom has quick links and contact without dwelling on it. Aim for about ${targetSec} seconds total. Speak in groups, not individual names. Then stop and wait.`;
+        ? `Now ${body}`
+        : `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then ${body}`;
       directive += NO_ASK;
       lastDirective = directive; lastDirectiveAt = Date.now();
       spokeThisStep = false;   // waiting on the agent to start narrating the preamble
@@ -903,6 +898,8 @@
     let capEstimateMs = 3000;
     let capActive = false;
     let pendingCapStart = false;       // buildCaption ran; waiting for first audio chunk to re-anchor the clock
+    let capText = '';                  // current utterance's text, kept even when captions are off so a mid-speech CC toggle can render + sync to it
+    let capCharged = false;            // budget already charged for the current utterance (charge once, when its visible line is first built)
     let lastWps = 3.7;                 // EMA of actual TTS words/sec — used as the fallback when alignment isn't sent
     let smoothFocusX = Number.NaN;     // visually-smoothed focusX so the rolling translate is always continuous
     let capPrevFocus = -1;             // index of the word currently lit in the accent colour (only re-paint on change)
@@ -927,6 +924,7 @@
     let capLastFrame = 0;                 // perf time of the previous frame (for dt)
     let capLastAudible = 0;               // perf time output was last audible
     let capFirstChunkAt = 0;              // perf time the first audio chunk arrived this utterance (anchor-fallback timer)
+    const CAP_TOGGLE_LEAD_MS = 300;       // switching captions on mid-speech places the line slightly AHEAD of the voice, so it reads as leading and the speech settles into it, instead of starting at word 0 and racing to catch up
     // ---- Per-visitor daily character budget ----
     // ElevenLabs charges per TTS character (agent voice output), and there's no login on
     // the site, so cap each browser's daily agent-speech bytes via localStorage. Pre-flight
@@ -1008,34 +1006,48 @@
       if (echoTimer !== null) { clearTimeout(echoTimer); echoTimer = null; }
       echoing = false;
       msgEl.classList.remove('is-echo');
-      // Captions toggled off: skip rendering entirely (the input placeholder stays visible).
-      // Note: we don't bother running the rolling teleprompter or tracking timing if the
-      // visitor can't see it anyway — they'll just hear the agent.
-      if (!captionsEnabled) {
+      capText = text;
+      if (reduceMotion) {
+        // No rolling teleprompter under reduced motion: just show the whole line, and only
+        // when captions are on (otherwise leave the placeholder).
         capActive = false; capTrack = null; capSpans = [];
-        msgEl.textContent = '';
-        if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption');
+        if (captionsEnabled) setMsg(text);
+        else { msgEl.textContent = ''; if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption'); }
         return;
       }
-      if (document.body.classList.contains('tour-mode')) fieldEl.classList.add('has-caption');
-      if (reduceMotion) { setMsg(text); return; }   // no scrolling under reduced-motion: show the line
-      // Charge this utterance against the day's budget. If it tips us over, flag a graceful
-      // shutdown to fire when the agent finishes speaking this message (in onModeChange).
-      if (text && text.length > 0) {
-        const total = chargeBudget(text.length);
-        if (total >= CHAR_BUDGET) budgetLimitReached = true;
-      }
+      // Track every utterance's clock + char timeline even when captions are OFF, so the
+      // visitor can switch captions on mid-speech and the line picks up at the word being
+      // spoken right now (see the captions toggle) instead of restarting from word 0 and then
+      // skipping to the end to catch up. Drawing the row (and charging the budget) is still
+      // gated on captionsEnabled — when off we track silently and render nothing.
       capWords = text.split(/\s+/).filter(Boolean);
-      capStart = performance.now();           // fallback start; onAudio will re-anchor when the first chunk lands
-      pendingCapStart = true;                 // re-anchor capStart on the next onAudio
+      capStart = performance.now();           // fallback start; the frame loop re-anchors to the first audible output
+      pendingCapStart = true;                 // re-anchor capStart on first audible output
       capAlign = null; capAlignReady = false;   // fresh utterance → fresh char timeline
       smoothFocusX = Number.NaN;              // reset the visual smoothing so it doesn't lerp from the previous line
       capPrevFocus = -1;                      // new line, new spans → forget the previous highlighted word
       capLastAudible = performance.now();     // don't trip the stall guard before any audio has played
       capFirstChunkAt = 0;                    // anchor-fallback timer; re-armed by the first audio chunk
       capEstimateMs = Math.max(2000, (capWords.length / lastWps) * 1000);   // EMA-learned TTS pace, self-tunes per utterance
+      capCharged = false;                     // not yet charged this utterance
       capActive = capWords.length > 0;
-      if (!capActive) { capTrack = null; capSpans = []; msgEl.textContent = ''; return; }
+      capTrack = null; capSpans = [];
+      if (!capActive) { msgEl.textContent = ''; if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption'); return; }
+      if (captionsEnabled) renderCaptionDom();
+      else { msgEl.textContent = ''; if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption'); }
+    }
+    // Build (or rebuild) the visible caption row from the current capWords and paint it once.
+    // Split out from buildCaption so the captions toggle can render the in-flight utterance the
+    // instant it's switched on. Charges the day's budget once per utterance, the first time a
+    // visible line is built for it (so toggling captions on mid-speech still meters the speech).
+    function renderCaptionDom() {
+      if (!capActive || !capWords.length) return;
+      if (!capCharged && capText.length > 0) {
+        const total = chargeBudget(capText.length);
+        if (total >= CHAR_BUDGET) budgetLimitReached = true;
+        capCharged = true;
+      }
+      if (document.body.classList.contains('tour-mode')) fieldEl.classList.add('has-caption');
       msgEl.innerHTML = '<span class="guide-cap"><span class="guide-cap__track">'
         + capWords.map((w) => `<span>${escHtml(w)}</span>`).join(' ')
         + '</span></span>';
@@ -2010,10 +2022,22 @@
       try { localStorage.setItem(CAPTIONS_KEY, captionsEnabled ? 'on' : 'off'); } catch (_) {}
       syncCcIcon();
       if (!captionsEnabled) {
-        // Turning off mid-utterance: clear the line so it doesn't sit half-rendered.
-        capActive = false; capTrack = null; capSpans = [];
+        // Turning off mid-utterance: hide the visible line, but keep tracking the clock and
+        // char timeline (capActive stays true) so flipping captions back on still syncs.
+        capTrack = null; capSpans = [];
         msgEl.textContent = '';
         if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption');
+      } else if (agentSpeaking && capActive && capWords.length) {
+        // Turning on mid-speech: draw the in-flight line and land the highlight where the
+        // voice is right now. capStart is already anchored to the audible start, so we nudge
+        // it back a touch to place the line slightly AHEAD of the voice (it reads as leading,
+        // then the speech settles into it) rather than starting at word 0 and racing to catch up.
+        if (reduceMotion) { if (capText) setMsg(capText); }
+        else {
+          if (!pendingCapStart) capStart -= CAP_TOGGLE_LEAD_MS;   // already anchored → give the line a small head start
+          smoothFocusX = Number.NaN; capPrevFocus = -1;           // snap to the live position, don't slide up from a stale transform
+          renderCaptionDom();                                     // builds the row and paints it at the current (led) position
+        }
       }
     });
     syncCcIcon();
