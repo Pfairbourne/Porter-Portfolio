@@ -154,6 +154,7 @@
     let conversation: Conversation | null = null;
     let connecting = false;
     let voiceEnabled = false;
+    let connectDeferred = false;   // guide auto-popped with no user gesture yet: hold the metered connect until the first real interaction
     let micMuted = false;
     let pendingText: string | null = null;
     let outputMuted = false;
@@ -1382,10 +1383,38 @@
     // ---- agent session ----
     async function connectGuide() {
       if (conversation || connecting || userPaused) return;   // never bring the agent up while paused
+      if (connectDeferred) return;   // already waiting on the first real gesture (see the defer block below)
       if (isOverBudget()) {
         // Daily voice-guide budget exhausted for this browser; refuse to mint another
         // metered ElevenLabs session. Leave the panel up so the visitor sees why.
         if (panelOpen) { setState('off'); setMsg(BUDGET_OVER_MSG); }
+        return;
+      }
+      // Don't open the metered ElevenLabs session until the visitor has actually interacted.
+      // Browsers block audio without a user gesture (the agent would be silent and the SDK's
+      // AudioContext logs a warning), and connecting on mouse movement alone (the auto-pop
+      // below) burns the daily character budget on passersby who never engage. If there's been
+      // no genuine activation yet, surface the panel but hold the connect until the first real
+      // gesture, then connect. Gesture-initiated opens (orb/Take tour/mic/typed question) already
+      // have activation, so they connect immediately. Browsers without the userActivation API
+      // fall through and connect as before.
+      const ua = (navigator as any).userActivation as { hasBeenActive?: boolean } | undefined;
+      if (ua && ua.hasBeenActive === false) {
+        connectDeferred = true;
+        const onFirstGesture = () => {
+          document.removeEventListener('pointerdown', onFirstGesture, true);
+          document.removeEventListener('keydown', onFirstGesture, true);
+          document.removeEventListener('touchend', onFirstGesture, true);
+          connectDeferred = false;
+          // Re-enter only if the guide is still open and idle. A gesture-initiated handler
+          // (takeTour sets tourMode, a typed question sets pendingText) may run right after this
+          // in the same gesture; onConnect honours those flags, so we don't get stuck in
+          // exploring mode or double-connect.
+          if (panelOpen && !conversation && !connecting && !userPaused) connectGuide();
+        };
+        document.addEventListener('pointerdown', onFirstGesture, true);
+        document.addEventListener('keydown', onFirstGesture, true);
+        document.addEventListener('touchend', onFirstGesture, true);
         return;
       }
       connecting = true;
