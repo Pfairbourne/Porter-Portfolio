@@ -525,26 +525,55 @@
       finally { document.body.classList.remove('tour-preamble'); }
       return true;
     }
-    // The full tour-start flow: agent-led desktop orientation (DESKTOP_PREAMBLE), then
-    // kicks off runStep(0) which opens the Full App Prototype folder. takeTour and the
-    // tourMode path in onConnect both call this so the preamble fires exactly once per tour.
+    // After the desktop preamble's cursor walk lands, wait for the agent to finish narrating
+    // the orientation before opening the first folder — so the home view isn't cut short — then
+    // resolve. Never hangs: a sustained silence (the agent is done, or asked a stray question
+    // and stopped) resolves it after SILENCE_MS, a no-audio cap covers a voiceless agent, and a
+    // hard cap guarantees the tour proceeds even if the agent rambles or never cleanly stops.
+    function waitForNarrationToSettle(): Promise<void> {
+      return new Promise((resolve) => {
+        const started = Date.now();
+        const HARD_CAP_MS = 20000;     // absolute ceiling from when the cursor walk ended
+        const NO_AUDIO_CAP_MS = 9000;  // agent never produced narration audio → stop waiting and proceed
+        let quietSince = 0;
+        const tick = () => {
+          if (!touring || !conversation || userPaused) { resolve(); return; }
+          const elapsed = Date.now() - started;
+          if (elapsed >= HARD_CAP_MS) { resolve(); return; }
+          if (!spokeThisStep) {
+            if (elapsed >= NO_AUDIO_CAP_MS) { resolve(); return; }   // truly silent agent → don't wait forever
+          } else if (agentSpeaking) {
+            quietSince = 0;                                          // still narrating → reset the settle clock
+          } else {
+            if (quietSince === 0) quietSince = Date.now();
+            if (Date.now() - quietSince >= SILENCE_MS) { resolve(); return; }   // narration has settled → go
+          }
+          window.setTimeout(tick, 120);
+        };
+        tick();
+      });
+    }
+    // The full tour-start flow: agent-led desktop orientation (DESKTOP_PREAMBLE), then opens
+    // runStep(0) (the Full App Prototype folder). takeTour and the tourMode path in onConnect
+    // both call this so the preamble fires exactly once per tour.
     async function startTourFlow() {
       if (!touring) return;
       const fromExploring = tourFromExploring;
       tourFromExploring = true;   // consumed; also suppresses the cold-start greeting line in runStep(0) since we'll have already greeted
-      // Treat the desktop preamble as "step -1": when there's a cursor walk, its
-      // runChoreography finally drives the (agent-gated) advance into runStep(0), so the
-      // home-page narration plays out fully before the folder opens — instead of runStep(0)
-      // firing the instant the cursor walk ends and cutting the orientation short.
+      // Treat the desktop preamble as "step -1" so auto-advance stays suppressed (scheduleAdvance
+      // no-ops while tourStep < 0) — nothing races ahead while the cursor walks the desktop.
       const cursorWalk = !reduceMotion && !!cursorFx;
       if (cursorWalk) tourStep = -1;
       const ran = await runDesktopPreamble(fromExploring);
       if (!touring) return;
-      // When the cursor walk ran, runChoreography's finally drives the agent-gated advance into
-      // runStep(0). Otherwise (reduced motion, no cursor canvas, or the preamble bailed because
-      // the agent wasn't connected) there's no finally to hand off — open step 0 directly. Clear
-      // the "-1" sentinel first so a bailed preamble can't strand the tour before its first step.
-      if (!cursorWalk || !ran) { if (tourStep < 0) tourStep = 0; runStep(0); }
+      // Hand off into the tour EXPLICITLY here — never via the auto-advance machinery. When the
+      // cursor walked the desktop, first let the agent finish narrating the orientation (capped)
+      // so the home view isn't cut short; then open step 0. Driving the handoff here, instead of
+      // leaning on onModeChange/scheduleAdvance, means a stray "what would you like to do next?"
+      // question or an unclean mode transition can't strand the tour after the preamble.
+      if (cursorWalk && ran) await waitForNarrationToSettle();
+      if (!touring) return;
+      runStep(0);   // runStep sets tourStep = 0 itself once it passes its guards
     }
     // ---- Cursor choreography: scripted per-page sequences from tour-guide-cursor-spec.md.
     // When TOUR_CHOREOGRAPHY has an entry for a step's path, runStep calls runChoreography
@@ -988,6 +1017,7 @@
     function clearExpect() { if (expectTimer !== null) { clearTimeout(expectTimer); expectTimer = null; } }
     function scheduleAdvance(delay = SILENCE_MS) {
       clearAdvance();
+      if (tourStep < 0) return;   // desktop preamble ("step -1"): the handoff into runStep(0) is explicit (startTourFlow), never auto-advanced — keeps a stray agent question or unclean mode flip from racing OR stranding the tour
       if (qaActive) return;   // a question is being handled → never auto-advance; resume is explicit
       if (choreographyActive) return;   // wait for the scripted cursor walk to finish before moving on
       if (!touring || userPaused || humanActive || !conversation) return;
@@ -1778,7 +1808,7 @@
         humanActive = false;
         // resume gently: bring the orb back beside whatever the visitor landed on, then
         // re-arm the (delayed) advance — don't immediately yank to the next step.
-        if (touring && !userPaused && conversation) { cursorFx?.show(); repinOrb(); scheduleAdvance(); }
+        if (touring && !userPaused && conversation) { cursorFx?.show(); repinOrb(); if (tourStep < 0) runStep(0); else scheduleAdvance(); }
       }, 5000);
     }, true);
 
