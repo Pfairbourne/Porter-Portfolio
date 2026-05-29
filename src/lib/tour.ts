@@ -165,6 +165,36 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'scroll', ticks: 2, dir: 'down' },
     { kind: 'pause', ms: 1800 },
   ],
+  '/projects/ember-agent-platform': [
+    // 1. INTRO — section label + tagline heading (~4s)
+    { kind: 'move', target: 'selector:.t-label', dwellMs: 900 },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 2500 },
+    // 2. SCROLL to the Agent Store screenshot
+    { kind: 'scroll', ticks: 4, dir: 'down' },
+    // 3. SCREENSHOT — oval frames the whole image, then settle on it (~6s)
+    { kind: 'oval', target: 'selector:.img-frame' },
+    { kind: 'pause', ms: 2200 },
+    // 4. Body sections, ~3s each
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'point', target: 'The problem', dwellMs: 2800 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'point', target: 'What I built', dwellMs: 2800 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'point', target: 'Challenges it solves', dwellMs: 2800 },
+    // 5. "Why it matters" — point at each bold label as the agent reads the impact arc
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'pause', ms: 400 },
+    { kind: 'point', target: 'Ember without the platform', dwellMs: 2800 },
+    { kind: 'point', target: '45-tool registry', dwellMs: 2800 },
+    { kind: 'point', target: 'container pattern', dwellMs: 2800 },
+    { kind: 'point', target: 'Skill versioning', dwellMs: 2800 },
+    // 6. Key metrics
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'point', target: 'Key metrics', dwellMs: 2800 },
+    // 7. "Why this is hard to copy" — closing beat
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'point', target: 'Why this is hard to copy', dwellMs: 2800 },
+  ],
 };
 
 /**
