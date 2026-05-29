@@ -1109,11 +1109,17 @@ body.dock-hidden .dock { display: none; }
 .os--free .wallpaper a,
 .os--free .wallpaper button { pointer-events: auto; }
 
-/* — Icon columns — */
+/* — Icon columns — each nav is a single vertical stack. A fixed row pitch
+   (grid-auto-rows) gives even spacing AND keeps the left folders and right
+   files on identical row lines, so the two columns read as one tidy grid even
+   though file labels are shorter than folder labels. This natural layout is
+   what the icon-position script measures as the reset/home baseline. */
 .icon-column {
   display: grid;
-  grid-template-columns: repeat(3, 112px);
-  gap: var(--s-5) var(--s-6);
+  grid-template-columns: 112px;
+  grid-auto-rows: 156px;
+  align-items: start;
+  justify-items: center;
   align-content: start;
   z-index: 1;
 }

@@ -45,20 +45,21 @@ type IconConfig = {
   brand?: BrandName;
 };
 
-// Left group renders as a 3-column grid: row 1 = the three folders, row 2 =
-// two files. This is the "home" arrangement the Tidy-icons button resets to.
+// Left group: the three folders, stacked in a single vertical column at the
+// left edge. This is the "home" arrangement the Tidy-icons button resets to.
 const leftIcons: IconConfig[] = [
   { id: 'selected-work', href: '/projects', label: 'full-app-prototype', variant: 'folder', brand: 'prototype' },
   { id: 'ai-agents', href: '/agents', label: 'ai-agents', variant: 'folder', brand: 'robot' },
   { id: 'fun-projects', href: '/fun', label: 'internal-tools', variant: 'folder', brand: 'toolbox' },
-  { id: 'resume', href: '/resume', label: 'résumé.pdf', ext: 'pdf', variant: 'file' },
-  { id: 'about', href: '/about', label: 'about.md', ext: 'md', variant: 'file' },
 ];
 
-// Right group. About-this-site (/stack) and the style guide (/style-guide)
-// live in the Help menu instead, so the desktop keeps only the now file.
+// Right group: the three files, stacked in a single vertical column at the
+// right edge, mirroring the left folders. About-this-site (/stack) and the
+// style guide (/style-guide) live in the Help menu instead.
 const rightIcons: IconConfig[] = [
   { id: 'now', href: '/now', label: 'now.txt', ext: 'txt', variant: 'file' },
+  { id: 'resume', href: '/resume', label: 'résumé.pdf', ext: 'pdf', variant: 'file' },
+  { id: 'about', href: '/about', label: 'about.md', ext: 'md', variant: 'file' },
 ];
 
 const MAIL_TO = 'mailto:pfairbourne@gmail.com';

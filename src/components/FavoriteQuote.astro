@@ -91,15 +91,19 @@
     // Fixed landing spots — card CENTRE as a fraction of the viewport. A quote
     // picks a random FREE 'blue' spot; 'red' spots are used only once every blue
     // spot is taken. A spot is locked while a card occupies it (freed on close).
+    //
+    // The first 6 (blue) are the resting positions shown in the reference
+    // layout: two inboard columns of three, mirrored left/right and sitting
+    // just inside the edge folder/file columns (which hug x≈0.13 / 0.87), so
+    // the first six airplanes land in a tidy 3×2 grid that frames the portrait
+    // without covering the desktop icons. 'red' spots over the portrait are the
+    // overflow once all six are occupied.
     type Spot = { x: number; y: number; kind: 'blue' | 'red' };
     const SPOTS: Spot[] = [
-      // LEFT band
-      { x: 0.11, y: 0.55, kind: 'blue' }, { x: 0.27, y: 0.56, kind: 'blue' },
-      { x: 0.11, y: 0.82, kind: 'blue' }, { x: 0.27, y: 0.81, kind: 'blue' },
-      // RIGHT band
-      { x: 0.72, y: 0.35, kind: 'blue' }, { x: 0.88, y: 0.34, kind: 'blue' },
-      { x: 0.72, y: 0.58, kind: 'blue' }, { x: 0.88, y: 0.58, kind: 'blue' },
-      { x: 0.72, y: 0.81, kind: 'blue' }, { x: 0.88, y: 0.81, kind: 'blue' },
+      // LEFT inboard column (top → bottom)
+      { x: 0.26, y: 0.27, kind: 'blue' }, { x: 0.26, y: 0.52, kind: 'blue' }, { x: 0.26, y: 0.77, kind: 'blue' },
+      // RIGHT inboard column (top → bottom)
+      { x: 0.74, y: 0.27, kind: 'blue' }, { x: 0.74, y: 0.52, kind: 'blue' }, { x: 0.74, y: 0.77, kind: 'blue' },
       // CENTRE / over the portrait — RED fallback only
       { x: 0.38, y: 0.15, kind: 'red' }, { x: 0.62, y: 0.14, kind: 'red' },
       { x: 0.40, y: 0.40, kind: 'red' }, { x: 0.59, y: 0.40, kind: 'red' },
@@ -127,6 +131,21 @@
 
     // placement constants (keep cards clear of the menubar + viewport edges)
     const MARGIN = 24, MENUBAR = 54;
+
+    // Blue (inboard) spots anchor to the desktop SURFACE, not the raw viewport.
+    // The surface is max-width 1280 and centred, so on wide monitors a pure
+    // viewport fraction would drift the cards out over the icon columns. Anchoring
+    // to the surface edge keeps a constant GUTTER just inside the icon column at any
+    // width. SURF_PAD mirrors the surface's --s-7 padding; ICON_COL the column width.
+    const SURF_PAD = 48, ICON_COL = 112, GUTTER = 24;
+    const blueCenterX = (side: number): number => {
+      const sr = document.querySelector('.surface')?.getBoundingClientRect();
+      const left = sr ? sr.left : 0;
+      const right = sr ? sr.right : window.innerWidth;
+      return side < 0
+        ? left + SURF_PAD + ICON_COL + GUTTER + W / 2
+        : right - SURF_PAD - ICON_COL - GUTTER - W / 2;
+    };
 
     // The card is sized to the small RESTING sheet (~242px). The plane + crumple
     // ball fly/tumble larger than that, so every flight/crumple scale is multiplied
@@ -260,9 +279,12 @@
       layer!.appendChild(el);
       const r = el.getBoundingClientRect();
       if (r.width) { W = Math.round(r.width); H = Math.round(r.height); }
-      // place the card centred on its spot, clamped to the viewport
+      // place the card centred on its spot, clamped to the viewport. Blue spots
+      // track the surface (so they stay just inside the icon columns at any width);
+      // red fallbacks sit near centre, where the raw viewport fraction is fine.
       const vw = window.innerWidth, vh = window.innerHeight;
-      const left = Math.max(MARGIN, Math.min(vw - W - MARGIN, Math.round(spot.x * vw - W / 2)));
+      const cx = spot.kind === 'blue' ? blueCenterX(dir) : spot.x * vw;
+      const left = Math.max(MARGIN, Math.min(vw - W - MARGIN, Math.round(cx - W / 2)));
       const top = Math.max(MENUBAR + MARGIN, Math.min(vh - H - MARGIN, Math.round(spot.y * vh - H / 2)));
       el.style.left = left + 'px';
       el.style.top = top + 'px';
