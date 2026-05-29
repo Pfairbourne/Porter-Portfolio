@@ -1441,6 +1441,19 @@
         conversation = await Conversation.startSession({
           signedUrl: data.signedUrl,
           clientTools,
+          // The SDK fires onConnect SYNCHRONOUSLY before startSession returns, so the outer
+          // `conversation` (assigned from this await) isn't set yet inside onConnect. That meant
+          // our setMicMuted(true) there was silently skipped (`conversation && ...` was null) and
+          // the agent kept hearing the LIVE mic for the whole session — push-to-talk never actually
+          // turned it off, so ambient/visitor speech interrupted the tour. onConversationCreated
+          // hands us the instance the moment it exists (before onConnect, before any narration):
+          // capture it and mute the mic right now so push-to-talk truly starts OFF. This also lets
+          // onConnect's greet/preamble use `conversation` instead of no-opping on a null.
+          onConversationCreated: (conv) => {
+            conversation = conv;
+            micMuted = true; pttActive = false;
+            try { conv.setMicMuted(true); } catch (_) {}
+          },
           // Inject the sales-guide brain from code. Requires "Overrides" enabled on the
           // agent's Security settings; if the agent rejects it the catch below reconnects
           // without overrides, so the guide still works (using its dashboard prompt).
