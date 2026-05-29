@@ -127,6 +127,13 @@
     let exploring = false;                      // free-form Q&A mode: slim bar layout, no tour script, agent answers freely
     let exploringGreeted = false;               // sent the opening "tour or question?" directive once this panel-open
     let tourFromExploring = false;              // takeTour was called while already connected → skip the cold-start greeting
+    // Whether this browser has already heard the full spoken intro. Persists across sessions
+    // (like the captions/budget prefs) so the guide does the full "Hi, I'm Porter's guide,
+    // tour or question?" greeting only once per visitor; on later opens it gives a short
+    // welcome-back line instead. Bypassable by clearing storage or going incognito, which is fine.
+    const INTRO_KEY = 'porter-intro-heard';
+    let introHeard = false;
+    try { introHeard = localStorage.getItem(INTRO_KEY) === 'yes'; } catch (_) {}
     let qaActive = false;                       // a real question is being handled mid-tour → hold until explicit resume
     let choreographyActive = false;             // scripted cursor sequence is mid-flight; pause auto-advance until it lands
     let spokeThisStep = false;                  // agent has begun speaking since the current step's directive went out (guards auto-advance from running ahead of a silent/slow-to-start agent)
@@ -168,6 +175,7 @@
     const useOverrides = true;
     let allowOverrides = useOverrides;   // cleared for a one-shot retry if the override is rejected
     let overrideRetry = false;
+    let sessionGen = 0;                  // bumped per connect attempt; callbacks check it so a superseded session can't narrate, double-greet, or re-retry
     let audioSeen = false;       // any audio chunk arrived from the agent this session
     let voiceWarned = false;     // surfaced the "no voice from the agent" notice once
     let voiceWatchdog: number | null = null;
@@ -1531,6 +1539,7 @@
         return;
       }
       connecting = true;
+      const myGen = ++sessionGen;   // this attempt's id; a later attempt (retry) bumps it, so this session's callbacks no-op
       audioSeen = false; voiceWarned = false;
       unlockAudio();   // resume audio within the gesture, before we await the signed URL
       setState('connecting');
@@ -1555,16 +1564,18 @@
           // capture it and mute the mic right now so push-to-talk truly starts OFF. This also lets
           // onConnect's greet/preamble use `conversation` instead of no-opping on a null.
           onConversationCreated: (conv) => {
+            try { conv.setMicMuted(true); } catch (_) {}   // mute this session's mic no matter what
+            if (sessionGen !== myGen) { try { conv.endSession(); } catch (_) {} return; }   // a newer attempt superseded this one → drop it
             conversation = conv;
             micMuted = true; pttActive = false;
             setMicTracksEnabled(false);   // raw track gate off too (closes the pre-mute window)
-            try { conv.setMicMuted(true); } catch (_) {}
           },
           // Inject the sales-guide brain from code. Requires "Overrides" enabled on the
           // agent's Security settings; if the agent rejects it the catch below reconnects
           // without overrides, so the guide still works (using its dashboard prompt).
           ...(allowOverrides ? { overrides: { agent: { prompt: { prompt: TOUR_GUIDE_PROMPT } } } } : {}),
           onConnect: () => {
+            if (sessionGen !== myGen) return;   // superseded by a newer attempt → ignore
             connecting = false; voiceEnabled = true;
             if (userPaused) return;   // paused mid-connect: the post-await guard tears it down
             // Push-to-talk: start muted so ambient noise doesn't trigger the agent. The
@@ -1575,6 +1586,13 @@
             setState('muted');
             armIdle();
             try { conversation && conversation.setVolume({ volume: outputMuted ? 0 : 1 }); } catch (_) {}
+            // Defer the first narration a beat: if the prompt override is rejected the socket
+            // disconnects almost immediately, and we want THIS doomed session torn down before it
+            // ever speaks — otherwise it narrates, the retry session narrates again, and the
+            // visitor hears two overlapping voices. Cancelled if the session is superseded (a retry
+            // bumped the gen) or torn down before it fires.
+            window.setTimeout(() => {
+              if (sessionGen !== myGen || !conversation || userPaused) return;
             if (tourMode) {
               // Agent-led tour: the client now drives the page-by-page walkthrough,
               // starting with the desktop preamble and then opening /projects.
@@ -1584,12 +1602,22 @@
               // flush a queued question now that the socket is open (typed before connect)
               try { conversation && conversation.sendUserMessage(pendingText); } catch (_) {} pendingText = null;
             } else if (exploring && !exploringGreeted) {
-              // First connect of an exploring session: agent greets and offers the tour vocally.
+              // First connect of an exploring session: agent greets vocally. The very first time
+              // this browser ever opens the guide it gets the full intro + tour offer; after that
+              // it gets a short welcome-back line, so the full intro plays only once per visitor.
               exploringGreeted = true;
-              const opener = `Say ONE short greeting sentence and ask whether they would like a quick guided tour of Porter's work, or if they have a specific question. Then STOP and wait for their answer. Do NOT navigate anywhere. Do NOT call any tool yet. Do NOT start describing Porter or any page. Just greet and ask the choice. If they later accept the tour (yes, sure, please, take me through it, etc.), call the startTour tool. If they ask a question, answer it directly using your tools.`;
+              let opener: string;
+              if (introHeard) {
+                opener = `The visitor has used this guide before, so do NOT re-introduce yourself and do NOT explain or pitch the tour. Say ONE short, warm welcome-back line, for example "Welcome back, what can I help with?". Then STOP and wait for their answer. Do NOT navigate anywhere and do NOT call any tool yet. If they accept a tour (yes, sure, please, take me through it, etc.), call the startTour tool. If they ask a question, answer it directly using your tools.`;
+              } else {
+                opener = `Say ONE short greeting sentence and ask whether they would like a quick guided tour of Porter's work, or if they have a specific question. Then STOP and wait for their answer. Do NOT navigate anywhere. Do NOT call any tool yet. Do NOT start describing Porter or any page. Just greet and ask the choice. If they later accept the tour (yes, sure, please, take me through it, etc.), call the startTour tool. If they ask a question, answer it directly using your tools.`;
+                introHeard = true;
+                try { localStorage.setItem(INTRO_KEY, 'yes'); } catch (_) {}
+              }
               lastDirective = opener; lastDirectiveAt = Date.now();
               try { conversation && conversation.sendUserMessage(opener); } catch (_) {}
             }
+            }, 500);
           },
           onModeChange: ({ mode }) => {
             if (userPaused) return;   // ignore agent activity while the visitor has it paused
@@ -1703,6 +1731,7 @@
           },
           onError: (m) => { console.warn('[guide] agent error:', m); },
           onDisconnect: (d) => {
+            if (sessionGen !== myGen) return;   // a superseded session's disconnect → ignore (don't clobber the live one or double-retry)
             conversation = null; voiceEnabled = false; connecting = false; agentSpeaking = false;
             if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
             if (panelOpen) {
@@ -1726,7 +1755,9 @@
         // straight back down so the ElevenLabs agent + mic never linger in the background.
         if (!panelOpen || userPaused || document.hidden) { endSession(); return; }
       } catch (e) {
-        connecting = false; conversation = null; voiceEnabled = false;
+        connecting = false;
+        if (conversation) { try { conversation.endSession(); } catch (_) {} }   // tear down a half-open session before any retry so its audio can't linger
+        conversation = null; voiceEnabled = false;
         const msg = e instanceof Error ? e.name + ': ' + e.message : String(e);
         const micBlocked = /not\s*allowed|permission|denied/i.test(msg);   // VoiceConversation needs the mic
         if (allowOverrides && !overrideRetry && !micBlocked) {
