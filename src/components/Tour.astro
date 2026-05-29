@@ -128,6 +128,7 @@
     let tourFromExploring = false;              // takeTour was called while already connected → skip the cold-start greeting
     let qaActive = false;                       // a real question is being handled mid-tour → hold until explicit resume
     let choreographyActive = false;             // scripted cursor sequence is mid-flight; pause auto-advance until it lands
+    let spokeThisStep = false;                  // agent has begun speaking since the current step's directive went out (guards auto-advance from running ahead of a silent/slow-to-start agent)
     // Push-to-talk: mic is muted by default; visitor taps the mic to speak, mic auto-mutes
     // after a short tail of silence. Stops background noise + ambient talking from tripping
     // the agent every time someone in the room speaks.
@@ -506,8 +507,8 @@
     }
     // Walks the visitor through the desktop (sign + folder/file rows; no dock — the bar
     // covers it) before runStep(0) opens the Full App Prototype folder.
-    async function runDesktopPreamble(fromExploring: boolean) {
-      if (!touring || !conversation || !voiceEnabled) return;
+    async function runDesktopPreamble(fromExploring: boolean): Promise<boolean> {
+      if (!touring || !conversation || !voiceEnabled) return false;
       const steps = buildDesktopPreamble();
       // Count what's actually present so the narration can adapt instead of over-promising.
       const folderCount = steps.filter((s) => s.kind === 'hover' && (s as { dwellMs?: number }).dwellMs === 1700).length;
@@ -517,10 +518,12 @@
         ? `Now narrate as the cursor walks Porter's desktop. Hit these beats in order: the hero sign with his name and role, then the work folders (those are the main thing), then a quicker pass over the small files. You can mention the dock at the bottom has quick links and contact without dwelling on it. Aim for about ${targetSec} seconds total. Speak in groups, not individual names. Then stop and wait.`
         : `Open by saying word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then narrate as the cursor walks Porter's desktop: the hero sign with his name and role, then the work folders (those are the main thing), then a quicker pass over the small files. You can mention the dock at the bottom has quick links and contact without dwelling on it. Aim for about ${targetSec} seconds total. Speak in groups, not individual names. Then stop and wait.`;
       lastDirective = directive; lastDirectiveAt = Date.now();
+      spokeThisStep = false;   // waiting on the agent to start narrating the preamble
       try { conversation.sendUserMessage(directive); } catch (_) {}
       document.body.classList.add('tour-preamble');
       try { await runChoreography(steps); }
       finally { document.body.classList.remove('tour-preamble'); }
+      return true;
     }
     // The full tour-start flow: agent-led desktop orientation (DESKTOP_PREAMBLE), then
     // kicks off runStep(0) which opens the Full App Prototype folder. takeTour and the
@@ -529,8 +532,19 @@
       if (!touring) return;
       const fromExploring = tourFromExploring;
       tourFromExploring = true;   // consumed; also suppresses the cold-start greeting line in runStep(0) since we'll have already greeted
-      await runDesktopPreamble(fromExploring);
-      if (touring) runStep(0);
+      // Treat the desktop preamble as "step -1": when there's a cursor walk, its
+      // runChoreography finally drives the (agent-gated) advance into runStep(0), so the
+      // home-page narration plays out fully before the folder opens — instead of runStep(0)
+      // firing the instant the cursor walk ends and cutting the orientation short.
+      const cursorWalk = !reduceMotion && !!cursorFx;
+      if (cursorWalk) tourStep = -1;
+      const ran = await runDesktopPreamble(fromExploring);
+      if (!touring) return;
+      // When the cursor walk ran, runChoreography's finally drives the agent-gated advance into
+      // runStep(0). Otherwise (reduced motion, no cursor canvas, or the preamble bailed because
+      // the agent wasn't connected) there's no finally to hand off — open step 0 directly. Clear
+      // the "-1" sentinel first so a bailed preamble can't strand the tour before its first step.
+      if (!cursorWalk || !ran) { if (tourStep < 0) tourStep = 0; runStep(0); }
     }
     // ---- Cursor choreography: scripted per-page sequences from tour-guide-cursor-spec.md.
     // When TOUR_CHOREOGRAPHY has an entry for a step's path, runStep calls runChoreography
@@ -681,9 +695,23 @@
       }
       } finally {
         choreographyActive = false;
-        // If the agent already stopped while we were still walking, kick off the next step now.
-        if (touring && !qaActive && !agentSpeaking && tourStep === myStep && token === browseToken) {
-          scheduleAdvance();
+        // Decide what to do now that the scripted cursor walk has landed. The key fix:
+        // only auto-advance if the agent ACTUALLY narrated this step. Without this guard a
+        // short choreography that finishes before the agent's first utterance arrives would
+        // fire scheduleAdvance → runStep(next) → a fresh directive that preempts the agent
+        // before it ever spoke, cascading through the whole tour in silence (the speed-run).
+        if (touring && !qaActive && tourStep === myStep && token === browseToken) {
+          if (spokeThisStep) {
+            // Agent already narrated. If it's still talking, onModeChange's non-speaking
+            // branch will advance when it stops; if it's done, advance now.
+            if (!agentSpeaking) scheduleAdvance();
+          } else if (!agentSpeaking) {
+            // Agent hasn't started yet — wait for it rather than racing ahead. The generous
+            // fallback only fires if the agent stays silent (onModeChange clears it the moment
+            // speech begins), so a slow first utterance isn't cut off and a voiceless agent
+            // still inches forward instead of stalling.
+            scheduleAdvance(NO_SPEECH_MS);
+          }
         }
       }
     }
@@ -950,9 +978,15 @@
     // narration. A short silence advances; a spoken interruption pauses it; once the
     // interruption is answered it resumes; reaching the last step ends the tour.
     const SILENCE_MS = 3000;
+    // Fallback wait when the cursor walk finishes but the agent never started narrating this
+    // step (slow first-utterance TTS, a dropped directive, or a voiceless agent config). Long
+    // enough that a slow-to-start agent isn't cut off, short enough that a truly silent tour
+    // still creeps forward at a calm, readable pace instead of stalling. If the agent does
+    // start speaking, onModeChange clears this timer — so it only ever fires on real silence.
+    const NO_SPEECH_MS = 9000;
     function clearAdvance() { if (advanceTimer !== null) { clearTimeout(advanceTimer); advanceTimer = null; } }
     function clearExpect() { if (expectTimer !== null) { clearTimeout(expectTimer); expectTimer = null; } }
-    function scheduleAdvance() {
+    function scheduleAdvance(delay = SILENCE_MS) {
       clearAdvance();
       if (qaActive) return;   // a question is being handled → never auto-advance; resume is explicit
       if (choreographyActive) return;   // wait for the scripted cursor walk to finish before moving on
@@ -960,7 +994,7 @@
       advanceTimer = window.setTimeout(() => {
         advanceTimer = null;
         if (touring && !userPaused && conversation && !agentSpeaking) runStep(tourStep + 1);
-      }, SILENCE_MS);
+      }, delay);
     }
     // ---- cursor auto-pilot: the guide's pointer clicks its way through the site ----
     function windowOpen(): boolean {
@@ -1091,6 +1125,7 @@
           : `The visitor is now looking at ${step.label}. ONE short framing sentence (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
         else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
         lastDirective = directive; lastDirectiveAt = Date.now();   // remember it (and when) so its echo + timing distinguish scripted speech from a Q&A reply
+        spokeThisStep = false;   // reset per step: auto-advance waits until the agent actually narrates this one
         try { conversation.sendUserMessage(directive); } catch (_) {}
         // Prefer the per-page choreography from the spec; fall back to the generic
         // auto-picker for pages we haven't codified yet.
@@ -1317,7 +1352,12 @@
               // treat as Q&A if the agent starts speaking long after our directive landed,
               // since scripted speech normally starts within a few seconds of the directive.
               const recentUserSpeech = userSpokeAt > lastDirectiveAt && Date.now() - userSpokeAt < 8000;
-              const lateAgentSpeech = lastDirectiveAt > 0 && Date.now() - lastDirectiveAt > 6000;
+              // Only treat a late agent reply as a question if the mic was actually open for the
+              // visitor to interrupt. With push-to-talk the mic is muted during scripted
+              // narration, so a slow first utterance (cold-start TTS warmup, which routinely
+              // exceeds 6s) is just the agent starting late — not a Q&A — and must not hold the
+              // tour. Typed questions enter Q&A directly via onMessage, so nothing is lost.
+              const lateAgentSpeech = !micMuted && lastDirectiveAt > 0 && Date.now() - lastDirectiveAt > 6000;
               if (touring && !qaActive && (recentUserSpeech || lateAgentSpeech)) enterQa();
               clearAdvance(); clearExpect();   // agent talking → cancel pending advance + interruption grace
               holdForAgent(); agentSpeaking = true; startLoop(); if (!micMuted) setState('speaking');
@@ -1351,7 +1391,10 @@
                 return;
               }
               if (qaActive) showResume();                    // answered a question → wait, surface Resume, never auto-advance
-              else if (expectTimer === null) scheduleAdvance();   // don't advance while waiting on a question
+              // Advance at the normal pace only if the agent actually narrated (audio landed).
+              // A "speaking" turn that produced no audio (voiceless/text-only config) waits the
+              // longer no-speech window instead of racing ahead at the 3s silence cadence.
+              else if (expectTimer === null) scheduleAdvance(spokeThisStep ? SILENCE_MS : NO_SPEECH_MS);
             }
           },
           onMessage: ({ message, role }) => {
@@ -1386,6 +1429,7 @@
           },
           onAudio: () => {
             audioSeen = true;
+            spokeThisStep = true;   // real narration audio landed → this step may auto-advance once the agent stops
             armIdle();
             if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
             if (voiceWarned) { voiceWarned = false; setState(agentSpeaking ? 'speaking' : micMuted ? 'muted' : 'listening'); }   // slow first chunk: undo the false alarm
