@@ -40,6 +40,13 @@
         <line class="guide-sound-slash" x1="11.3" y1="5" x2="16.2" y2="13.2" />
       </svg>
     </button>
+    <button class="guide-panel__captions" type="button" data-guide-captions aria-label="Turn captions on">
+      <svg viewBox="0 0 18 14" width="18" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="1" y="1" width="16" height="12" rx="3" />
+        <path d="M6.6 5.5 Q5.1 5.5 5.1 7 Q5.1 8.5 6.6 8.5" />
+        <path d="M11.6 5.5 Q10.1 5.5 10.1 7 Q10.1 8.5 11.6 8.5" />
+      </svg>
+    </button>
     <button class="guide-panel__fullscreen" type="button" data-guide-fullscreen aria-label="Enter fullscreen">
       <svg class="guide-fs-enter" viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M2 5V2h3" /><path d="M9 2h3v3" /><path d="M12 9v3h-3" /><path d="M5 12H2V9" />
@@ -105,6 +112,7 @@
     const resumeBtn = panel.querySelector('[data-guide-resume]') as HTMLButtonElement;
     const orbSlot = panel.querySelector('[data-guide-orb-slot]') as HTMLElement;
     const fsBtn = panel.querySelector('[data-guide-fullscreen]') as HTMLButtonElement;
+    const ccBtn = panel.querySelector('[data-guide-captions]') as HTMLButtonElement;
     const msgHome = msgEl.parentElement as HTMLElement;   // .guide-panel__body — where the caption lives outside the tour
 
     const desktop = () => (window as any).desktopOS as { open: (p: string) => void; close: () => void } | undefined;
@@ -731,6 +739,11 @@
     let pendingCapStart = false;       // buildCaption ran; waiting for first audio chunk to re-anchor the clock
     let lastWps = 3.7;                 // EMA of actual TTS words/sec — used as the fallback when alignment isn't sent
     let smoothFocusX = Number.NaN;     // visually-smoothed focusX so the rolling translate is always continuous
+    // Visitor-controlled CC toggle. Default off (rolling teleprompter is opt-in); preference
+    // persists across sessions in localStorage.
+    const CAPTIONS_KEY = 'porter-voice-captions';
+    let captionsEnabled = false;
+    try { captionsEnabled = localStorage.getItem(CAPTIONS_KEY) === 'on'; } catch (_) {}
     // Character-level audio timeline from ElevenLabs's onAudioAlignment (per-utterance,
     // accumulated across audio chunks). When present, revealCaption uses this directly
     // and the highlighted word tracks the spoken word exactly; absent, we fall back to
@@ -818,6 +831,15 @@
       if (echoTimer !== null) { clearTimeout(echoTimer); echoTimer = null; }
       echoing = false;
       msgEl.classList.remove('is-echo');
+      // Captions toggled off: skip rendering entirely (the input placeholder stays visible).
+      // Note: we don't bother running the rolling teleprompter or tracking timing if the
+      // visitor can't see it anyway — they'll just hear the agent.
+      if (!captionsEnabled) {
+        capActive = false; capTrack = null; capSpans = [];
+        msgEl.textContent = '';
+        if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption');
+        return;
+      }
       if (document.body.classList.contains('tour-mode')) fieldEl.classList.add('has-caption');
       if (reduceMotion) { setMsg(text); return; }   // no scrolling under reduced-motion: show the line
       // Charge this utterance against the day's budget. If it tips us over, flag a graceful
@@ -899,7 +921,7 @@
       // less distance per second than long ones). Tiny time constant (~50ms at 60fps)
       // keeps perceived sync tight while killing the micro-jitter at word boundaries.
       if (Number.isNaN(smoothFocusX)) smoothFocusX = targetFocusX;
-      else smoothFocusX += (targetFocusX - smoothFocusX) * 0.35;
+      else smoothFocusX += (targetFocusX - smoothFocusX) * 0.5;
       capTrack.style.transform = `translate3d(${(capViewW / 2 - smoothFocusX).toFixed(1)}px,0,0)`;
       for (let k = 0; k < capSpans.length; k++) {  // current word pops, neighbours stay legible enough to read ahead
         const dist = Math.abs(k - fpos);
@@ -1645,6 +1667,23 @@
     document.addEventListener('fullscreenchange', syncFsIcon);
     document.addEventListener('webkitfullscreenchange' as any, syncFsIcon);
     syncFsIcon();
+    // Captions toggle (visitor-controlled, default off, persisted in localStorage).
+    function syncCcIcon() {
+      ccBtn.classList.toggle('is-on', captionsEnabled);
+      ccBtn.setAttribute('aria-label', captionsEnabled ? 'Turn captions off' : 'Turn captions on');
+    }
+    ccBtn.addEventListener('click', () => {
+      captionsEnabled = !captionsEnabled;
+      try { localStorage.setItem(CAPTIONS_KEY, captionsEnabled ? 'on' : 'off'); } catch (_) {}
+      syncCcIcon();
+      if (!captionsEnabled) {
+        // Turning off mid-utterance: clear the line so it doesn't sit half-rendered.
+        capActive = false; capTrack = null; capSpans = [];
+        msgEl.textContent = '';
+        if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption');
+      }
+    });
+    syncCcIcon();
     // Hard stop the agent + mic if the page is unloaded with a session live.
     window.addEventListener('pagehide', () => endSession());
     // Tab backgrounded / app minimised → end the metered session + mic shortly after
@@ -1905,6 +1944,7 @@
   body.tour-mode .guide-panel__head { min-height: 0; justify-content: flex-end; gap: 8px; padding-right: 4px; }
   body.tour-mode .guide-panel__close { width: 20px; height: 20px; }
   body.tour-mode .guide-panel__fullscreen { width: 20px; height: 20px; }
+  body.tour-mode .guide-panel__captions { width: 22px; height: 18px; }
   body.tour-mode .guide-ask { border-top: none; padding-top: 0; gap: 14px; }
   /* Fullscreen toggle button: only one of the two icons shows at a time. */
   .guide-panel__fullscreen {
@@ -1917,6 +1957,15 @@
   .guide-fs-exit { display: none; }
   .guide-panel__fullscreen.is-fullscreen .guide-fs-enter { display: none; }
   .guide-panel__fullscreen.is-fullscreen .guide-fs-exit { display: inline; }
+  /* Captions toggle (CC icon). Outlined when off, accent-coloured when on. */
+  .guide-panel__captions {
+    flex-shrink: 0; padding: 0; border: 0; background: none; color: var(--ink-2); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: color 160ms ease, opacity 160ms ease;
+    opacity: 0.7;
+  }
+  .guide-panel__captions:hover, .guide-panel__captions:focus-visible { outline: none; color: var(--accent); opacity: 1; }
+  .guide-panel__captions.is-on { color: var(--accent); opacity: 1; }
 
   /* the caption, moved over the input, rolls as one thin line */
   .guide-msg--inline {
