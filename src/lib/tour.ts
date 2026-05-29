@@ -80,6 +80,37 @@ export interface TourStep {
   notes?: string;
 }
 
+/**
+ * Per-page cursor choreography. When present for a step's path, runStep runs this
+ * sequence instead of the generic browseStep auto-picker.
+ *
+ * Targets are resolved by:
+ *   - "icon:/projects"   → desktop folder icon (anchor by href)
+ *   - "card:/projects/..." → listing card inside an open folder (the card container)
+ *   - "selector:.foo"     → CSS selector inside the desktop window body
+ *   - "close"             → the desktop window's X close button
+ *   - "next:Label"        → bottom-nav "next" link whose label/path contains Label
+ *   - anything else       → text search across h1/h2/h3, strong, .project-card, etc.
+ */
+export type ChoreographyStep =
+  | { kind: 'pause'; ms: number }
+  | { kind: 'scroll'; ticks: number; dir: 'up' | 'down' }
+  | { kind: 'move'; target: string; dwellMs?: number }
+  | { kind: 'hover'; target: string; dwellMs?: number }
+  | { kind: 'point'; target: string; dwellMs?: number }
+  | { kind: 'click'; target: string }
+  | { kind: 'circle'; target: string; radius?: number; loops?: number }
+  | { kind: 'oval'; target: string }
+  | { kind: 'underline'; target: string; passes?: number }
+  | { kind: 'glide'; targets: string[]; pxPerSec?: number };
+
+/**
+ * Codified cursor choreography, keyed by step.path. Phase A ships the framework with
+ * an empty record so existing tour steps keep using browseStep; subsequent phases will
+ * populate per-page sequences from the spec.
+ */
+export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {};
+
 export const TOUR_STEPS: TourStep[] = [
   { path: '/projects', label: "Porter's full app prototype, his flagship product work", intro: true },
   {

@@ -80,7 +80,7 @@
 
 <script>
   import { Conversation } from '@elevenlabs/client';
-  import { TOUR_GUIDE_PROMPT, TOUR_STEPS } from '../lib/tour';
+  import { TOUR_GUIDE_PROMPT, TOUR_STEPS, TOUR_CHOREOGRAPHY, type ChoreographyStep } from '../lib/tour';
   import { GuideOrb, type OrbState } from '../lib/guide-orb';
   import { GuideCursor } from '../lib/guide-cursor';
 
@@ -466,6 +466,143 @@
         await sleep(500);
       }
     }
+    // ---- Cursor choreography: scripted per-page sequences from tour-guide-cursor-spec.md.
+    // When TOUR_CHOREOGRAPHY has an entry for a step's path, runStep calls runChoreography
+    // instead of the generic browseStep auto-picker.
+    function resolveChoreographyTarget(t: string): Element | null {
+      if (!t) return null;
+      const body = document.getElementById('desktop-window-body');
+      if (t === 'close') return closeBtnEl();
+      if (t.startsWith('icon:')) return iconEl(t.slice(5));
+      if (t.startsWith('card:')) return cardEl(t.slice(5));
+      if (t.startsWith('selector:') && body) {
+        try { return body.querySelector(t.slice(9)); } catch (_) { return null; }
+      }
+      if (t.startsWith('next:')) {
+        if (!body) return null;
+        const label = t.slice(5).trim().toLowerCase();
+        const cands = Array.from(body.querySelectorAll('.case-nav a, a[href^="/projects/"], a[href^="/agents/"]'));
+        for (const el of cands) {
+          const txt = (el.textContent || '').trim().toLowerCase();
+          if (txt.includes(label)) return el;
+        }
+        return null;
+      }
+      // Default: text search across plausible body elements.
+      return resolvePointTarget({ text: t });
+    }
+    function centerOf(el: Element): { x: number; y: number } {
+      const r = (el as HTMLElement).getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    async function runChoreography(steps: ChoreographyStep[]) {
+      if (reduceMotion || !cursorFx || !touring) return;
+      const myStep = tourStep;
+      const token = ++browseToken;
+      const live = () => touring && !navigating && !humanActive && !qaActive && tourStep === myStep && token === browseToken;
+      const body = bodyEl();
+      for (const step of steps) {
+        if (!live()) return;
+        switch (step.kind) {
+          case 'pause': {
+            await sleep(step.ms);
+            break;
+          }
+          case 'scroll': {
+            if (!body) break;
+            const tickPx = body.clientHeight * 0.20;
+            const max = Math.max(0, body.scrollHeight - body.clientHeight);
+            const target = Math.max(0, Math.min(max, body.scrollTop + step.ticks * tickPx * (step.dir === 'up' ? -1 : 1)));
+            await smoothScrollTo(body, target, 800);
+            break;
+          }
+          case 'move':
+          case 'hover':
+          case 'point': {
+            const el = resolveChoreographyTarget(step.target);
+            if (!el) break;
+            await centerInBody(el);
+            if (!live()) return;
+            moveCursorToEl(el);
+            pulseEl(el);
+            await sleep(step.dwellMs ?? (step.kind === 'hover' ? 1100 : 1200));
+            break;
+          }
+          case 'click': {
+            const el = resolveChoreographyTarget(step.target);
+            if (!el) break;
+            await gestureClick(el as HTMLElement, () => {
+              // Real navigation: clicking a link fires its href; the close button calls close.
+              if ((el as HTMLElement).matches('[data-guide-close], .window__close')) { desktop()?.close(); return; }
+              const a = (el as HTMLAnchorElement).closest('a');
+              if (a && a.href) {
+                // Pull the path from the link and route through the desktop API.
+                try { const u = new URL(a.href); desktop()?.open(u.pathname); return; } catch (_) {}
+              }
+              (el as HTMLElement).click();
+            });
+            break;
+          }
+          case 'circle': {
+            const el = resolveChoreographyTarget(step.target);
+            if (!el) break;
+            await centerInBody(el);
+            if (!live()) return;
+            const c = centerOf(el);
+            const r = (el as HTMLElement).getBoundingClientRect();
+            const radius = step.radius ?? Math.max(40, Math.min(r.width, r.height) / 4);
+            await cursorFx.traceLoop(c.x, c.y, radius, step.loops ?? 1);
+            break;
+          }
+          case 'oval': {
+            const el = resolveChoreographyTarget(step.target);
+            if (!el) break;
+            await centerInBody(el);
+            if (!live()) return;
+            const r = (el as HTMLElement).getBoundingClientRect();
+            const cx = r.left + r.width / 2;
+            const cy = r.top + r.height / 2;
+            const halfW = Math.max(40, r.width / 2 - 12);
+            const halfH = Math.max(28, r.height / 2 - 12);
+            await cursorFx.oval(
+              { x: cx, y: cy - halfH },
+              { x: cx + halfW, y: cy },
+              { x: cx, y: cy + halfH },
+              { x: cx - halfW, y: cy },
+            );
+            break;
+          }
+          case 'underline': {
+            const el = resolveChoreographyTarget(step.target);
+            if (!el) break;
+            await centerInBody(el);
+            if (!live()) return;
+            const r = (el as HTMLElement).getBoundingClientRect();
+            const y = r.bottom + 5;
+            const sx = r.left + 4;
+            const ex = r.right - 4;
+            const passes = step.passes ?? 1;
+            for (let i = 0; i < passes; i++) {
+              if (!live()) return;
+              await cursorFx.underline({ x: sx, y }, { x: ex, y });
+              if (passes > 1 && i < passes - 1) await cursorFx.moveTo(sx, y);   // jump back for the next pass
+            }
+            break;
+          }
+          case 'glide': {
+            const pts: { x: number; y: number }[] = [];
+            for (const t of step.targets) {
+              const el = resolveChoreographyTarget(t);
+              if (!el) continue;
+              pts.push(centerOf(el));
+            }
+            if (pts.length === 0) break;
+            await cursorFx.glide(pts, step.pxPerSec ?? 700);
+            break;
+          }
+        }
+      }
+    }
     // Resolve an element the agent named (for the pointAt client tool).
     function resolvePointTarget(p: { id?: string; selector?: string; text?: string }): Element | null {
       const body = document.getElementById('desktop-window-body');
@@ -847,7 +984,11 @@
         else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
         lastDirective = directive; lastDirectiveAt = Date.now();   // remember it (and when) so its echo + timing distinguish scripted speech from a Q&A reply
         try { conversation.sendUserMessage(directive); } catch (_) {}
-        browseStep();   // scroll through + gesture at the content while it's described
+        // Prefer the per-page choreography from the spec; fall back to the generic
+        // auto-picker for pages we haven't codified yet.
+        const choreography = TOUR_CHOREOGRAPHY[step.path];
+        if (choreography && choreography.length > 0) runChoreography(choreography);
+        else browseStep();   // scroll through + gesture at the content while it's described
       } finally {
         navigating = false;
       }

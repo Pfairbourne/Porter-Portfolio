@@ -52,7 +52,7 @@ export class GuideCursor {
   private vx = 0;
   private vy = 0;
 
-  private tween: { ax: number; ay: number; bx: number; by: number; t: number; dur: number } | null = null;
+  private tween: { ax: number; ay: number; bx: number; by: number; t: number; dur: number; linear?: boolean } | null = null;
   private tweenResolve: (() => void) | null = null;
   private tweenTimer: number | null = null; // real-time fallback so moveTo resolves even if rAF stalls
   private clickT = 99; // seconds since last click (large = inactive)
@@ -227,6 +227,47 @@ export class GuideCursor {
     await this.moveTo(cx, cy);
   }
 
+  /** Glide to (x,y) at a constant velocity in CSS px/sec (not eased). Used to chain
+   *  waypoints together in a `glide` so the path doesn't slow at each one. */
+  linearMoveTo(x: number, y: number, pxPerSec = 700): Promise<void> {
+    this.visible = true;
+    if (this.reduced) { this.place(x, y); return Promise.resolve(); }
+    this.resolveTween();
+    const ax = this.x;
+    const ay = this.y;
+    const dist = Math.hypot(x - ax, y - ay);
+    const dur = clamp(0.1, 1.6, dist / Math.max(60, pxPerSec));
+    this.tween = { ax, ay, bx: x, by: y, t: 0, dur, linear: true };
+    return new Promise((res) => {
+      this.tweenResolve = res;
+      this.tweenTimer = window.setTimeout(() => this.resolveTween(), Math.round(dur * 1000) + 500);
+    });
+  }
+
+  /** Flowing multi-waypoint path. Eased entry to the first point, then constant velocity
+   *  through the rest so there's no slowdown at each waypoint. Empty array is a no-op. */
+  async glide(points: Pt[], pxPerSec = 700): Promise<void> {
+    if (points.length === 0) return;
+    this.visible = true;
+    await this.moveTo(points[0].x, points[0].y);   // eased entry to the path start
+    for (let i = 1; i < points.length; i++) {
+      await this.linearMoveTo(points[i].x, points[i].y, pxPerSec);
+    }
+  }
+
+  /** A wide clockwise oval through four anchor points (top, right, bottom, left) and back
+   *  to the start. Useful for framing a screenshot or chart with one big looping gesture. */
+  async oval(top: Pt, right: Pt, bottom: Pt, left: Pt, pxPerSec = 700): Promise<void> {
+    await this.glide([top, right, bottom, left, top], pxPerSec);
+  }
+
+  /** Slow left-to-right underline sweep from start to end (typically a few px below a
+   *  heading's baseline). Constant velocity so it reads as a deliberate "highlight." */
+  async underline(start: Pt, end: Pt, pxPerSec = 250): Promise<void> {
+    await this.moveTo(start.x, start.y);
+    await this.linearMoveTo(end.x, end.y, pxPerSec);
+  }
+
   private resolveTween() {
     if (this.tweenTimer !== null) { clearTimeout(this.tweenTimer); this.tweenTimer = null; }
     const r = this.tweenResolve;
@@ -251,7 +292,7 @@ export class GuideCursor {
       const f = this.tween;
       f.t += dt;
       const p = clamp01(f.t / f.dur);
-      const e = easeInOut(p);
+      const e = f.linear ? p : easeInOut(p);
       const nx = f.ax + (f.bx - f.ax) * e;
       const ny = f.ay + (f.by - f.ay) * e;
       this.vx = nx - this.x;
