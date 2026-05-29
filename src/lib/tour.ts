@@ -141,10 +141,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 6500 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 4500 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1800 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/projects/ember-agent-platform': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -153,10 +150,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 6000 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1800 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/projects/ember-data-agents': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -165,10 +159,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 6000 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1700 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/projects/ember-analytics': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -177,10 +168,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 6000 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1700 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/projects/ember-workflows': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -189,10 +177,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 5500 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 3500 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1600 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/agents': [
     { kind: 'scroll', ticks: 2, dir: 'down' },
@@ -216,9 +201,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:2', dwellMs: 3800 },
     { kind: 'scroll', ticks: 6, dir: 'down' },
     { kind: 'oval', target: 'shot:4' },   // example output
-    { kind: 'move', target: 'shot:4', dwellMs: 3800 },
-    { kind: 'scroll', ticks: 4, dir: 'down' },
-    { kind: 'pause', ms: 1300 },
+    { kind: 'move', target: 'shot:4', dwellMs: 5000 },
   ],
   '/agents/daily-intelligence-brief': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -228,8 +211,6 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'scroll', ticks: 6, dir: 'down' },
     { kind: 'oval', target: 'shot:2' },   // example SMS output
     { kind: 'move', target: 'shot:2', dwellMs: 4500 },
-    { kind: 'scroll', ticks: 4, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
   ],
   '/agents/sales-call-analyzer': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -238,10 +219,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 6000 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1700 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/agents/sku-enrichment-agent': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -250,10 +228,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 7000 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 5000 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1700 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/agents/market-sizing-pro': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -266,8 +241,6 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'scroll', ticks: 3, dir: 'down' },
     { kind: 'oval', target: 'shot:3' },   // scrape-sources subflow
     { kind: 'move', target: 'shot:3', dwellMs: 4000 },
-    { kind: 'scroll', ticks: 4, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
   ],
   '/agents/adding-leads-agent': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -276,10 +249,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 6000 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1700 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/agents/realestate-setter-agent': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -289,10 +259,6 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'scroll', ticks: 3, dir: 'down' },
     { kind: 'oval', target: 'shot:2' },
     { kind: 'move', target: 'shot:2', dwellMs: 5000 },
-    { kind: 'scroll', ticks: 5, dir: 'down' },
-    { kind: 'pause', ms: 1600 },
-    { kind: 'scroll', ticks: 5, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
   ],
   '/agents/product-image-compliance-editor': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -301,10 +267,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 6000 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1700 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/agents/cross-listing-agent': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -317,8 +280,6 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'scroll', ticks: 4, dir: 'down' },
     { kind: 'oval', target: 'shot:3' },
     { kind: 'move', target: 'shot:3', dwellMs: 4000 },
-    { kind: 'scroll', ticks: 4, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
   ],
   '/agents/yoodlize-blog-poster': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -328,10 +289,6 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'scroll', ticks: 3, dir: 'down' },
     { kind: 'oval', target: 'shot:2' },
     { kind: 'move', target: 'shot:2', dwellMs: 5000 },
-    { kind: 'scroll', ticks: 5, dir: 'down' },
-    { kind: 'pause', ms: 1600 },
-    { kind: 'scroll', ticks: 5, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
   ],
   '/agents/website-hell-s-kitchen': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -340,10 +297,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 6000 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1700 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/fun/ai-managed-evidence-pipeline': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -352,10 +306,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 6000 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1700 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/fun/job-application-agent': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -364,10 +315,7 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'move', target: 'shot:1', dwellMs: 6000 },
     { kind: 'circle', target: 'shot:1', loops: 1 },
     { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1700 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
   ],
   '/fun/sales-manager-agent': [
     { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
@@ -377,8 +325,6 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'scroll', ticks: 6, dir: 'down' },
     { kind: 'oval', target: 'shot:2' },   // example output
     { kind: 'move', target: 'shot:2', dwellMs: 4500 },
-    { kind: 'scroll', ticks: 4, dir: 'down' },
-    { kind: 'pause', ms: 1400 },
   ],
 };
 

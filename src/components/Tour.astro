@@ -1222,6 +1222,21 @@
         const prev = i > 0 ? TOUR_STEPS[i - 1] : null;
         await driveTo(step, prev);             // pointer clicks through to the page (or opens it)
         if (!touring || userPaused || humanActive || !conversation) return;   // bailed mid-navigation
+        // The desktop fetches + injects the opened page ASYNCHRONOUSLY, so its content (screenshots,
+        // headings) isn't in the DOM the instant driveTo returns. Without this wait the cursor walk
+        // runs against the "opening…" placeholder: the early screenshot/section targets resolve to
+        // null and get skipped, so the cursor jumps straight to the body. Wait until the content is
+        // injected AND the hero image has a real height (project frames are sized immediately by
+        // aspect-ratio; agent/fun frames are height:auto and need the image to load), capped so a
+        // slow or broken image can't stall the tour.
+        await waitForEl(() => {
+          const b = bodyEl(); if (!b) return null;
+          if (!b.querySelector('.t-h1, .prose')) return null;            // page content not injected yet
+          const shot = b.querySelector('.img-frame, .prose img') as HTMLElement | null;
+          if (shot && shot.clientHeight < 24) return null;               // hero present but image not sized yet
+          return b;
+        }, 3500);
+        if (!touring || userPaused || humanActive || !conversation) return;   // bailed during the load wait
         // Navigation is done and the page is open. Drop the navigating guard NOW: the scripted
         // cursor walk below is gated by choreographyActive + its own browseToken, not navigating.
         // runChoreography checks live() (which requires !navigating) synchronously on its first
