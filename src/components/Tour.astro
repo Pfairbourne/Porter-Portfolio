@@ -220,6 +220,34 @@
         resumeAllAudio();   // also kick any SDK output context that was created suspended
       } catch (_) {}
     }
+    // Hard mic gate at the MediaStreamTrack level. setMicMuted only silences the SDK's audio
+    // worklet, which still leaves a brief window at connect where the raw getUserMedia track is
+    // live before onConversationCreated mutes it. Wrap getUserMedia to capture every audio track
+    // the SDK opens and keep it DISABLED (the track itself emits silence) unless push-to-talk is
+    // active. Driven by setMicTracksEnabled from activate/deactivatePtt, in lockstep with the SDK
+    // mute — so the mic is doubly off whenever it should be off, with no live-track window.
+    const micTracks = new Set<MediaStreamTrack>();
+    function setMicTracksEnabled(on: boolean) {
+      for (const t of micTracks) { try { t.enabled = on; } catch (_) {} }
+    }
+    try {
+      const md: any = navigator.mediaDevices;
+      if (md && typeof md.getUserMedia === 'function' && !md.__guideMicWrapped) {
+        const nativeGUM = md.getUserMedia.bind(md);
+        md.getUserMedia = async (constraints: MediaStreamConstraints) => {
+          const stream: MediaStream = await nativeGUM(constraints);
+          if (constraints && (constraints as any).audio) {
+            for (const t of stream.getAudioTracks()) {
+              micTracks.add(t);
+              try { t.enabled = pttActive; } catch (_) {}   // off at connect (push-to-talk starts off)
+              t.addEventListener('ended', () => micTracks.delete(t));
+            }
+          }
+          return stream;
+        };
+        md.__guideMicWrapped = true;
+      }
+    } catch (_) {}
     type State = 'off' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'muted' | 'paused' | 'qa';
     const LABELS: Record<State, string> = {
       off: '', connecting: 'Connecting…', listening: 'Listening', thinking: 'Thinking…', speaking: 'Speaking', muted: 'Mic off', paused: 'Paused', qa: 'Ask away, or resume',
@@ -1308,6 +1336,7 @@
     function activatePtt() {
       if (!conversation || !voiceEnabled) return;
       micMuted = false;
+      setMicTracksEnabled(true);   // open the raw mic track for the press
       try { conversation.setMicMuted(false); } catch (_) {}
       pttActive = true;
       micBtn.classList.add('is-recording');
@@ -1319,6 +1348,7 @@
       clearPttSilenceTimer();
       pttActive = false;
       micMuted = true;
+      setMicTracksEnabled(false);   // gate the raw mic track back off
       if (conversation) { try { conversation.setMicMuted(true); } catch (_) {} }
       micBtn.classList.remove('is-recording');
       if (!agentSpeaking) setState('muted');
@@ -1452,6 +1482,7 @@
           onConversationCreated: (conv) => {
             conversation = conv;
             micMuted = true; pttActive = false;
+            setMicTracksEnabled(false);   // raw track gate off too (closes the pre-mute window)
             try { conv.setMicMuted(true); } catch (_) {}
           },
           // Inject the sales-guide brain from code. Requires "Overrides" enabled on the
