@@ -1495,7 +1495,7 @@
       // opened the guide (or it auto-popped from real desktop activity).
       unlockAudio();
       enterExploring();
-      setMsg('Connecting…');   // placeholder until the agent's greeting lands
+      setMsg('');   // let the input's "Ask me anything…" placeholder hold the space until the agent speaks
       connectGuide();
     }
     function closeGuide() {
@@ -1551,7 +1551,7 @@
       cursorFx?.start();
       cursorFx?.show();
       cursorFx?.place(window.innerWidth * 0.5, window.innerHeight * 0.62);   // pointer waits, then drives
-      setMsg('Starting the tour…');   // captions then fill in from the agent's speech
+      setMsg('');   // captions fill in from the agent's speech; the input placeholder holds the space until then
       if (conversation && voiceEnabled) {
         // Already connected (e.g. agent called startTour from the opening greeting);
         // run the desktop preamble, then jump into step 0 (which opens /projects).
