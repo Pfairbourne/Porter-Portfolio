@@ -658,7 +658,7 @@
         // the case-study body (.prose). 1-indexed (shot:1 = hero). Lets a page's choreography
         // frame each screenshot the spec calls out, not just the first one.
         const n = parseInt(t.slice(5), 10) || 1;
-        const shots = Array.from(body.querySelectorAll('.img-frame, .prose img'));
+        const shots = Array.from(body.querySelectorAll('.img-frame, .prose img, .photo__img, .book__cover, .fav__cover'));
         return (shots[n - 1] as Element) ?? null;
       }
       if (t.startsWith('desktopSelector:')) {
@@ -1232,8 +1232,8 @@
         await waitForEl(() => {
           const b = bodyEl(); if (!b) return null;
           if (!b.querySelector('.t-h1, .prose')) return null;            // page content not injected yet
-          const shot = b.querySelector('.img-frame, .prose img') as HTMLElement | null;
-          if (shot && shot.clientHeight < 24) return null;               // hero present but image not sized yet
+          const shot = b.querySelector('.img-frame, .prose img, .photo__img, .book__cover, .fav__cover') as HTMLElement | null;
+          if (shot && shot.clientHeight < 24) return null;               // image present but not sized yet
           return b;
         }, 3500);
         if (!touring || userPaused || humanActive || !conversation) return;   // bailed during the load wait

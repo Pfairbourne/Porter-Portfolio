@@ -326,6 +326,49 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
     { kind: 'oval', target: 'shot:2' },   // example output
     { kind: 'move', target: 'shot:2', dwellMs: 4500 },
   ],
+  // ── Folders + galleries (the lighter tail of the tour) ──────────────────
+  '/fun': [
+    { kind: 'move', target: 'selector:.ethos', dwellMs: 600 },
+    { kind: 'underline', target: 'selector:.ethos' },
+    { kind: 'scroll', ticks: 2, dir: 'down' },
+    { kind: 'hover', target: 'card:/fun/ai-managed-evidence-pipeline', dwellMs: 900 },
+    { kind: 'hover', target: 'card:/fun/job-application-agent', dwellMs: 900 },
+    { kind: 'hover', target: 'card:/fun/sales-manager-agent', dwellMs: 900 },
+    { kind: 'pause', ms: 700 },
+    { kind: 'scroll', ticks: 8, dir: 'up' },
+  ],
+  '/photos': [
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1300 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'circle', target: 'shot:1', loops: 1 },
+    { kind: 'move', target: 'shot:1', dwellMs: 2200 },
+    { kind: 'scroll', ticks: 2, dir: 'down' },
+    { kind: 'circle', target: 'shot:4', loops: 1 },
+    { kind: 'move', target: 'shot:4', dwellMs: 2600 },
+  ],
+  '/books': [
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1300 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'circle', target: 'shot:1', loops: 1 },
+    { kind: 'move', target: 'shot:1', dwellMs: 2400 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'shot:3', dwellMs: 2600 },
+  ],
+  '/movies': [
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1300 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'circle', target: 'shot:1', loops: 1 },
+    { kind: 'move', target: 'shot:1', dwellMs: 2400 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'shot:3', dwellMs: 2600 },
+  ],
+  '/stack': [
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'point', target: 'selector:.prose h2', dwellMs: 2600 },
+    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'pause', ms: 2000 },
+  ],
 };
 
 /**
