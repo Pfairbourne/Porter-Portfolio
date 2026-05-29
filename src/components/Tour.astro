@@ -1272,6 +1272,24 @@
       navigating = true;
       clearAdvance();
       clearStepWatchdog();   // drop the previous step's safety-net timer
+      armIdle();             // re-arm the idle-disconnect each step so a long/quiet stop can't trip it mid-tour
+      // Safety net, armed UP FRONT (before navigation) and ungated: even if driveTo throws, the
+      // page never loads, or the agent never speaks / never cleanly stops, force the tour forward
+      // after a generous per-step cap so it can NEVER permanently stall on one stop. The normal
+      // silence-based advance fires long before this; runStep's clearAdvance + clearStepWatchdog +
+      // navigating guards make a double-advance impossible. Interruptions clear it (enterQa) or
+      // block it (the userPaused/humanActive/qaActive guards), so the tour still pauses for the
+      // visitor — it only guarantees progress when nothing interrupts.
+      {
+        const myStepIdx = i;
+        const capMs = TOUR_STEPS[i] && TOUR_STEPS[i].notes ? 80000 : 28000;   // case studies narrate longest
+        stepWatchdog = window.setTimeout(() => {
+          stepWatchdog = null;
+          if (touring && !userPaused && !humanActive && !qaActive && conversation && !navigating && tourStep === myStepIdx) {
+            runStep(myStepIdx + 1);
+          }
+        }, capMs);
+      }
       try {
         tourStep = i;
         const step = TOUR_STEPS[i];
@@ -1329,21 +1347,7 @@
         const choreography = TOUR_CHOREOGRAPHY[step.path];
         if (choreography && choreography.length > 0) runChoreography(choreography);
         else browseStep();   // scroll through + gesture at the content while it's described
-        // Safety net: if this step never advances on its own (the agent keeps chattering, or asks
-        // the visitor something and lingers without a clean pause, so the silence-based
-        // scheduleAdvance never lands), force the tour forward after a generous per-step cap. The
-        // normal advance fires long before this; the cap only catches a misbehaving agent. Guarded
-        // so it only fires while still on THIS step and the agent actually narrated it. runStep's
-        // own clearAdvance/navigating guards make a same-tick double-advance impossible.
-        const capMs = step.notes ? 80000 : 28000;   // case studies narrate ~45s; intros ~12 to 14s
-        const myStepIdx = i;
-        clearStepWatchdog();
-        stepWatchdog = window.setTimeout(() => {
-          stepWatchdog = null;
-          if (touring && !userPaused && !humanActive && !qaActive && conversation && !navigating && tourStep === myStepIdx && spokeThisStep) {
-            runStep(myStepIdx + 1);
-          }
-        }, capMs);
+        // (the per-step safety-net watchdog was armed up front, before driveTo)
       } finally {
         navigating = false;
       }
