@@ -141,24 +141,15 @@ export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
  * Approximate duration at default cursor speeds: ~22 seconds. The agent's narration
  * directive sent alongside it should match that window.
  */
-export const DESKTOP_PREAMBLE: ChoreographyStep[] = [
-  // Opening: land on the name card, sweep the tagline.
-  { kind: 'move', target: 'desktopSelector:.hero-figure__name', dwellMs: 900 },
-  { kind: 'underline', target: 'desktopSelector:.hero-figure__tagline' },
-  { kind: 'pause', ms: 400 },
-  // Row 1 folders — the main event. Linger here so the visitor groks the structure.
-  { kind: 'hover', target: 'icon:/projects', dwellMs: 1700 },
-  { kind: 'hover', target: 'icon:/agents', dwellMs: 1700 },
-  { kind: 'hover', target: 'icon:/fun', dwellMs: 1700 },
-  // Row 2 files — quick pass; the visitor doesn't need to dwell on each.
-  { kind: 'hover', target: 'icon:/resume', dwellMs: 600 },
-  { kind: 'hover', target: 'icon:/about', dwellMs: 600 },
-  { kind: 'hover', target: 'icon:/now', dwellMs: 600 },
-  // (Dock intentionally skipped: the guide bar sits right over the dock, so a sweep there
-  // would be visually covered by the bar/orb. The agent mentions it briefly instead.)
-  // Settle back on Full App Prototype, ready for runStep(0) to open it.
-  { kind: 'move', target: 'icon:/projects', dwellMs: 500 },
-];
+/**
+ * Static fallback path order for the desktop preamble. The runtime builder
+ * (Tour.astro `buildDesktopPreamble`) keeps only the entries currently on screen and
+ * follows their actual document order, so a rearrangement, rename, hide-via-Settings,
+ * or even an added icon Just Works without code edits here.
+ */
+export const DESKTOP_PREAMBLE_FOLDER_PATHS = ['/projects', '/agents', '/fun'];
+export const DESKTOP_PREAMBLE_FILE_PATHS = ['/resume', '/about', '/now'];
+export const DESKTOP_PREAMBLE: ChoreographyStep[] = [];
 
 export const TOUR_STEPS: TourStep[] = [
   { path: '/projects', label: "Porter's full app prototype, his flagship product work", intro: true },
