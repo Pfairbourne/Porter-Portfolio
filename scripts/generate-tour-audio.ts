@@ -14,7 +14,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { TOUR_STOPS } from '../src/lib/tour.ts';
+import { TOUR_AUDIO_CLIPS } from '../src/lib/tour.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(HERE, '..', 'public', 'audio', 'tour');
@@ -68,13 +68,13 @@ async function main() {
 
   mkdirSync(OUT_DIR, { recursive: true });
   const provider = EL_KEY ? 'ElevenLabs' : 'OpenAI';
-  console.log(`Generating ${TOUR_STOPS.length} narration clips with ${provider}`);
+  console.log(`Generating ${TOUR_AUDIO_CLIPS.length} narration clips with ${provider}`);
   console.log(`  → ${OUT_DIR}\n`);
 
-  for (const stop of TOUR_STOPS) {
-    process.stdout.write(`  ${stop.id} … `);
-    const buf = await synth(stop.caption);
-    writeFileSync(join(OUT_DIR, `${stop.id}.mp3`), Buffer.from(buf));
+  for (const clip of TOUR_AUDIO_CLIPS) {
+    process.stdout.write(`  ${clip.id} … `);
+    const buf = await synth(clip.narration);
+    writeFileSync(join(OUT_DIR, `${clip.id}.mp3`), Buffer.from(buf));
     console.log(`ok (${Math.round(buf.byteLength / 1024)} KB)`);
   }
 
