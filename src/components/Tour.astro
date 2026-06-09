@@ -65,8 +65,8 @@
   <div class="guide-panel__body">
     <p class="guide-msg" data-guide-msg aria-live="polite"></p>
     <div class="guide-choices" data-guide-choices>
-      <button class="guide-btn guide-btn--primary" type="button" data-guide-tour>Take the tour</button>
-      <button class="guide-btn" type="button" data-guide-dismiss>I'll explore</button>
+      <button class="guide-btn guide-btn--primary" type="button" data-guide-tour>Start Tour</button>
+      <button class="guide-btn" type="button" data-guide-dismiss>Talk to Agent</button>
     </div>
   </div>
 
@@ -80,18 +80,17 @@
     <div class="guide-ask__field" data-guide-field>
       <input class="guide-ask__input" type="text" data-guide-input placeholder="Ask me anything…" autocomplete="off" maxlength="500" />
     </div>
-    <button class="guide-ask__resume" type="button" data-guide-resume hidden>Resume tour ›</button>
+    <button class="guide-ask__pause" type="button" data-guide-pause hidden aria-label="Pause the tour">Pause</button>
+    <button class="guide-ask__resume" type="button" data-guide-resume hidden>Resume Tour ›</button>
     <button class="guide-ask__send" type="submit" aria-label="Send">↑</button>
   </form>
 </div>
 
 <script>
   import { Conversation } from '@elevenlabs/client';
-  import { TOUR_GUIDE_PROMPT, TOUR_STEPS, TOUR_CHOREOGRAPHY, DESKTOP_PREAMBLE_FOLDER_PATHS, DESKTOP_PREAMBLE_FILE_PATHS, type ChoreographyStep } from '../lib/tour';
+  import { TOUR_GUIDE_PROMPT, TOUR_STEPS, TOUR_CHOREOGRAPHY, DESKTOP_PREAMBLE_FOLDER_PATHS, DESKTOP_PREAMBLE_FILE_PATHS, tourAudioSrc, TOUR_INTRO, TOUR_WELCOME_BACK, TOUR_PREAMBLE, TOUR_WRAP, type ChoreographyStep } from '../lib/tour';
   import { GuideOrb, type OrbState } from '../lib/guide-orb';
   import { GuideCursor } from '../lib/guide-cursor';
-
-  const INTRO = "Hi, I'm Porter's guide. Want a quick tour of the site, or would you rather explore on your own? You can ask me anything, by voice or text.";
 
   const orb = document.getElementById('guide-orb') as HTMLButtonElement | null;
   const panel = document.getElementById('guide-panel') as HTMLElement | null;
@@ -110,6 +109,7 @@
     const micBtn = panel.querySelector('[data-guide-mic]') as HTMLButtonElement;
     const soundBtn = panel.querySelector('[data-guide-sound]') as HTMLButtonElement;
     const resumeBtn = panel.querySelector('[data-guide-resume]') as HTMLButtonElement;
+    const pauseBtn = panel.querySelector('[data-guide-pause]') as HTMLButtonElement;
     const orbSlot = panel.querySelector('[data-guide-orb-slot]') as HTMLElement;
     const fsBtn = panel.querySelector('[data-guide-fullscreen]') as HTMLButtonElement;
     const ccBtn = panel.querySelector('[data-guide-captions]') as HTMLButtonElement;
@@ -121,22 +121,21 @@
     let panelOpen = false;
     let touring = false;
     let resumeTimer: number | null = null;
-    let advanceTimer: number | null = null;   // advance to the next tour step after a silence
-    let expectTimer: number | null = null;     // grace window while the visitor might be asking
-    let stepWatchdog: number | null = null;    // per-step safety net: force the tour forward if a step never advances on its own
-    let exploring = false;                      // free-form Q&A mode: slim bar layout, no tour script, agent answers freely
-    let exploringGreeted = false;               // sent the opening "tour or question?" directive once this panel-open
-    let tourFromExploring = false;              // takeTour was called while already connected → skip the cold-start greeting
+    let stepWatchdog: number | null = null;    // per-step safety net: force the tour forward if a clip never ends (broken/stalled audio)
+    let exploring = false;                      // free-form Q&A mode: slim bar layout, live agent answers freely (no tour script)
     // Whether this browser has already heard the full spoken intro. Persists across sessions
-    // (like the captions/budget prefs) so the guide does the full "Hi, I'm Porter's guide,
-    // tour or question?" greeting only once per visitor; on later opens it gives a short
-    // welcome-back line instead. Bypassable by clearing storage or going incognito, which is fine.
+    // (like the captions/budget prefs) so the intro popup plays the full welcome only once per
+    // visitor; on later opens it plays a short welcome-back line instead. Bypassable by clearing
+    // storage or going incognito, which is fine.
     const INTRO_KEY = 'porter-intro-heard';
     let introHeard = false;
     try { introHeard = localStorage.getItem(INTRO_KEY) === 'yes'; } catch (_) {}
-    let qaActive = false;                       // a real question is being handled mid-tour → hold until explicit resume
-    let choreographyActive = false;             // scripted cursor sequence is mid-flight; pause auto-advance until it lands
-    let spokeThisStep = false;                  // agent has begun speaking since the current step's directive went out (guards auto-advance from running ahead of a silent/slow-to-start agent)
+    // The tour is PRE-RECORDED: each step plays a static MP3 (TTS'd once, $0 at runtime) and
+    // advances when that clip's 'ended' fires. The live agent is NEVER used to lead the tour —
+    // it only comes up for on-demand Q&A while the tour is paused. tourPaused freezes the whole
+    // walkthrough (clip audio, cursor mid-glide, and choreography sleeps) at the exact frame the
+    // visitor hit Pause, so Resume continues from precisely where it stopped.
+    let tourPaused = false;
     // Push-to-talk: mic is muted by default; visitor taps the mic to speak, mic auto-mutes
     // after a short tail of silence. Stops background noise + ambient talking from tripping
     // the agent every time someone in the room speaks.
@@ -144,18 +143,30 @@
     let pttSilenceTimer: number | null = null;
     const PTT_INITIAL_MS = 8000;     // grace window after tapping the mic before the first VAD trigger
     const PTT_TAIL_MS = 2200;        // silence after each VAD trigger before auto-muting
-    let lastDirective = '';                     // last system-injected directive, so its echo isn't read as a question
-    let lastDirectiveAt = 0;                    // when we sent it (ms) — used to tell a scripted reply from a Q&A reply
-    let userSpokeAt = 0;                        // last VAD-detected speech (ms) — commits to Q&A on the agent's reply even if no transcript arrives
     let tourStep = 0;                           // current index into TOUR_STEPS
     let orbFx: GuideOrb | null = null;   // the halftone particle orb (drawn on the overlay canvas)
     let cursorFx: GuideCursor | null = null;   // the tour's halftone "mouse pointer"
     let navigating = false;   // a cursor-driven step is mid-flight (don't stack advances)
-    let humanActive = false;  // the visitor grabbed their real mouse → auto-pilot stands down
     let cursorPointTimer: number | null = null;
-    let humanTimer: number | null = null;
     let echoTimer: number | null = null; // clears a transient typed-message echo in tour mode
     let echoing = false;
+
+    // ---- pre-recorded narration playback ----
+    // One reusable <audio> element streams every tour clip from /audio/tour/<id>.mp3. playClip
+    // resolves when the clip's 'ended' fires; pausing the element never fires 'ended', so a
+    // frozen clip keeps its awaiter pending until Resume calls play() again — that is the
+    // freeze-frame. clipResolve holds the current clip's resolver so teardown can release a
+    // pending awaiter without waiting for audio.
+    const clipAudio = new Audio();
+    clipAudio.preload = 'auto';
+    let clipPlaying = false;              // a narration clip is mid-flight (drives the orb pulse + caption clock)
+    let clipResolve: (() => void) | null = null;
+    // Pausable sleeps: every choreography dwell goes through sleep() and registers here, so Pause
+    // can freeze the remaining time and Resume re-arm it — the cursor walk picks up its pacing
+    // exactly where it stopped instead of snapping forward by the paused duration.
+    type SleepRec = { resolve: () => void; timer: number; remaining: number; startedAt: number; armed: boolean };
+    const liveSleeps = new Set<SleepRec>();
+    let capAudioEl: HTMLAudioElement | null = null;   // when set, the caption clock is driven by this element's currentTime/duration (a tour clip) instead of the live agent's alignment
 
     // agent
     let conversation: Conversation | null = null;
@@ -165,8 +176,6 @@
     let micMuted = false;
     let pendingText: string | null = null;
     let outputMuted = false;
-    let userPaused = false;      // the visitor hit Pause: agent must stop listening AND talking
-    let tourMode = false;        // connected via "Take the tour" → agent leads the walkthrough on connect
     // Inject the code prompt (TOUR_GUIDE_PROMPT) into the agent. Requires "Overrides"
     // enabled on the agent's dashboard Security settings. ElevenLabs hard-rejects a
     // disallowed override, so if the connection throws while overrides are on we retry
@@ -273,7 +282,7 @@
       orbFx?.setState(ORB_STATE[s]);
     }
     function setMsg(t: string) {
-      capActive = false; capTrack = null; capSpans = [];
+      capActive = false; capTrack = null; capSpans = []; capAudioEl = null;
       msgEl.textContent = t;
       if (document.body.classList.contains('tour-mode')) fieldEl.classList.toggle('has-caption', !!t);
     }
@@ -395,7 +404,82 @@
       repinTimer = window.setTimeout(() => { repinTimer = null; if (touring && orbFx) orbFx.swooshTo(windowPin()); }, 380);
     }
     // ---- pointing & browsing: the cursor reads the page instead of sitting still ----
-    const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
+    // Pausable sleep — the pacing primitive for the whole cursor walk. Each call registers a
+    // record so Pause can clear the timer and bank the remaining time, and Resume can re-arm it.
+    function sleep(ms: number): Promise<void> {
+      return new Promise<void>((resolve) => {
+        const rec: SleepRec = { resolve, timer: 0, remaining: ms, startedAt: performance.now(), armed: false };
+        // A sleep created WHILE paused starts frozen (no timer); resumeSleeps arms it on Resume.
+        if (!tourPaused) { rec.timer = window.setTimeout(() => { liveSleeps.delete(rec); resolve(); }, ms); rec.armed = true; }
+        liveSleeps.add(rec);
+      });
+    }
+    function pauseSleeps() {
+      for (const rec of liveSleeps) {
+        if (!rec.armed) continue;
+        clearTimeout(rec.timer);
+        rec.remaining = Math.max(0, rec.remaining - (performance.now() - rec.startedAt));
+        rec.armed = false;
+      }
+    }
+    function resumeSleeps() {
+      for (const rec of liveSleeps) {
+        if (rec.armed) continue;
+        rec.startedAt = performance.now();
+        rec.timer = window.setTimeout(() => { liveSleeps.delete(rec); rec.resolve(); }, rec.remaining);
+        rec.armed = true;
+      }
+    }
+    // Teardown: resolve every pending sleep so nothing awaiting the cursor walk hangs forever.
+    function flushSleeps() {
+      for (const rec of liveSleeps) { clearTimeout(rec.timer); rec.resolve(); }
+      liveSleeps.clear();
+    }
+    // 'ended' and 'error' both finish a clip (a missing/broken MP3 must never stall the tour).
+    // Pausing the element fires neither — that is what holds the awaiter during a Pause.
+    function finishClip() {
+      if (!clipPlaying && clipResolve === null) return;
+      clipPlaying = false;
+      capFinish();                       // snap the caption to its last word
+      const r = clipResolve; clipResolve = null;
+      if (r) r();
+    }
+    clipAudio.addEventListener('ended', finishClip);
+    clipAudio.addEventListener('error', () => { if (clipResolve) finishClip(); });
+    // Play one narration clip; resolve when it ends. captionText is the exact string the clip was
+    // synthesized from, so the rolling caption can be driven by this element's own playback clock.
+    function playClip(id: string, captionText: string | null): Promise<void> {
+      if (clipResolve) { const r = clipResolve; clipResolve = null; r(); }   // release a stray previous awaiter
+      return new Promise<void>((resolve) => {
+        clipResolve = resolve;
+        clipPlaying = true;
+        try { clipAudio.pause(); } catch (_) {}
+        try { clipAudio.currentTime = 0; } catch (_) {}
+        clipAudio.src = tourAudioSrc(id);
+        clipAudio.volume = outputMuted ? 0 : 1;
+        if (captionText != null) startClipCaption(captionText);
+        setState('speaking');
+        armIdle();
+        // If a Pause is already in effect (e.g. it landed during the page navigation), load the
+        // clip but leave it frozen on word 0 — resumeClip will start playback on Resume.
+        const p = tourPaused ? null : clipAudio.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {/* autoplay race: 'error'/'ended' still resolves us */});
+      });
+    }
+    function pauseClip() { try { clipAudio.pause(); } catch (_) {} }
+    function resumeClip() {
+      if (!clipPlaying) return;
+      clipAudio.volume = outputMuted ? 0 : 1;
+      const p = clipAudio.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    }
+    // Hard-stop narration (teardown): drop playback and release any pending awaiter.
+    function stopClip() {
+      try { clipAudio.pause(); } catch (_) {}
+      clipPlaying = false;
+      const r = clipResolve; clipResolve = null;
+      if (r) r();
+    }
     const bodyEl = () => document.getElementById('desktop-window-body');
     // eased scroll of a container — smooth, unlike the browser's choppy 'smooth' behavior
     function smoothScrollTo(el: HTMLElement, top: number, dur = 850): Promise<void> {
@@ -404,9 +488,15 @@
         const goal = Math.max(0, top);
         const delta = goal - start;
         if (reduceMotion || Math.abs(delta) < 2) { el.scrollTop = goal; resolve(); return; }
-        const t0 = performance.now();
+        let t0 = performance.now();
+        let last = t0;
         const tick = () => {
-          const p = Math.min(1, (performance.now() - t0) / dur);
+          const now = performance.now();
+          // Freeze-frame: while paused, advance t0 in lockstep so elapsed time doesn't grow — the
+          // scroll holds at its current offset and resumes smoothly instead of snapping to the end.
+          if (tourPaused) { t0 += now - last; last = now; if (touring) requestAnimationFrame(tick); else resolve(); return; }
+          last = now;
+          const p = Math.min(1, (now - t0) / dur);
           const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; // easeInOutQuad
           el.scrollTop = start + delta * e;
           if (p < 1 && touring) requestAnimationFrame(tick);
@@ -428,7 +518,7 @@
       window.setTimeout(() => el.classList.remove('tour-highlight'), 1900);
     }
     function moveCursorToEl(el: Element) {
-      if (!cursorFx || reduceMotion || humanActive) return;
+      if (!cursorFx || reduceMotion) return;
       const r = (el as HTMLElement).getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return;
       cursorFx.show();
@@ -452,7 +542,7 @@
       return { kind: 'none' };
     }
     async function gestureForEl(el: Element) {
-      if (!cursorFx || humanActive) return;
+      if (!cursorFx) return;
       const r = (el as HTMLElement).getBoundingClientRect();
       const cx = r.left + r.width / 2;
       const cy = r.top + r.height / 2;
@@ -475,17 +565,17 @@
     function cursorPointAt(el: Element | null, delay = 220) {
       if (!el) return;
       const active = touring || exploring;
-      if (reduceMotion || !cursorFx || !active || humanActive) { pulseEl(el); return; }
+      if (reduceMotion || !cursorFx || !active) { pulseEl(el); return; }
       if (cursorPointTimer !== null) clearTimeout(cursorPointTimer);
       cursorPointTimer = window.setTimeout(async () => {
         cursorPointTimer = null;
-        if (!(touring || exploring) || (touring && navigating) || humanActive || !cursorFx) return;
+        if (!(touring || exploring) || (touring && navigating) || !cursorFx) return;
         await centerInBody(el);
-        if (!(touring || exploring) || humanActive) return;
+        if (!(touring || exploring)) return;
         moveCursorToEl(el);
         pulseEl(el);
         await sleep(260);
-        if (!(touring || exploring) || humanActive || !cursorFx) return;
+        if (!(touring || exploring) || !cursorFx) return;
         await gestureForEl(el);
       }, delay);
     }
@@ -520,7 +610,7 @@
       const token = ++browseToken;
       const body = bodyEl();
       if (!body) return;
-      const live = () => touring && !navigating && !humanActive && !qaActive && tourStep === myStep && token === browseToken;
+      const live = () => touring && !navigating && tourStep === myStep && token === browseToken;
       await sleep(650);
       if (!live()) return;
       const head = body.querySelector('h1, .project-title, h2, .project-card');
@@ -567,82 +657,28 @@
       if (folders[0]) steps.push({ kind: 'move', target: 'icon:' + folders[0].p, dwellMs: 400 });
       return steps;
     }
-    // Appended to every scripted-tour directive. During the walkthrough the system drives
-    // navigation and pacing, so the agent must never turn a stop into a menu: the moment it asks
-    // "which would you like to see?" or "what next?" and waits, the tour reads as stalled. It
-    // narrates the current stop, then stops talking, and the system advances on its own.
-    const NO_ASK = ' Do not ask the visitor anything, do not offer choices, and do not invite them to pick what to see next. Just narrate, then stop talking; the system moves on automatically.';
-    // Walks the visitor through the desktop (sign + folder/file rows; no dock — the bar
-    // covers it) before runStep(0) opens the Full App Prototype folder.
-    async function runDesktopPreamble(fromExploring: boolean): Promise<boolean> {
-      if (!touring || !conversation || !voiceEnabled) return false;
-      const steps = buildDesktopPreamble();
-      // Scripted desktop orientation. Do NOT touch Porter's name or title; describe the three
-      // product folders (with their one-line purpose), then the files, then hand off to the App
-      // Prototype. The cursor walk hovers each folder/file as it's named.
-      const body =
-        `narrate Porter's desktop in exactly this order, conversational, a sentence or two per group and no lists, then stop. Do NOT mention Porter's name or his title. First, on the left, his three core product folders: his Full App Prototype, the app he built for Ember, the startup he co-founded; then his full suite of AI agents, built for a range of purposes and clients; and his personal internal tools, built for his own workflows. Next, on the right, the files: his resume, more about him, and what he is currently working on. Finally, in one short line, say that first you'll cover the App Prototype.`;
-      let directive = fromExploring
-        ? `Now ${body}`
-        : `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then ${body}`;
-      directive += NO_ASK;
-      lastDirective = directive; lastDirectiveAt = Date.now();
-      spokeThisStep = false;   // waiting on the agent to start narrating the preamble
-      try { conversation.sendUserMessage(directive); } catch (_) {}
-      document.body.classList.add('tour-preamble');
-      try { await runChoreography(steps); }
-      finally { document.body.classList.remove('tour-preamble'); }
-      return true;
-    }
-    // After the desktop preamble's cursor walk lands, wait for the agent to finish narrating
-    // the orientation before opening the first folder — so the home view isn't cut short — then
-    // resolve. Never hangs: a sustained silence (the agent is done, or asked a stray question
-    // and stopped) resolves it after SILENCE_MS, a no-audio cap covers a voiceless agent, and a
-    // hard cap guarantees the tour proceeds even if the agent rambles or never cleanly stops.
-    function waitForNarrationToSettle(): Promise<void> {
-      return new Promise((resolve) => {
-        const started = Date.now();
-        const HARD_CAP_MS = 20000;     // absolute ceiling from when the cursor walk ended
-        const NO_AUDIO_CAP_MS = 9000;  // agent never produced narration audio → stop waiting and proceed
-        let quietSince = 0;
-        const tick = () => {
-          if (!touring || !conversation || userPaused) { resolve(); return; }
-          const elapsed = Date.now() - started;
-          if (elapsed >= HARD_CAP_MS) { resolve(); return; }
-          if (!spokeThisStep) {
-            if (elapsed >= NO_AUDIO_CAP_MS) { resolve(); return; }   // truly silent agent → don't wait forever
-          } else if (agentSpeaking) {
-            quietSince = 0;                                          // still narrating → reset the settle clock
-          } else {
-            if (quietSince === 0) quietSince = Date.now();
-            if (Date.now() - quietSince >= SILENCE_MS) { resolve(); return; }   // narration has settled → go
-          }
-          window.setTimeout(tick, 120);
-        };
-        tick();
-      });
-    }
-    // The full tour-start flow: agent-led desktop orientation (DESKTOP_PREAMBLE), then opens
-    // runStep(0) (the Full App Prototype folder). takeTour and the tourMode path in onConnect
-    // both call this so the preamble fires exactly once per tour.
+    // The full tour-start flow: play the desktop-orientation clip (preamble.mp3) while the cursor
+    // walks the folder/file rows, then open the first stop. The narration and the cursor walk run
+    // in parallel; the clip's length sets the pacing (Promise.all waits for both). Entirely
+    // pre-recorded — no agent involved. A Pause during the preamble freezes the clip + cursor walk
+    // together, and Resume picks both back up before handing off to runStep(0).
     async function startTourFlow() {
       if (!touring) return;
-      const fromExploring = tourFromExploring;
-      tourFromExploring = true;   // consumed; also suppresses the cold-start greeting line in runStep(0) since we'll have already greeted
-      // Treat the desktop preamble as "step -1" so auto-advance stays suppressed (scheduleAdvance
-      // no-ops while tourStep < 0) — nothing races ahead while the cursor walks the desktop.
       const cursorWalk = !reduceMotion && !!cursorFx;
-      if (cursorWalk) tourStep = -1;
-      const ran = await runDesktopPreamble(fromExploring);
-      if (!touring) return;
-      // Hand off into the tour EXPLICITLY here — never via the auto-advance machinery. When the
-      // cursor walked the desktop, first let the agent finish narrating the orientation (capped)
-      // so the home view isn't cut short; then open step 0. Driving the handoff here, instead of
-      // leaning on onModeChange/scheduleAdvance, means a stray "what would you like to do next?"
-      // question or an unclean mode transition can't strand the tour after the preamble.
-      if (cursorWalk && ran) await waitForNarrationToSettle();
-      if (!touring) return;
-      runStep(0);   // runStep sets tourStep = 0 itself once it passes its guards
+      // Scope the preamble's cursor walk to "step -1" so its live() (tourStep === myStep) can't be
+      // confused with the first real step's walk.
+      tourStep = -1;
+      document.body.classList.add('tour-preamble');
+      try {
+        await Promise.all([
+          playClip(TOUR_PREAMBLE.id, TOUR_PREAMBLE.narration),
+          cursorWalk ? runChoreography(buildDesktopPreamble()) : Promise.resolve(),
+        ]);
+      } finally {
+        document.body.classList.remove('tour-preamble');
+      }
+      if (!touring || tourPaused) return;
+      runStep(0);
     }
     // ---- Cursor choreography: scripted per-page sequences from tour-guide-cursor-spec.md.
     // When TOUR_CHOREOGRAPHY has an entry for a step's path, runStep calls runChoreography
@@ -694,9 +730,11 @@
       if (reduceMotion || !cursorFx || !touring) return;
       const myStep = tourStep;
       const token = ++browseToken;
-      const live = () => touring && !navigating && !humanActive && !qaActive && tourStep === myStep && token === browseToken;
+      // Self-terminates the instant the step changes (token bump on the next runStep) or the tour
+      // tears down. A Pause does NOT bail here: every await inside is a pausable sleep / frozen
+      // cursor tween / held scroll, so the walk simply hangs at its current frame until Resume.
+      const live = () => touring && !navigating && tourStep === myStep && token === browseToken;
       const body = bodyEl();
-      choreographyActive = true;
       try {
       for (const step of steps) {
         if (!live()) return;
@@ -800,25 +838,9 @@
         }
       }
       } finally {
-        choreographyActive = false;
-        // Decide what to do now that the scripted cursor walk has landed. The key fix:
-        // only auto-advance if the agent ACTUALLY narrated this step. Without this guard a
-        // short choreography that finishes before the agent's first utterance arrives would
-        // fire scheduleAdvance → runStep(next) → a fresh directive that preempts the agent
-        // before it ever spoke, cascading through the whole tour in silence (the speed-run).
-        if (touring && !qaActive && tourStep === myStep && token === browseToken) {
-          if (spokeThisStep) {
-            // Agent already narrated. If it's still talking, onModeChange's non-speaking
-            // branch will advance when it stops; if it's done, advance now.
-            if (!agentSpeaking) scheduleAdvance();
-          } else if (!agentSpeaking) {
-            // Agent hasn't started yet — wait for it rather than racing ahead. The generous
-            // fallback only fires if the agent stays silent (onModeChange clears it the moment
-            // speech begins), so a slow first utterance isn't cut off and a voiceless agent
-            // still inches forward instead of stalling.
-            scheduleAdvance(NO_SPEECH_MS);
-          }
-        }
+        // The cursor walk just animates alongside the narration; it never drives advancement.
+        // runStep advances when the step's MP3 clip ends (await playClip), so there's nothing to
+        // schedule here — the walk simply finishes (or is superseded by the next step's token).
       }
     }
     // Resolve an element the agent named (for the pointAt client tool).
@@ -838,6 +860,14 @@
       return null;
     }
     function targetAmp(): number {
+      // Pre-recorded narration: there's no live volume signal to read, so animate the orb off a
+      // synthetic pulse (two detuned sines) while a clip plays — it breathes/talks instead of
+      // sitting dead. Muted output still pulses (the clip is "speaking", just inaudible).
+      if (clipPlaying && !clipAudio.paused) {
+        const t = performance.now() / 1000;
+        const v = 0.55 + 0.45 * Math.sin(t * 7.7) * Math.sin(t * 2.9);
+        return Math.min(1, Math.max(0.14, Math.abs(v)));
+      }
       if (voiceEnabled && agentSpeaking && conversation) {
         let v = 0; try { v = conversation.getOutputVolume(); } catch (_) {}
         // Drive the orb off the LIVE voice level so the spines track the speech shape:
@@ -856,7 +886,10 @@
       if (conversation && agentSpeaking) { try { rawVol = conversation.getOutputVolume() || 0; } catch (_) {} }
       const audible = rawVol > CAP_AUDIBLE;
       if (audible) capLastAudible = now;
-      if (capActive) {
+      // Clip-driven captions (capAudioEl set) read the MP3's own currentTime in revealCaption, so
+      // skip all the live-agent clock anchoring/stall correction below — that's only for the
+      // streamed agent voice during Q&A.
+      if (capActive && !capAudioEl) {
         if (pendingCapStart) {
           // Anchor the caption clock to the first AUDIBLE frame (true playback start) rather than
           // chunk arrival, holding on the first word until then so the line can't run ahead of the
@@ -1021,6 +1054,7 @@
       // skipping to the end to catch up. Drawing the row (and charging the budget) is still
       // gated on captionsEnabled — when off we track silently and render nothing.
       capWords = text.split(/\s+/).filter(Boolean);
+      capAudioEl = null;                      // live-agent caption → driven by the char timeline, not a clip clock
       capStart = performance.now();           // fallback start; the frame loop re-anchors to the first audible output
       pendingCapStart = true;                 // re-anchor capStart on first audible output
       capAlign = null; capAlignReady = false;   // fresh utterance → fresh char timeline
@@ -1036,13 +1070,41 @@
       if (captionsEnabled) renderCaptionDom();
       else { msgEl.textContent = ''; if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption'); }
     }
+    // Caption for a PRE-RECORDED clip. Same rolling teleprompter as buildCaption, but the focus
+    // word is driven by the clip's own playback clock (capAudioEl, read in revealCaption) instead
+    // of the live agent's char timeline, and it is never metered (the MP3 is free). playClip calls
+    // this with the exact text the clip was synthesized from.
+    function startClipCaption(text: string) {
+      if (echoTimer !== null) { clearTimeout(echoTimer); echoTimer = null; }
+      echoing = false;
+      msgEl.classList.remove('is-echo');
+      capText = text;
+      capAudioEl = clipAudio;                  // revealCaption syncs to this element's currentTime/duration
+      if (reduceMotion) {
+        capActive = false; capTrack = null; capSpans = [];
+        if (captionsEnabled) { msgEl.textContent = text; if (document.body.classList.contains('tour-mode')) fieldEl.classList.add('has-caption'); }
+        else { msgEl.textContent = ''; if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption'); }
+        return;
+      }
+      capWords = text.split(/\s+/).filter(Boolean);
+      capAlign = null; capAlignReady = false;
+      smoothFocusX = Number.NaN;
+      capPrevFocus = -1;
+      capCharged = true;                       // pre-recorded clips are never charged to the budget
+      capActive = capWords.length > 0;
+      capTrack = null; capSpans = [];
+      if (!capActive) { msgEl.textContent = ''; if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption'); return; }
+      if (captionsEnabled) renderCaptionDom();
+      else { msgEl.textContent = ''; if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption'); }
+    }
     // Build (or rebuild) the visible caption row from the current capWords and paint it once.
     // Split out from buildCaption so the captions toggle can render the in-flight utterance the
     // instant it's switched on. Charges the day's budget once per utterance, the first time a
     // visible line is built for it (so toggling captions on mid-speech still meters the speech).
     function renderCaptionDom() {
       if (!capActive || !capWords.length) return;
-      if (!capCharged && capText.length > 0) {
+      // Meter only live-agent speech (Q&A). Pre-recorded clip captions (capAudioEl set) are free.
+      if (!capCharged && !capAudioEl && capText.length > 0) {
         const total = chargeBudget(capText.length);
         if (total >= CHAR_BUDGET) budgetLimitReached = true;
         capCharged = true;
@@ -1074,7 +1136,15 @@
     function revealCaption() {
       if (!capActive || !capTrack || !capSpans.length) return;
       let fpos: number;
-      if (capAlignReady && capAlign && capAlign.starts.length > 0) {
+      if (capAudioEl) {
+        // Pre-recorded clip: the focus word is a straight read of the MP3's playback position.
+        // No char-level timeline, but the line is short and the clip's duration is exact, so a
+        // linear map of currentTime → word index tracks the voice closely and freezes precisely
+        // when the element is paused (currentTime stops, so the highlight stops).
+        const dur = capAudioEl.duration;
+        const prog = dur && isFinite(dur) && dur > 0 ? Math.max(0, Math.min(1, capAudioEl.currentTime / dur)) : 0;
+        fpos = prog * (capWords.length - 1);
+      } else if (capAlignReady && capAlign && capAlign.starts.length > 0) {
         // Drive directly off the TTS character timeline so the focus word tracks the
         // spoken word frame-by-frame, including through pauses inside a sentence.
         const elapsed = performance.now() - capStart;
@@ -1149,37 +1219,18 @@
       if (resumeTimer !== null) clearTimeout(resumeTimer);
       resumeTimer = window.setTimeout(() => {
         resumeTimer = null;
-        if (userPaused) return;                 // stay silenced while the visitor has it paused
-        if (!micMuted) setState(qaActive ? 'qa' : 'listening');
+        // Back to listening between Q&A turns. During a tour pause the bar reads "Ask away,
+        // or resume" (the qa state); otherwise it's the plain free-form listening state.
+        if (!micMuted) setState(touring && tourPaused ? 'qa' : 'listening');
       }, 600);
     }
 
-    // ---- agent-led tour: the CLIENT drives navigation + pacing ----
-    // The code opens one page, asks the agent to sell just that page, waits for it to
-    // finish, then advances. The agent never navigates, so the screen always matches the
-    // narration. A short silence advances; a spoken interruption pauses it; once the
-    // interruption is answered it resumes; reaching the last step ends the tour.
-    const SILENCE_MS = 3000;
-    // Fallback wait when the cursor walk finishes but the agent never started narrating this
-    // step (slow first-utterance TTS, a dropped directive, or a voiceless agent config). Long
-    // enough that a slow-to-start agent isn't cut off, short enough that a truly silent tour
-    // still creeps forward at a calm, readable pace instead of stalling. If the agent does
-    // start speaking, onModeChange clears this timer — so it only ever fires on real silence.
-    const NO_SPEECH_MS = 9000;
-    function clearAdvance() { if (advanceTimer !== null) { clearTimeout(advanceTimer); advanceTimer = null; } }
-    function clearExpect() { if (expectTimer !== null) { clearTimeout(expectTimer); expectTimer = null; } }
+    // ---- pre-recorded tour: the CLIENT drives navigation; the MP3 drives pacing ----
+    // Each step opens one page, plays that page's narration clip, and advances the instant the
+    // clip's 'ended' fires (await playClip in runStep). No silence timers, no agent: the audio's
+    // own length is the pacing. The only timer here is a per-step watchdog that force-advances if
+    // a clip never ends (a missing/stalled MP3) so the tour can't permanently stall on one stop.
     function clearStepWatchdog() { if (stepWatchdog !== null) { clearTimeout(stepWatchdog); stepWatchdog = null; } }
-    function scheduleAdvance(delay = SILENCE_MS) {
-      clearAdvance();
-      if (tourStep < 0) return;   // desktop preamble ("step -1"): the handoff into runStep(0) is explicit (startTourFlow), never auto-advanced — keeps a stray agent question or unclean mode flip from racing OR stranding the tour
-      if (qaActive) return;   // a question is being handled → never auto-advance; resume is explicit
-      if (choreographyActive) return;   // wait for the scripted cursor walk to finish before moving on
-      if (!touring || userPaused || humanActive || !conversation) return;
-      advanceTimer = window.setTimeout(() => {
-        advanceTimer = null;
-        if (touring && !userPaused && conversation && !agentSpeaking) runStep(tourStep + 1);
-      }, delay);
-    }
     // ---- cursor auto-pilot: the guide's pointer clicks its way through the site ----
     function windowOpen(): boolean {
       const w = document.getElementById('desktop-window');
@@ -1218,11 +1269,15 @@
     }
     function waitForEl(getEl: () => HTMLElement | null, timeout = 2500): Promise<HTMLElement | null> {
       return new Promise((resolve) => {
-        const start = performance.now();
+        let elapsed = 0, last = performance.now();
         const tryFind = () => {
           const el = getEl();
           if (el) { resolve(el); return; }
-          if (!touring || userPaused || humanActive || performance.now() - start > timeout) { resolve(null); return; }
+          if (!touring) { resolve(null); return; }
+          const now = performance.now();
+          if (!tourPaused) elapsed += now - last;   // don't count paused time against the timeout
+          last = now;
+          if (elapsed > timeout) { resolve(null); return; }
           window.setTimeout(tryFind, 60);
         };
         tryFind();
@@ -1234,14 +1289,14 @@
       if (!el || reduceMotion || !cursorFx) { act(); return; }
       try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
       await sleep(220);                       // let any scroll settle before aiming
-      if (!touring || userPaused || humanActive) return;
+      if (!touring) return;
       const r = el.getBoundingClientRect();
       cursorFx.show();
       // Land on the element's centre so the click visibly sits on the target — used to clamp
       // at (64, 22) from the corner, which on a big screenshot or card landed up near the
       // edge and read as "clicked the wrong thing."
       await cursorFx.moveTo(r.left + r.width / 2, r.top + r.height / 2);
-      if (!touring || userPaused || humanActive) return;
+      if (!touring) return;
       await cursorFx.click();
       act();
     }
@@ -1262,7 +1317,7 @@
       if (kind === 'icon') {
         // section change: close the current window, then click the next folder icon
         if (windowOpen()) { await gestureClick(closeBtnEl(), () => desktop()?.close()); await sleep(260); }
-        if (!touring || userPaused || humanActive) return;
+        if (!touring) return;
         await gestureClick(iconEl(step.path), open);
         return;
       }
@@ -1273,41 +1328,36 @@
         desktop()?.open(root);                          // pop back to the folder
         await waitForEl(() => cardEl(step.path), 2500);
       }
-      if (!touring || userPaused || humanActive) return;
+      if (!touring) return;
       const el = await waitForEl(() => cardEl(step.path), 2500);
       await gestureClick(el, open);
     }
     async function runStep(i: number) {
       if (navigating) return;                  // a step is already in flight
-      if (!touring || userPaused || humanActive || !conversation) return;
-      if (i >= TOUR_STEPS.length) { finishTour(); return; }
+      if (!touring) return;
+      if (i >= TOUR_STEPS.length) { void finishTour(); return; }
       navigating = true;
-      clearAdvance();
       clearStepWatchdog();   // drop the previous step's safety-net timer
       armIdle();             // re-arm the idle-disconnect each step so a long/quiet stop can't trip it mid-tour
-      // Safety net, armed UP FRONT (before navigation) and ungated: even if driveTo throws, the
-      // page never loads, or the agent never speaks / never cleanly stops, force the tour forward
-      // after a generous per-step cap so it can NEVER permanently stall on one stop. The normal
-      // silence-based advance fires long before this; runStep's clearAdvance + clearStepWatchdog +
-      // navigating guards make a double-advance impossible. Interruptions clear it (enterQa) or
-      // block it (the userPaused/humanActive/qaActive guards), so the tour still pauses for the
-      // visitor — it only guarantees progress when nothing interrupts.
+      // Safety net, armed UP FRONT (before navigation): if a clip never fires 'ended' (a missing or
+      // permanently-stalled MP3) the await playClip below would hang forever, so force the tour
+      // forward after a generous cap. finishClip's normal 'ended' fires long before this; the
+      // navigating + tourStep guards make a double-advance impossible, and a Pause holds it (the
+      // !tourPaused check) so the watchdog never skips a stop the visitor is paused on.
       {
         const myStepIdx = i;
-        const capMs = TOUR_STEPS[i] && TOUR_STEPS[i].notes ? 80000 : 28000;   // case studies narrate longest
+        const capMs = 90000;   // far longer than any clip; only fires on a truly dead clip
         stepWatchdog = window.setTimeout(() => {
           stepWatchdog = null;
-          if (touring && !userPaused && !humanActive && !qaActive && conversation && !navigating && tourStep === myStepIdx) {
-            runStep(myStepIdx + 1);
-          }
+          if (touring && !tourPaused && !navigating && tourStep === myStepIdx) runStep(myStepIdx + 1);
         }, capMs);
       }
+      tourStep = i;
+      const step = TOUR_STEPS[i];
+      const prev = i > 0 ? TOUR_STEPS[i - 1] : null;
       try {
-        tourStep = i;
-        const step = TOUR_STEPS[i];
-        const prev = i > 0 ? TOUR_STEPS[i - 1] : null;
         await driveTo(step, prev);             // pointer clicks through to the page (or opens it)
-        if (!touring || userPaused || humanActive || !conversation) return;   // bailed mid-navigation
+        if (!touring) { navigating = false; return; }   // bailed mid-navigation
         // The desktop fetches + injects the opened page ASYNCHRONOUSLY, so its content (screenshots,
         // headings) isn't in the DOM the instant driveTo returns. Without this wait the cursor walk
         // runs against the "opening…" placeholder: the early screenshot/section targets resolve to
@@ -1322,106 +1372,69 @@
           if (shot && shot.clientHeight < 24) return null;               // image present but not sized yet
           return b;
         }, 3500);
-        if (!touring || userPaused || humanActive || !conversation) return;   // bailed during the load wait
-        // Navigation is done and the page is open. Drop the navigating guard NOW: the scripted
-        // cursor walk below is gated by choreographyActive + its own browseToken, not navigating.
-        // runChoreography checks live() (which requires !navigating) synchronously on its first
-        // step, before this function's finally would clear navigating — so leaving it set made
-        // every codified-page choreography no-op instantly (the cursor never moved on those steps;
-        // only the generic browseStep, which sleeps first, slipped through).
-        navigating = false;
-        repinOrb();                            // float the orb beside the freshly opened window
-        let directive: string;
-        const hasChoreography = !!TOUR_CHOREOGRAPHY[step.path]?.length;
-        if (i === 0 && !tourFromExploring) {
-          directive = hasChoreography
-            ? `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then narrate in about 7 to 9 seconds as the cursor walks ${step.label}: introduce what's here in groups, not individual names. Then stop and wait for the system to advance.`
-            : `Open by saying this line word for word: "Hi, I'm Porter's guide. I'll walk you through his work, and you can jump in with a question anytime." Then ONE short sentence framing ${step.label} (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
-        } else if (i === 0 && tourFromExploring) {
-          tourFromExploring = false;
-          directive = hasChoreography
-            ? `Tour starting (you already greeted). First stop: ${step.label}. Narrate in about 7 to 9 seconds as the cursor walks the section: introduce what's here in groups, not individual names. Then stop and wait for the system to advance.`
-            : `Tour starting (you already greeted). First stop: ${step.label}. Say ONE short sentence framing it (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
-        } else if (step.notes) directive = hasChoreography
-          ? `The visitor is now looking at ${step.label}. Keep it tight: about 18 to 22 seconds, two or three short spoken sentences. Hit four quick beats, then stop: what it is (the feature), the benefit it delivers, why it is genuinely impressive, and the business impact. Lead with the strongest hook. Do not narrate every detail, do not list, and do not read the talking points word for word; they are background, not a script. Talking points for reference: ${step.notes} Then stop.`
-          : `The visitor is now looking at ${step.label}. In two or three short sentences, hit four quick beats: what it is, the benefit, why it is impressive, and the business impact. Lead with the strongest hook, no lists, and do not read the talking points word for word. Talking points for reference: ${step.notes} Then stop.`;
-        else if (step.intro) directive = hasChoreography
-          ? `The visitor is now looking at ${step.label}. In about 7 to 9 seconds, briefly introduce what this section contains, in groups not individual names. Then stop and wait for the system to advance.`
-          : `The visitor is now looking at ${step.label}. ONE short framing sentence (under 20 words). Do NOT list, name, or preview the items inside. Then stop and wait for the system to advance.`;
-        else if (step.path === '/books' || step.path === '/movies') directive = `The visitor is now looking at ${step.label}. This is personal, not product work: in one or two warm, conversational sentences give a quick glimpse of the kind of ${step.path === '/movies' ? 'films' : 'books'} Porter gravitates toward, and you may name one favorite and why. A bit of personality, never a sales pitch and never a long list. Then stop.`;
-        else directive = `The visitor is now looking at ${step.label}. In one or two sentences, sell why it is impressive and what it does for a team or customer. Then stop.`;
-        directive += NO_ASK;   // scripted tour: never invite questions/choices, the system advances
-        lastDirective = directive; lastDirectiveAt = Date.now();   // remember it (and when) so its echo + timing distinguish scripted speech from a Q&A reply
-        spokeThisStep = false;   // reset per step: auto-advance waits until the agent actually narrates this one
-        try { conversation.sendUserMessage(directive); } catch (_) {}
-        // Prefer the per-page choreography from the spec; fall back to the generic
-        // auto-picker for pages we haven't codified yet.
-        const choreography = TOUR_CHOREOGRAPHY[step.path];
-        if (choreography && choreography.length > 0) runChoreography(choreography);
-        else browseStep();   // scroll through + gesture at the content while it's described
-        // (the per-step safety-net watchdog was armed up front, before driveTo)
-      } finally {
-        navigating = false;
-      }
+      } catch (_) {}
+      // Navigation is done and the page is open. Drop the navigating guard NOW so the scripted
+      // cursor walk's live() (which requires !navigating) passes on its first synchronous step.
+      navigating = false;
+      if (!touring) return;
+      repinOrb();                            // float the orb beside the freshly opened window
+      // Run the per-page cursor choreography (or the generic auto-picker) ALONGSIDE the narration
+      // clip; the clip's length sets the pacing. Advance the instant the clip ends.
+      const choreography = TOUR_CHOREOGRAPHY[step.path];
+      if (choreography && choreography.length > 0) runChoreography(choreography);
+      else browseStep();
+      await playClip(step.id, step.narration);
+      // Don't advance if the tour was torn down, is paused at the clip boundary, or this step was
+      // already superseded (e.g. the watchdog force-advanced a dead clip → tourStep moved on).
+      if (!touring || tourPaused || tourStep !== i) return;
+      runStep(i + 1);   // tail call (no enclosing finally to clobber the next step's navigating)
     }
-    function finishTour() {
-      touring = false; navigating = false; qaActive = false;
-      clearAdvance(); clearExpect(); clearStepWatchdog(); clearCursorTimers();
-      hideResume();
+    async function finishTour() {
+      clearStepWatchdog();
+      // Final clip: play wrap.mp3 with the cursor parked, then fold back into the full Q&A panel.
+      await playClip(TOUR_WRAP.id, TOUR_WRAP.narration);
+      touring = false; tourPaused = false; navigating = false;
+      document.body.classList.remove('tour-locked');
+      pauseBtn.hidden = true; hideResume();
+      flushSleeps();
       setTourLayout(false);                 // back to the full panel for Q&A
       cursorFx?.hide();
       cursorFx?.stop();
       orbFx?.release();
       orbFx?.swooshTo(avatarAnchor());       // orb flies home into the panel header
-      lastDirective = 'The walkthrough is finished. Give one short line inviting them to open the résumé, book a meeting, or ask anything, then stop.'; lastDirectiveAt = Date.now();
-      try { conversation && conversation.sendUserMessage(lastDirective); } catch (_) {}
+      setState('off');
+      setMsg('That is the tour. Tap the mic or type a question whenever you like.');
+      choicesEl.hidden = false;              // offer Start Tour / Talk to Agent again
     }
-    // A real spoken interruption: hold off advancing until the agent has answered. If no
-    // answer arrives (e.g. background noise tripped the mic), resume after a few seconds.
-    function pauseForUser() {
-      if (!touring) return;
-      clearAdvance();
-      clearExpect();
-      expectTimer = window.setTimeout(() => { expectTimer = null; if (touring && !userPaused && !qaActive && !agentSpeaking) scheduleAdvance(); }, 7000);
-    }
-
-    // ---- Q&A hold: a question during the tour pauses the walkthrough until the visitor
-    // explicitly resumes (a "Resume tour" tap, or saying "continue"). The screen stays put
-    // while the agent answers, so the caption never desyncs and the orb keeps listening. ----
-    // Matches natural resume phrasings with optional filler at the start (yes/ok/alright/
-    // sure/please/cool/sounds good). Anchored to ^ so a question that mentions "continue"
-    // mid-sentence doesn't falsely resume.
-    const RESUME_RE = /^(?:(?:yes|yeah|yep|sure|ok|okay|alright|all\s*right|sounds\s*good|please|cool)[\s,.!]+)?(continue|keep going|go on|next|resume|carry on|let'?s continue|you can continue|continue the tour|let'?s go)\b/i;
-    // After the agent's "tour or question?" greeting, accept tour cues the agent might
-    // have failed to act on (e.g. it forgot to call startTour). Filters out questions
-    // so "what's the tour about?" doesn't false-trigger.
-    function looksLikeTourYes(text: string): boolean {
-      const t = (text || '').trim().toLowerCase().replace(/[.!]+$/, '');
-      if (!t) return false;
-      if (/[?]$/.test(t)) return false;
-      if (/^(what|who|why|when|where|how|can you|could you|would you|will you|do you|is there|tell me|describe)/i.test(t)) return false;
-      if (/\b(tour|walkthrough|walk\s*through|show\s*me\s*around|guided)\b/i.test(t)) return true;
-      // Bare affirmative answer to the tour-or-question prompt.
-      if (/^(yes|yeah|yep|sure|ok|okay|alright|all\s*right|sounds\s*good|cool|absolutely|definitely|please|do it|let'?s do it|go ahead|let'?s go)\s*$/i.test(t)) return true;
-      return false;
-    }
-    function enterQa() {
-      if (!touring || qaActive) return;
-      qaActive = true;
-      clearAdvance();                 // kill any pending auto-advance + grace timers
-      clearExpect();
-      clearStepWatchdog();            // a real question holds the tour: cancel the force-advance net too
-      cursorFx?.hide();               // stand the auto-pilot pointer down; an explicit pointAt re-shows it
-      hideResume();                   // hidden until the answer finishes (shown on the next "stopped speaking")
-    }
-    function showResume() { if (touring && qaActive) { resumeBtn.hidden = false; if (!agentSpeaking && !micMuted) setState('qa'); } }
     function hideResume() { resumeBtn.hidden = true; }
-    function resumeTour() {
-      if (!touring || !qaActive) return;
-      qaActive = false;
-      hideResume();
-      clearExpect();
-      runStep(tourStep + 1);          // pick the walkthrough back up at the next stop
+    // ---- Pause / Resume: the freeze-frame ----
+    // Pause freezes the whole walkthrough at the current frame — the narration clip, the cursor
+    // mid-glide, and every choreography dwell — and unlocks the mic + text box so the visitor can
+    // ask the LIVE agent a question. Resume turns the agent off completely and continues playback
+    // from exactly where it stopped.
+    function pauseTour() {
+      if (!touring || tourPaused) return;
+      tourPaused = true;
+      pauseClip();                                 // freeze the narration (no 'ended' → awaiter holds)
+      cursorFx?.pause();                           // freeze the pointer mid-glide
+      pauseSleeps();                               // bank the remaining time on every choreography dwell
+      document.body.classList.remove('tour-locked');   // unlock the mic + text for Q&A
+      pauseBtn.hidden = true;
+      resumeBtn.hidden = false;
+      armIdle();
+      setState('paused');
+    }
+    function resumeTourPlayback() {
+      if (!touring || !tourPaused) return;
+      endSession();                                // "completely turns off the voice agent"
+      tourPaused = false;
+      resumeBtn.hidden = true;
+      pauseBtn.hidden = false;
+      document.body.classList.add('tour-locked');  // re-lock the mic + text while the tour plays
+      resumeSleeps();                              // re-arm the banked choreography dwells
+      cursorFx?.resume();                          // unfreeze the pointer
+      resumeClip();                                // resume the clip → its 'ended' will advance the tour
+      setState('speaking');
     }
 
     // ---- push-to-talk ----
@@ -1439,7 +1452,7 @@
       try { conversation.setMicMuted(false); } catch (_) {}
       pttActive = true;
       micBtn.classList.add('is-recording');
-      setState(qaActive ? 'qa' : 'listening');
+      setState(touring && tourPaused ? 'qa' : 'listening');
       armIdle();
       armPttSilenceTimer(PTT_INITIAL_MS);
     }
@@ -1501,25 +1514,16 @@
         if (el) { cursorPointAt(el, 120); return 'Pointing at it.'; }
         return 'Could not find that on screen.';
       },
-      resumeTour: () => {
-        // Resume is visitor-driven (their voice/text "continue" cue, or the Resume button).
-        // The agent should never call this; if a stale prompt does, no-op so the call can't
-        // cut its own answer off by navigating the page mid-utterance.
-        console.warn('[guide] agent called resumeTour; ignored (resume is visitor-driven)');
-        return 'I cannot resume the tour. The visitor will say continue or click the Resume button when they are ready.';
-      },
-      startTour: () => {
-        if (touring) return 'The tour is already running.';
-        // Defer slightly so the agent's tool-return settles before we send the kickoff
-        // directive, avoiding overlap with whatever it says about starting the tour.
-        window.setTimeout(() => { if (!touring) takeTour(); }, 250);
-        return 'Starting the tour now.';
-      },
+      // The scripted walkthrough is pre-recorded and visitor-controlled (Start Tour / Pause /
+      // Resume buttons), so the Q&A agent has no tour controls — it only answers questions.
     };
 
-    // ---- agent session ----
+    // ---- agent session (Q&A only) ----
+    // The live ElevenLabs agent is NOT used for the walkthrough (that's pre-recorded). It connects
+    // only when the visitor wants to ask something: "Talk to Agent" from the intro, or the mic /
+    // text box while the tour is paused. Resume tears it straight back down.
     async function connectGuide() {
-      if (conversation || connecting || userPaused) return;   // never bring the agent up while paused
+      if (conversation || connecting) return;
       if (connectDeferred) return;   // already waiting on the first real gesture (see the defer block below)
       if (isOverBudget()) {
         // Daily voice-guide budget exhausted for this browser; refuse to mint another
@@ -1544,10 +1548,9 @@
           document.removeEventListener('touchend', onFirstGesture, true);
           connectDeferred = false;
           // Re-enter only if the guide is still open and idle. A gesture-initiated handler
-          // (takeTour sets tourMode, a typed question sets pendingText) may run right after this
-          // in the same gesture; onConnect honours those flags, so we don't get stuck in
-          // exploring mode or double-connect.
-          if (panelOpen && !conversation && !connecting && !userPaused) connectGuide();
+          // (a typed question sets pendingText) may run right after this in the same gesture;
+          // onConnect flushes that, so we don't double-connect.
+          if (panelOpen && !conversation && !connecting) connectGuide();
         };
         document.addEventListener('pointerdown', onFirstGesture, true);
         document.addEventListener('keydown', onFirstGesture, true);
@@ -1593,7 +1596,6 @@
           onConnect: () => {
             if (sessionGen !== myGen) return;   // superseded by a newer attempt → ignore
             connecting = false; voiceEnabled = true;
-            if (userPaused) return;   // paused mid-connect: the post-await guard tears it down
             // Push-to-talk: start muted so ambient noise doesn't trigger the agent. The
             // visitor taps the mic to talk; auto-mute kicks in after silence.
             micMuted = true; pttActive = false;
@@ -1602,109 +1604,53 @@
             setState('muted');
             armIdle();
             try { conversation && conversation.setVolume({ volume: outputMuted ? 0 : 1 }); } catch (_) {}
-            // Defer the first narration a beat: if the prompt override is rejected the socket
-            // disconnects almost immediately, and we want THIS doomed session torn down before it
-            // ever speaks — otherwise it narrates, the retry session narrates again, and the
-            // visitor hears two overlapping voices. Cancelled if the session is superseded (a retry
-            // bumped the gen) or torn down before it fires.
+            // No spoken greeting on connect — the pre-recorded intro already greeted. Just flush a
+            // queued question (typed before the socket opened). Deferred a beat so a rejected
+            // prompt-override session is torn down before it can speak, never double-answering.
             window.setTimeout(() => {
-              if (sessionGen !== myGen || !conversation || userPaused) return;
-            if (tourMode) {
-              // Agent-led tour: the client now drives the page-by-page walkthrough,
-              // starting with the desktop preamble and then opening /projects.
-              tourMode = false;   // one-shot: only kick off on this connect, not on later reconnects
-              startTourFlow();
-            } else if (pendingText) {
-              // flush a queued question now that the socket is open (typed before connect)
-              try { conversation && conversation.sendUserMessage(pendingText); } catch (_) {} pendingText = null;
-            } else if (exploring && !exploringGreeted) {
-              // First connect of an exploring session: agent greets vocally. The very first time
-              // this browser ever opens the guide it gets the full intro + tour offer; after that
-              // it gets a short welcome-back line, so the full intro plays only once per visitor.
-              exploringGreeted = true;
-              let opener: string;
-              if (introHeard) {
-                opener = `The visitor has used this guide before, so do NOT re-introduce yourself and do NOT explain or pitch the tour. Say ONE short, warm welcome-back line, for example "Welcome back, what can I help with?". Then STOP and wait for their answer. Do NOT navigate anywhere and do NOT call any tool yet. If they accept a tour (yes, sure, please, take me through it, etc.), call the startTour tool. If they ask a question, answer it directly using your tools.`;
-              } else {
-                opener = `Say ONE short greeting sentence and ask whether they would like a quick guided tour of Porter's work, or if they have a specific question. Then STOP and wait for their answer. Do NOT navigate anywhere. Do NOT call any tool yet. Do NOT start describing Porter or any page. Just greet and ask the choice. If they later accept the tour (yes, sure, please, take me through it, etc.), call the startTour tool. If they ask a question, answer it directly using your tools.`;
-                introHeard = true;
-                try { localStorage.setItem(INTRO_KEY, 'yes'); } catch (_) {}
+              if (sessionGen !== myGen || !conversation) return;
+              if (pendingText) {
+                try { conversation.sendUserMessage(pendingText); } catch (_) {}
+                pendingText = null;
               }
-              lastDirective = opener; lastDirectiveAt = Date.now();
-              try { conversation && conversation.sendUserMessage(opener); } catch (_) {}
-            }
             }, 500);
           },
           onModeChange: ({ mode }) => {
-            if (userPaused) return;   // ignore agent activity while the visitor has it paused
             armIdle();
             if (mode === 'speaking') {
-              // If the visitor spoke after our last scripted directive and the agent is now
-              // replying, this is a Q&A turn — hold the tour even when no user transcript
-              // arrives via onMessage (some agent configs skip user-side transcripts). Also
-              // treat as Q&A if the agent starts speaking long after our directive landed,
-              // since scripted speech normally starts within a few seconds of the directive.
-              const recentUserSpeech = userSpokeAt > lastDirectiveAt && Date.now() - userSpokeAt < 8000;
-              // Only treat a late agent reply as a question if the mic was actually open for the
-              // visitor to interrupt. With push-to-talk the mic is muted during scripted
-              // narration, so a slow first utterance (cold-start TTS warmup, which routinely
-              // exceeds 6s) is just the agent starting late — not a Q&A — and must not hold the
-              // tour. Typed questions enter Q&A directly via onMessage, so nothing is lost.
-              const lateAgentSpeech = !micMuted && lastDirectiveAt > 0 && Date.now() - lastDirectiveAt > 6000;
-              if (touring && !qaActive && (recentUserSpeech || lateAgentSpeech)) enterQa();
-              clearAdvance(); clearExpect();   // agent talking → cancel pending advance + interruption grace
               holdForAgent(); agentSpeaking = true; startLoop(); if (!micMuted) setState('speaking');
               // Watchdog: if the agent "speaks" but no audio lands in 3s, it has no voice.
               if (voiceWatchdog !== null) clearTimeout(voiceWatchdog);
               if (!audioSeen) voiceWatchdog = window.setTimeout(() => { if (!audioSeen) flagNoVoice(); }, 3000);
             } else {
               agentSpeaking = false; releaseAfterAgent();
-              // Backsolve actual TTS pace from the just-finished utterance and roll it into
-              // the lastWps EMA, so future captions get a better estimate. Must run before
-              // capFinish, which snaps capStart way back to mark the line done.
-              if (capActive && capWords.length > 1 && capStart > 0 && !pendingCapStart) {
+              // Backsolve actual TTS pace from the just-finished Q&A utterance into the lastWps EMA
+              // so future captions estimate better. Clip captions (capAudioEl) read their own clock,
+              // so skip them. Must run before capFinish, which snaps capStart back to mark it done.
+              if (capActive && !capAudioEl && capWords.length > 1 && capStart > 0 && !pendingCapStart) {
                 const actualDurMs = performance.now() - capStart;
                 if (actualDurMs > 800) {
                   const measuredWps = capWords.length / (actualDurMs / 1000);
-                  // Faster convergence than before — the wall-clock fallback path needs to
-                  // catch the real TTS rate within an utterance or two.
                   if (measuredWps > 1.5 && measuredWps < 6.0) lastWps = lastWps * 0.35 + measuredWps * 0.65;
                 }
               }
               capFinish();   // snap the caption to the end when speech stops
               capAlign = null; capAlignReady = false;   // drop the stale timeline so the next utterance starts clean
               if (budgetLimitReached) {
-                // Daily char budget hit during the utterance we just finished. End the
-                // metered session now, show the goodbye line, leave the panel up so the
-                // visitor can read it before closing.
+                // Daily Q&A char budget hit during the utterance we just finished. End the metered
+                // session now and show the goodbye line; leave the panel up so it can be read.
                 budgetLimitReached = false;
-                if (touring) { touring = false; clearAdvance(); clearExpect(); hideResume(); }
                 endSession();
                 setMsg(BUDGET_OVER_MSG);
-                return;
               }
-              if (qaActive) showResume();                    // answered a question → wait, surface Resume, never auto-advance
-              // Advance at the normal pace only if the agent actually narrated (audio landed).
-              // A "speaking" turn that produced no audio (voiceless/text-only config) waits the
-              // longer no-speech window instead of racing ahead at the 3s silence cadence.
-              else if (expectTimer === null) scheduleAdvance(spokeThisStep ? SILENCE_MS : NO_SPEECH_MS);
             }
           },
           onMessage: ({ message, role }) => {
             armIdle();
             if (role === 'user') {
-              const text = (message || '').trim();
-              if (text && text === lastDirective) { lastDirective = ''; return; }   // our own injected directive, not a question
-              holdForAgent(); clearAdvance();
-              if (touring) {
-                if (qaActive && RESUME_RE.test(text)) { resumeTour(); return; }      // "continue" → pick the tour back up
-                enterQa();                                                           // a real question → hold the tour
-              } else if (exploring && !touring && looksLikeTourYes(text)) {
-                // The agent should have called startTour, but didn't (e.g. tool not in
-                // dashboard config, or it just decided to narrate instead). Take over.
-                takeTour();
-                return;
-              }
+              // A visitor question (typed or spoken). The walkthrough is pre-recorded, so there's
+              // nothing to hold — just reflect that the agent is thinking about the answer.
+              holdForAgent();
               if (!micMuted) setState('thinking');
             } else if (role === 'agent' && message) { buildCaption(message); }
           },
@@ -1712,17 +1658,14 @@
             if (vadScore <= 0.6) return;
             if (micMuted) return;   // mic is off; ignore phantom VAD (and any local audio leakage)
             holdForAgent(); armIdle();
-            // Ignore VAD while the agent is speaking — its own output through the speakers
-            // bleeds into the visitor's mic and trips VAD. Real interruptions still arrive
-            // via the SDK's own interrupt detection and onMessage('user').
+            // Ignore VAD while the agent is speaking — its own output through the speakers bleeds
+            // into the mic and trips VAD. Real interruptions arrive via the SDK's interrupt
+            // detection + onMessage('user').
             if (agentSpeaking) return;
-            if (touring) userSpokeAt = Date.now();
             if (pttActive) armPttSilenceTimer(PTT_TAIL_MS);   // extend the silence window each time the visitor actually speaks
-            pauseForUser();
           },
           onAudio: () => {
             audioSeen = true;
-            spokeThisStep = true;   // real narration audio landed → this step may auto-advance once the agent stops
             armIdle();
             if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
             if (voiceWarned) { voiceWarned = false; setState(agentSpeaking ? 'speaking' : micMuted ? 'muted' : 'listening'); }   // slow first chunk: undo the false alarm
@@ -1730,7 +1673,7 @@
             // frame loop anchors to the first SOUND — far more accurate than arrival, which the
             // SDK's buffer makes precede playback. Only when OUTPUT is muted (no audible signal to
             // detect) do we anchor on arrival here.
-            if (capActive && pendingCapStart) {
+            if (capActive && !capAudioEl && pendingCapStart) {
               if (capFirstChunkAt === 0) capFirstChunkAt = performance.now();
               if (outputMuted) { capStart = performance.now(); pendingCapStart = false; }
             }
@@ -1739,8 +1682,8 @@
           onAudioAlignment: (al: { chars: string[]; char_start_times_ms: number[]; char_durations_ms: number[] }) => {
             // ElevenLabs sends per-character timing in each audio chunk. Accumulate them
             // into a master per-utterance timeline so revealCaption can sync the focus
-            // word to the exact spoken character.
-            if (!capActive) return;
+            // word to the exact spoken character. (Q&A captions only; clip captions read the MP3.)
+            if (!capActive || capAudioEl) return;
             // (clock anchoring is handled by the frame loop on first audible output, not here)
             appendAlignment(al.chars, al.char_start_times_ms, al.char_durations_ms);
             if (import.meta.env.DEV && capAlign) console.log('[guide] align chunk +', al.chars.length, 'chars; tl=', capAlign.starts.length, 'lastEnd=', (capAlign.starts[capAlign.starts.length - 1] + capAlign.durs[capAlign.durs.length - 1]).toFixed(0), 'ms');
@@ -1750,13 +1693,13 @@
             if (sessionGen !== myGen) return;   // a superseded session's disconnect → ignore (don't clobber the live one or double-retry)
             conversation = null; voiceEnabled = false; connecting = false; agentSpeaking = false;
             if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
-            if (panelOpen) {
-              if (userPaused) setState('paused');                                    // we cut it on purpose (pause)
-              else if (d.reason === 'error' && allowOverrides && !overrideRetry) {
-                // The WS opened then closed with an error, so the throw-catch never ran.
-                // Most likely the prompt override was rejected (the dashboard's prompt
-                // override toggle is off). Retry once on the dashboard prompt so the
-                // visitor doesn't see "Guide offline."
+            // During a tour the panel state is owned by the walkthrough (Resume tears the agent down
+            // on purpose), so don't let a Q&A disconnect repaint it. Only react when not touring.
+            if (panelOpen && !touring) {
+              if (d.reason === 'error' && allowOverrides && !overrideRetry) {
+                // The WS opened then closed with an error, so the throw-catch never ran. Most
+                // likely the prompt override was rejected (dashboard override toggle off). Retry
+                // once on the dashboard prompt so the visitor doesn't see "Guide offline."
                 overrideRetry = true; allowOverrides = false;
                 console.warn('[guide] disconnect during overrides; retrying once without them:', d.message);
                 connectGuide();
@@ -1766,10 +1709,10 @@
             }
           },
         });
-        // If the panel was closed/paused, or the tab was hidden, while we were still
-        // connecting, the session resolves now with no UI to control it — tear it
-        // straight back down so the ElevenLabs agent + mic never linger in the background.
-        if (!panelOpen || userPaused || document.hidden) { endSession(); return; }
+        // If the panel was closed, or the tab was hidden, while we were still connecting, the
+        // session resolves now with no UI to control it — tear it straight back down so the
+        // ElevenLabs agent + mic never linger in the background.
+        if (!panelOpen || document.hidden) { endSession(); return; }
       } catch (e) {
         connecting = false;
         if (conversation) { try { conversation.endSession(); } catch (_) {} }   // tear down a half-open session before any retry so its audio can't linger
@@ -1795,23 +1738,11 @@
       micBtn.classList.remove('is-recording');
       if (voiceWatchdog !== null) { clearTimeout(voiceWatchdog); voiceWatchdog = null; }
       disarmIdle();
-      clearAdvance();
-      clearExpect();
     }
-    // If the voice agent can't be reached when a tour starts, don't strand the visitor in
-    // the collapsed tour bar with an idle cursor — revert to the full panel (the offline
-    // state is already shown) so they can retry, explore, or type. No-op outside a tour.
+    // If the live Q&A agent can't be reached, surface the offline state in the slim bar (the tour
+    // itself is pre-recorded and unaffected). Only meaningful while a Q&A session was being set up.
     function bailTourOffline() {
-      if (!touring && !exploring) return;
-      touring = false; tourMode = false; navigating = false; qaActive = false; exploring = false;
-      clearAdvance(); clearExpect(); clearStepWatchdog(); clearCursorTimers();
-      hideResume();
-      setTourLayout(false);
-      setMsg("The voice guide can't connect right now. You can still explore on your own, or ask me anything by text.");
-      cursorFx?.hide(); cursorFx?.stop();
-      orbFx?.release();
-      orbFx?.swooshTo(avatarAnchor());
-      choicesEl.hidden = false;
+      setMsg("The voice agent can't connect right now. The tour still works; you can also keep exploring on your own.");
     }
 
     // ---- panel open / close + tour control ----
@@ -1830,8 +1761,6 @@
     }
     function clearCursorTimers() {
       if (cursorPointTimer !== null) { clearTimeout(cursorPointTimer); cursorPointTimer = null; }
-      if (humanTimer !== null) { clearTimeout(humanTimer); humanTimer = null; }
-      humanActive = false;
     }
     // A typed question briefly shows on the bar, then clears to free the space again.
     function showEcho(text: string) {
@@ -1856,21 +1785,29 @@
       startLoop();
       orbFx?.release();
       orbFx?.setState('idle');
-      touring = false; tourMode = false;
-      // Go straight to the slim Q&A bar; the agent will greet and verbally offer the tour.
-      // This eagerly opens a metered ElevenLabs session since the visitor explicitly
-      // opened the guide (or it auto-popped from real desktop activity).
+      touring = false; tourPaused = false; exploring = false;
       unlockAudio();
-      enterExploring();
-      setMsg('');   // let the input's "Ask me anything…" placeholder hold the space until the agent speaks
-      connectGuide();
+      // Intro popup (full centered panel, NOT the slim tour bar): play the pre-recorded intro —
+      // the full welcome on a visitor's first ever open, a short welcome-back line afterwards —
+      // and surface the two choices, Start Tour and Talk to Agent. No metered agent session is
+      // opened here; the intro is a static clip, so opening the guide costs nothing.
+      setTourLayout(false);
+      choicesEl.hidden = false;
+      pauseBtn.hidden = true; hideResume();
+      const first = !introHeard;
+      if (first) { introHeard = true; try { localStorage.setItem(INTRO_KEY, 'yes'); } catch (_) {} }
+      const clip = first ? TOUR_INTRO : TOUR_WELCOME_BACK;
+      setMsg(clip.narration);            // the popup shows the intro text statically beneath the buttons
+      playClip(clip.id, null);           // audio only; no rolling teleprompter in the popup
     }
     function closeGuide() {
       if (!panelOpen) return;
-      panelOpen = false; touring = false; agentSpeaking = false; userPaused = false; tourMode = false; navigating = false; qaActive = false; exploring = false; exploringGreeted = false; tourFromExploring = false;
+      panelOpen = false; touring = false; tourPaused = false; agentSpeaking = false; navigating = false; exploring = false;
+      stopClip(); flushSleeps();
       clearPttSilenceTimer(); pttActive = false;
       micBtn.classList.remove('is-recording');
-      hideResume();
+      document.body.classList.remove('tour-locked');
+      pauseBtn.hidden = true; hideResume();
       setTourLayout(false);
       cursorFx?.hide();
       cursorFx?.stop();
@@ -1889,9 +1826,9 @@
       orbFx?.swooshTo(dormantAnchor());
       desktop()?.close();
     }
-    // Free-form Q&A: slim-bar layout (orb floats free, caption rolls over the input) with
-    // no scripted walkthrough. The agent greets here and verbally offers the tour; the
-    // visitor's answer drives what happens (the agent calls startTour, or just answers).
+    // Free-form Q&A: slim-bar layout (orb floats free, caption rolls over the input) with no
+    // scripted walkthrough. Reached from the intro's "Talk to Agent" choice, or from the mic /
+    // text box. The live agent answers questions here; it does not lead any tour.
     function enterExploring() {
       if (touring || exploring) return;
       exploring = true;
@@ -1904,50 +1841,61 @@
       cursorFx?.start();
       cursorFx?.place(window.innerWidth * 0.5, window.innerHeight * 0.62);
     }
+    // Intro's "Talk to Agent" choice: drop the popup, open the live Q&A session.
+    function talkToAgent() {
+      stopClip();                     // stop the intro clip if it's still playing
+      unlockAudio();
+      enterExploring();
+      connectGuide();
+    }
+    // Intro's "Start Tour" choice: run the pre-recorded walkthrough. No agent is involved — the
+    // mic + text box are LOCKED (body.tour-locked) until the visitor hits Pause.
     function takeTour() {
-      userPaused = false;
-      qaActive = false;
-      const wasExploring = exploring;
-      exploring = false;        // transitioning out of free-form into the scripted tour
-      hideResume();
-      touring = true;
+      if (touring) return;
+      stopClip();               // stop the intro clip before the preamble starts
+      endSession();             // the tour never uses the live agent
+      exploring = false;
+      touring = true; tourPaused = false;
       choicesEl.hidden = true;
-      setTourLayout(true);      // collapse to the slim caption bar (no-op if already slim)
+      hideResume();
+      pauseBtn.hidden = false;                          // Pause is available throughout playback
+      document.body.classList.add('tour-locked');       // lock the mic + text for the duration
+      setTourLayout(true);      // collapse to the slim caption bar
       orbFx?.release();
       orbFx?.swooshTo(windowPin());   // orb comets off to float beside the window (or its corner spot)
       cursorFx?.start();
       cursorFx?.show();
       cursorFx?.place(window.innerWidth * 0.5, window.innerHeight * 0.62);   // pointer waits, then drives
-      setMsg('');   // captions fill in from the agent's speech; the input placeholder holds the space until then
-      if (conversation && voiceEnabled) {
-        // Already connected (e.g. agent called startTour from the opening greeting);
-        // run the desktop preamble, then jump into step 0 (which opens /projects).
-        tourFromExploring = wasExploring;
-        startTourFlow();
-      } else {
-        tourMode = true;          // agent leads the walkthrough as soon as it connects
-        connectGuide();           // first connect; onConnect will fire startTourFlow
-      }
+      setMsg('');               // the preamble clip fills the caption in
+      startTourFlow();
     }
     // ---- text + mic ----
+    // While the tour is PLAYING (not paused), the mic + text box are locked. Tapping either flashes
+    // the Pause button orange so it's clear the visitor must pause the walkthrough to ask a question.
+    let flashTimer: number | null = null;
+    function flashPause() {
+      if (flashTimer !== null) clearTimeout(flashTimer);
+      pauseBtn.classList.remove('is-flash');
+      void pauseBtn.offsetWidth;   // reflow so the animation restarts on rapid repeat taps
+      pauseBtn.classList.add('is-flash');
+      flashTimer = window.setTimeout(() => { flashTimer = null; pauseBtn.classList.remove('is-flash'); }, 900);
+    }
+    const tourLocked = () => touring && !tourPaused;
     askForm.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (tourLocked()) { flashPause(); return; }   // locked during playback → nudge Pause
       const text = inputEl.value.trim();
       if (!text) return;
       inputEl.value = '';
-      if (touring && qaActive && RESUME_RE.test(text)) { resumeTour(); return; }   // typed "continue" → resume, don't ask the agent
       if (!touring && !exploring) enterExploring();   // first free-form message → slim bar layout, orb floats free
-      if (exploring && !touring && looksLikeTourYes(text)) {   // typed acceptance of the tour offer → start the tour
-        takeTour();
-        return;
-      }
       setState('thinking');
       armIdle();
-      if (touring) enterQa();   // a typed question mid-tour holds the walkthrough until resume
       if (document.body.classList.contains('tour-mode')) showEcho(text);   // flash the question, then free the space
       if (conversation && voiceEnabled) { try { conversation.sendUserMessage(text); } catch (_) {} }
       else { pendingText = text; connectGuide(); }   // submit is a gesture → connect, then send on onConnect
     });
+    // Block focusing the locked text box (so no caret appears under the not-allowed cursor).
+    inputEl.addEventListener('pointerdown', (e) => { if (tourLocked()) { e.preventDefault(); flashPause(); } });
     // In the slim tour bar, focusing the input hides the rolling caption so the visitor
     // can see what they type; blurring an empty field brings the caption back.
     inputEl.addEventListener('focus', () => { if (document.body.classList.contains('tour-mode')) fieldEl.classList.add('is-typing'); });
@@ -1967,6 +1915,7 @@
     inputEl.addEventListener('input', pingUserActivity);
     inputEl.addEventListener('focus', pingUserActivity);
     micBtn.addEventListener('click', () => {
+      if (tourLocked()) { flashPause(); return; }   // locked during playback → nudge Pause
       if (!conversation || !voiceEnabled) {
         if (!touring && !exploring) enterExploring();   // first voice engagement → slim bar layout
         connectGuide();
@@ -1986,8 +1935,9 @@
     // ---- wiring ----
     orb.addEventListener('click', () => openGuide());
     closeBtn.addEventListener('click', closeGuide);
-    dismissBtn.addEventListener('click', closeGuide);
-    resumeBtn.addEventListener('click', () => resumeTour());
+    dismissBtn.addEventListener('click', talkToAgent);          // intro popup: "Talk to Agent"
+    pauseBtn.addEventListener('click', () => pauseTour());      // freeze the walkthrough, unlock Q&A
+    resumeBtn.addEventListener('click', () => resumeTourPlayback());  // kill the agent, resume from the frozen frame
     // Fullscreen toggle: hide the button entirely on browsers without the API. Esc still
     // exits via the browser, but we also listen for fullscreenchange so the icon flips.
     const docEl = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
@@ -2027,16 +1977,17 @@
         capTrack = null; capSpans = [];
         msgEl.textContent = '';
         if (document.body.classList.contains('tour-mode')) fieldEl.classList.remove('has-caption');
-      } else if (agentSpeaking && capActive && capWords.length) {
+      } else if ((agentSpeaking || clipPlaying) && capActive && capWords.length) {
         // Turning on mid-speech: draw the in-flight line and land the highlight where the
-        // voice is right now. capStart is already anchored to the audible start, so we nudge
-        // it back a touch to place the line slightly AHEAD of the voice (it reads as leading,
-        // then the speech settles into it) rather than starting at word 0 and racing to catch up.
-        if (reduceMotion) { if (capText) setMsg(capText); }
+        // voice is right now. For a clip, revealCaption reads the MP3's currentTime, so just
+        // rebuilding the row lands it on the live word. For the live agent, capStart is already
+        // anchored to the audible start, so we nudge it back a touch to place the line slightly
+        // AHEAD of the voice (it reads as leading) rather than racing to catch up from word 0.
+        if (reduceMotion) { if (capText) { msgEl.textContent = capText; if (document.body.classList.contains('tour-mode')) fieldEl.classList.add('has-caption'); } }
         else {
-          if (!pendingCapStart) capStart -= CAP_TOGGLE_LEAD_MS;   // already anchored → give the line a small head start
+          if (!capAudioEl && !pendingCapStart) capStart -= CAP_TOGGLE_LEAD_MS;   // agent path only: small head start
           smoothFocusX = Number.NaN; capPrevFocus = -1;           // snap to the live position, don't slide up from a stale transform
-          renderCaptionDom();                                     // builds the row and paints it at the current (led) position
+          renderCaptionDom();                                     // builds the row and paints it at the current position
         }
       }
     });
@@ -2075,25 +2026,8 @@
       if (e.key === 'Escape' && document.activeElement !== inputEl) { e.preventDefault(); e.stopImmediatePropagation(); closeGuide(); }
     }, true);
 
-    // Hand control back when the visitor uses their real mouse: a click on the page (not
-    // the panel) stands the cursor auto-pilot down; it resumes after a short idle.
-    document.addEventListener('pointerdown', (e) => {
-      if (!touring) return;
-      if (panel.contains(e.target as Node)) return;   // using the panel isn't "taking over"
-      humanActive = true;
-      cursorFx?.hide();
-      cursorFx?.stop();
-      clearAdvance();
-      if (cursorPointTimer !== null) { clearTimeout(cursorPointTimer); cursorPointTimer = null; }
-      if (humanTimer !== null) clearTimeout(humanTimer);
-      humanTimer = window.setTimeout(() => {
-        humanTimer = null;
-        humanActive = false;
-        // resume gently: bring the orb back beside whatever the visitor landed on, then
-        // re-arm the (delayed) advance — don't immediately yank to the next step.
-        if (touring && !userPaused && conversation) { cursorFx?.show(); repinOrb(); if (tourStep < 0) runStep(0); else scheduleAdvance(); }
-      }, 5000);
-    }, true);
+    // (The old "real mouse takes over the cursor" handler is gone: during the pre-recorded tour
+    // the page is locked — clicks on the mic/text flash Pause instead of seizing the pointer.)
 
     // Audio can only start after a real user gesture. If the guide ever connected without one
     // (the mousemove auto-pop), the SDK's output context is suspended and the agent is silent —
@@ -2122,7 +2056,7 @@
     }
     document.addEventListener('mousemove', onMove);
 
-    if (import.meta.env.DEV) (window as any).__guide = { open: openGuide, close: closeGuide, takeTour, orbFx, cursorFx, pointAtEl, avatarAnchor, dormantAnchor, windowPin, repinOrb, driveTo, iconEl, cardEl, nextArrowEl, runStep, TOUR_STEPS, cursorPointAt, resolvePointTarget, clientTools };
+    if (import.meta.env.DEV) (window as any).__guide = { open: openGuide, close: closeGuide, takeTour, talkToAgent, pauseTour, resumeTourPlayback, playClip, startTourFlow, orbFx, cursorFx, pointAtEl, avatarAnchor, dormantAnchor, windowPin, repinOrb, driveTo, iconEl, cardEl, nextArrowEl, runStep, TOUR_STEPS, cursorPointAt, resolvePointTarget, clientTools };
   }
 </script>
 
@@ -2286,7 +2220,7 @@
     transition: background 160ms ease, border-color 160ms ease;
   }
   .guide-ask__send:hover, .guide-ask__send:focus-visible { outline: none; background: var(--accent); border-color: var(--accent); color: #fff; }
-  /* shown only while a question has paused the tour (see showResume) */
+  /* Resume: shown only while the tour is paused (see resumeTourPlayback). Solid = primary action. */
   .guide-ask__resume {
     flex-shrink: 0; padding: 7px 13px; border: 1px solid var(--ink); border-radius: var(--radius-pill);
     background: var(--ink); color: var(--bg); font-family: var(--font-sans); font-size: 13px; font-weight: 500;
@@ -2294,6 +2228,33 @@
   }
   .guide-ask__resume:hover, .guide-ask__resume:focus-visible { outline: none; background: var(--accent); border-color: var(--accent); color: #fff; }
   .guide-ask__resume[hidden] { display: none; }
+  /* Pause: shown throughout tour playback. Resting state is a quiet outlined pill; tapping a
+     LOCKED mic/text box flashes it orange (is-flash) to point the visitor at it. */
+  .guide-ask__pause {
+    flex-shrink: 0; padding: 7px 14px; border: 1px solid var(--rule); border-radius: var(--radius-pill);
+    background: var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 13px; font-weight: 500;
+    white-space: nowrap; cursor: pointer; transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  }
+  .guide-ask__pause:hover, .guide-ask__pause:focus-visible { outline: none; border-color: var(--ink); }
+  .guide-ask__pause[hidden] { display: none; }
+  .guide-ask__pause.is-flash { animation: guide-pause-flash 0.9s ease; }
+  @keyframes guide-pause-flash {
+    0%   { background: var(--bg); border-color: var(--rule); color: var(--ink); box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 0%, transparent); }
+    16%  { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 5px color-mix(in oklab, var(--accent) 32%, transparent); }
+    100% { background: var(--bg); border-color: var(--rule); color: var(--ink); box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 0%, transparent); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .guide-ask__pause.is-flash { animation: none; background: var(--accent); border-color: var(--accent); color: #fff; }
+  }
+  /* Locked controls: while the tour PLAYS (not paused), the mic + text box can't be used —
+     not-allowed cursor + dimmed. The click handlers flash Pause instead of acting. */
+  body.tour-locked .guide-ask__mic,
+  body.tour-locked .guide-ask__field,
+  body.tour-locked .guide-ask__input,
+  body.tour-locked .guide-ask__send { cursor: not-allowed; }
+  body.tour-locked .guide-ask__mic,
+  body.tour-locked .guide-ask__input,
+  body.tour-locked .guide-ask__send { opacity: 0.5; }
 
   /* ---- tour mode: the panel collapses to a slim caption bar; the orb floats free ---- */
   body.tour-mode .guide-panel {

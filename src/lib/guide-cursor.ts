@@ -60,6 +60,7 @@ export class GuideCursor {
 
   private visible = false;
   private running = false;
+  private paused = false;
   private rafId = 0;
   private last = 0;
   private reduced = false;
@@ -143,6 +144,36 @@ export class GuideCursor {
     this.running = false;
     if (this.rafId) cancelAnimationFrame(this.rafId);
     this.rafId = 0;
+  }
+
+  /** Freeze the cursor exactly where it is — including mid-glide. The in-flight tween
+   *  (if any) keeps its progress and its awaiting promise stays pending, so the caller
+   *  blocked on moveTo()/glide() resumes from the same spot. The last frame stays painted
+   *  on the canvas since the rAF loop (the only thing that clears+redraws) is stopped. */
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    this.running = false;
+    if (this.rafId) cancelAnimationFrame(this.rafId);
+    this.rafId = 0;
+    // hold the real-time fallback so a frozen glide's promise can't resolve early
+    if (this.tweenTimer !== null) { clearTimeout(this.tweenTimer); this.tweenTimer = null; }
+  }
+
+  /** Un-freeze from pause(): re-arm the fallback for the remainder of any frozen glide,
+   *  reset the dt anchor so the first frame isn't a huge jump, and restart the loop. */
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    if (this.tween && this.tweenResolve && this.tweenTimer === null) {
+      const remainMs = Math.max(0, Math.round((this.tween.dur - this.tween.t) * 1000) + 500);
+      this.tweenTimer = window.setTimeout(() => this.resolveTween(), remainMs);
+    }
+    if (!this.running) {
+      this.running = true;
+      this.last = performance.now();
+      this.rafId = requestAnimationFrame(this.tick);
+    }
   }
 
   destroy() {

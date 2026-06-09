@@ -37,8 +37,6 @@ export interface TourStep {
   intro?: boolean;
   /** Pre-recorded narration for this stop; also shown verbatim as the on-screen caption. */
   narration: string;
-  /** Legacy live-agent talking points; only used to size the old caption budget until the live-narration path is removed. */
-  notes?: string;
 }
 
 /**
@@ -366,8 +364,6 @@ export const TOUR_STEPS: TourStep[] = [
     label: 'the Onboarding Agent',
     narration:
       "At University Growth Fund, Porter analyzed nearly 40 software companies, and churn was one of the first things he'd dig into when it ran high. So what's the number one cause of churn for software companies? What he found: customers who never finish onboarding. They sit on the product for a year, never really log in, then cancel. The old path was a sales call, a CSV, an engineer hand-mapping fields, and two weeks later half of them hadn't logged back in. This agent does the whole thing in one fifteen-minute conversation, for under thirty cents a run. Everyone else outsources onboarding to a services team. Porter made it the most important software the product ships.",
-    notes:
-      "The core problem this solves is churn. The leading cause of churn at most software companies isn't a missing feature, it's that users never get properly onboarded in the first place. This agent onboards a user in minutes: they give their company name, the agent researches the company and builds a context profile, then asks targeted follow-up questions to deepen it. From there it maps their fields to Ember's standard format and ports in all their data. Every user gets onboarded correctly and fast, so they can immediately start using the more valuable core features.",
   },
   {
     id: 'agent-platform',
@@ -375,8 +371,6 @@ export const TOUR_STEPS: TourStep[] = [
     label: 'the Agent Platform',
     narration:
       "What's the future of software? Do customers want more features? More buttons? Or do they want the output as fast as possible? Porter's bet is the latter. So instead of building more features for customers to click through, he built an Agent Platform inside Ember, handing the tools to agents that just deliver the output. Competitors like Salsify ship two-hundred-plus features, and retail operators hate it: the software gets too technical for every department to use, and ops teams become the bottleneck. Porter went the other way. The features become tools, and agents use them on your behalf. Underneath is a registry of 45 tools and a fast agent-to-agent API, so a brand-new agent ships in about a week instead of a quarter. One agent now does a job that used to mean stitching three features together, and every action it takes is logged and auditable.",
-    notes:
-      "This is the positioning against competitors. PIM competitors like Salsify ship a massive surface area of features, 200 or more, which makes the software highly technical and hard to learn. Porter took the opposite approach: since every department, technical or not, needs clean access to this data, he built agents instead, with all of those features strung together as tools the agent uses on the user's behalf. Some agents do things competitors don't, like Change Sentinel, and for things they do offer, like dispute building, one agent handles the whole job instead of stitching three separate features together.",
   },
   {
     id: 'data-agents',
@@ -384,8 +378,6 @@ export const TOUR_STEPS: TourStep[] = [
     label: 'the Data Agents',
     narration:
       "This is one of the data agents built into the Ember app, an enrichment agent that did years of manual back-office work at a plumbing retailer. Let me explain. Standard Plumbing had three hundred thousand products, everything from random bolts and nuts to faucets and tools. They were launching an e-commerce site with no product data, so their team was pulling specs from supplier sites one product at a time, a pace that would've taken five years. This agent enriched the entire catalog in two weeks, and instead of grabbing one value from one source the way they were, it cross-referenced and validated every field across multiple sources.",
-    notes:
-      "Tell the Standard Plumbing story. They were managing three hundred thousand SKUs and trying to launch an ecommerce site, but they didn't have the data for it. Their team was manually enriching catalog data by searching products on the internet, with no cross-review, a pace that would have taken five years. Porter's system enriched every SKU in two weeks, cross-referenced and validated.",
   },
   {
     id: 'analytics',
@@ -393,8 +385,6 @@ export const TOUR_STEPS: TourStep[] = [
     label: 'the Analytics layer',
     narration:
       "Customers always have questions about their data, and normally that means filing a request and waiting a day for a report. Here they build their own dashboards by dragging tiles around, rendering in under two-tenths of a second across ten thousand products. A built-in agent answers, in plain English, how the data is doing, and draws the chart for you. Most analytics in this category is a fixed set of charts the vendor picked. This lets you ask a brand-new question and get the answer now.",
-    notes:
-      'Users constantly have questions about their data. Here they can ask the data directly with AI, or build custom tables to help them decide what to do next.',
   },
   {
     id: 'workflows',
@@ -402,8 +392,6 @@ export const TOUR_STEPS: TourStep[] = [
     label: 'the Workflows engine',
     narration:
       "Work gets repetitive, and those low-value tasks drag teams down and kill morale. AI agents alone don't fix it. They can even add busywork, like copying one agent's output and pasting it into the next. The workflow page closes that gap. Users schedule tasks, set custom firing rules, and chain multiple agents into complex workflows that run autonomously on accurate data from their catalog. This is the engine under everything else: it clears the busywork so the team's time goes to revenue. Fifteen functions on a durable execution layer mean every agent on the platform inherits reliability for free: a job survives a crash and resumes where it left off, and human approval is a built-in step, which is exactly what enterprise buyers pay for. Most tools cram storage and execution into one system and do both badly. This does one thing very well.",
-    notes:
-      'Workflows automate the low-value, repetitive work so the team can focus on revenue-driving operations.',
   },
   {
     id: 'agents',
