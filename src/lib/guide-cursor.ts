@@ -24,7 +24,10 @@ interface Pt {
 const TAU = Math.PI * 2;
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const clamp = (lo: number, hi: number, v: number) => (v < lo ? lo : v > hi ? hi : v);
-const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+// Minimum-jerk profile — the classic model of how a human hand actually moves a mouse:
+// smooth acceleration, a fast cruise, and a long soft landing with zero end-velocity.
+// Reads far more organic than a symmetric cubic ease.
+const minJerk = (t: number) => t * t * t * (10 - 15 * t + 6 * t * t);
 
 // ember palette — bright tip → deep body, echoing the orb
 const TIP: [number, number, number] = [0xf7, 0xa2, 0x3a];
@@ -52,13 +55,19 @@ export class GuideCursor {
   private vx = 0;
   private vy = 0;
 
-  private tween: { ax: number; ay: number; bx: number; by: number; t: number; dur: number; linear?: boolean } | null = null;
+  // Line glides travel a shallow quadratic arc (cx,cy is the bezier control point) — humans
+  // never move a mouse in a perfectly straight line. Orbits are continuous parametric
+  // circles/ellipses (angle a0→a1) so a traced loop never decelerates at compass points.
+  private tween: { ax: number; ay: number; bx: number; by: number; cx: number; cy: number; t: number; dur: number; linear?: boolean } | null = null;
+  private orbit: { cx: number; cy: number; rx: number; ry: number; a0: number; a1: number; t: number; dur: number; wobble: number; phase: number } | null = null;
   private tweenResolve: (() => void) | null = null;
   private tweenTimer: number | null = null; // real-time fallback so moveTo resolves even if rAF stalls
   private clickT = 99; // seconds since last click (large = inactive)
   private clock = 0;   // ever-advancing time → gentle idle hand-drift so the pointer isn't stiff
 
   private visible = false;
+  private alpha = 0;        // fade level actually painted this frame
+  private targetAlpha = 0;  // where the fade is heading (show → 1, fadeOut → 0)
   private running = false;
   private paused = false;
   private rafId = 0;
@@ -135,6 +144,7 @@ export class GuideCursor {
 
   start() {
     if (this.running) return;
+    if (this.paused) return;   // frozen mid-gesture: only resume() may restart the loop
     this.running = true;
     this.last = performance.now();
     this.rafId = requestAnimationFrame(this.tick);
@@ -160,13 +170,14 @@ export class GuideCursor {
     if (this.tweenTimer !== null) { clearTimeout(this.tweenTimer); this.tweenTimer = null; }
   }
 
-  /** Un-freeze from pause(): re-arm the fallback for the remainder of any frozen glide,
-   *  reset the dt anchor so the first frame isn't a huge jump, and restart the loop. */
+  /** Un-freeze from pause(): re-arm the fallback for the remainder of any frozen glide or
+   *  orbit, reset the dt anchor so the first frame isn't a huge jump, and restart the loop. */
   resume() {
     if (!this.paused) return;
     this.paused = false;
-    if (this.tween && this.tweenResolve && this.tweenTimer === null) {
-      const remainMs = Math.max(0, Math.round((this.tween.dur - this.tween.t) * 1000) + 500);
+    const active = this.tween ?? this.orbit;
+    if (active && this.tweenResolve && this.tweenTimer === null) {
+      const remainMs = Math.max(0, Math.round((active.dur - active.t) * 1000) + 500);
       this.tweenTimer = window.setTimeout(() => this.resolveTween(), remainMs);
     }
     if (!this.running) {
@@ -182,15 +193,48 @@ export class GuideCursor {
     this.ctx.clearRect(0, 0, this.w, this.h);
   }
 
+  /** Fade the pointer in (if the loop is running; instant under reduced motion). */
   show() {
     this.visible = true;
+    this.targetAlpha = 1;
+    if (this.reduced || !this.running) this.alpha = 1;
   }
 
+  /** Hard hide — instant clear, used on teardown. For a graceful exit use fadeOut(). */
   hide() {
     this.visible = false;
+    this.alpha = 0;
+    this.targetAlpha = 0;
     this.tween = null;
+    this.orbit = null;
     this.resolveTween();
     this.ctx.clearRect(0, 0, this.w, this.h);
+  }
+
+  /** Dissolve the pointer in place — the "I have nothing to point at right now" exit.
+   *  The draw loop fades alpha down and stops painting; position is kept so a later
+   *  show() can either resume here or re-enter from a fresh approach point. */
+  fadeOut() {
+    if (!this.visible) return;
+    this.targetAlpha = 0;
+    if (this.reduced || !this.running) { this.alpha = 0; this.visible = false; this.ctx.clearRect(0, 0, this.w, this.h); }
+  }
+
+  /** True when the pointer is invisible (fully faded or hidden) — callers use this to
+   *  re-enter from a sensible approach point instead of swooping from a stale spot. */
+  isFaded(): boolean {
+    return !this.visible || this.alpha < 0.05;
+  }
+
+  /** If the pointer is currently invisible, relocate it just below-right of (x,y) so the
+   *  next gesture materializes beside its subject rather than arcing in from across the
+   *  screen. No-op while visible — a visible pointer should travel honestly. */
+  private reenterNear(x: number, y: number) {
+    if (!this.isFaded()) return;
+    this.x = x + 70;
+    this.y = y + 110;
+    this.vx = 0;
+    this.vy = 0;
   }
 
   // ---- control --------------------------------------------------------------
@@ -201,22 +245,30 @@ export class GuideCursor {
     this.vx = 0;
     this.vy = 0;
     this.tween = null;
+    this.orbit = null;
     this.resolveTween();
   }
 
-  /** Glide the tip to (x,y). Resolves when it arrives (immediately under reduced motion). */
+  /** Glide the tip to (x,y) along a shallow arc with a minimum-jerk velocity profile.
+   *  Resolves when it arrives (immediately under reduced motion). */
   moveTo(x: number, y: number): Promise<void> {
-    this.visible = true;
+    this.show();
     if (this.reduced) {
       this.place(x, y);
       return Promise.resolve();
     }
     this.resolveTween();
+    this.orbit = null;
     const ax = this.x;
     const ay = this.y;
     const dist = Math.hypot(x - ax, y - ay);
-    const dur = clamp(0.32, 0.9, 0.26 + dist / 1600);
-    this.tween = { ax, ay, bx: x, by: y, t: 0, dur };
+    const dur = clamp(0.34, 1.05, 0.27 + dist / 1500);
+    // Bow the path perpendicular to the travel line — every glide gets its own slight,
+    // randomly-sided arc (capped so short hops stay near-straight and long ones don't loop).
+    const bow = dist < 48 ? 0 : Math.min(90, dist * (0.07 + Math.random() * 0.08)) * (Math.random() < 0.5 ? -1 : 1);
+    const nx = dist > 0 ? -(y - ay) / dist : 0;
+    const ny = dist > 0 ? (x - ax) / dist : 0;
+    this.tween = { ax, ay, bx: x, by: y, cx: (ax + x) / 2 + nx * bow, cy: (ay + y) / 2 + ny * bow, t: 0, dur };
     return new Promise((res) => {
       this.tweenResolve = res;
       // if rAF is throttled (backgrounded tab), the tween can't complete — resolve in
@@ -231,25 +283,35 @@ export class GuideCursor {
     return new Promise((res) => setTimeout(res, this.reduced ? 0 : 260));
   }
 
+  /** One continuous parametric orbit (ellipse) — no waypoint deceleration, with a tiny
+   *  radius wobble so the loop reads hand-drawn rather than compass-perfect. */
+  private runOrbit(cx: number, cy: number, rx: number, ry: number, loops: number): Promise<void> {
+    this.resolveTween();
+    this.tween = null;
+    const a0 = -Math.PI / 2;                              // start at 12 o'clock
+    const a1 = a0 + TAU * loops;
+    const circumference = Math.PI * (rx + ry) * loops;    // close enough for pacing
+    const dur = clamp(1.1, 2.4 * loops + 0.4, circumference / 430);
+    this.orbit = { cx, cy, rx, ry, a0, a1, t: 0, dur, wobble: 0.04, phase: Math.random() * TAU };
+    return new Promise((res) => {
+      this.tweenResolve = res;
+      this.tweenTimer = window.setTimeout(() => this.resolveTween(), Math.round(dur * 1000) + 500);
+    });
+  }
+
   /** Trace a circle around (cx,cy) at the given radius. `loops` repeats the trip. */
   async traceLoop(cx: number, cy: number, radius: number, loops = 1): Promise<void> {
-    this.visible = true;
-    if (this.reduced) { this.place(cx, cy); return; }
-    const pts: Pt[] = [
-      { x: cx, y: cy - radius },     // top
-      { x: cx + radius, y: cy },     // right
-      { x: cx, y: cy + radius },     // bottom
-      { x: cx - radius, y: cy },     // left
-    ];
-    for (let l = 0; l < loops; l++) {
-      for (const p of pts) await this.moveTo(p.x, p.y);
-    }
-    await this.moveTo(cx, cy);
+    if (this.reduced) { this.show(); this.place(cx, cy); return; }
+    this.reenterNear(cx, cy - radius);
+    this.show();
+    await this.moveTo(cx, cy - radius);                   // arc into the rim first
+    await this.runOrbit(cx, cy, radius, radius, loops);
+    await this.moveTo(cx, cy);                            // settle on the subject
   }
 
   /** Sweep horizontally past (cx,cy) — a quick "look here, and here" gesture. */
   async traceSideToSide(cx: number, cy: number, amplitude: number, count = 2): Promise<void> {
-    this.visible = true;
+    this.show();
     if (this.reduced) { this.place(cx, cy); return; }
     for (let i = 0; i < count; i++) {
       await this.moveTo(cx + amplitude, cy);
@@ -261,14 +323,15 @@ export class GuideCursor {
   /** Glide to (x,y) at a constant velocity in CSS px/sec (not eased). Used to chain
    *  waypoints together in a `glide` so the path doesn't slow at each one. */
   linearMoveTo(x: number, y: number, pxPerSec = 700): Promise<void> {
-    this.visible = true;
+    this.show();
     if (this.reduced) { this.place(x, y); return Promise.resolve(); }
     this.resolveTween();
+    this.orbit = null;
     const ax = this.x;
     const ay = this.y;
     const dist = Math.hypot(x - ax, y - ay);
     const dur = clamp(0.1, 1.6, dist / Math.max(60, pxPerSec));
-    this.tween = { ax, ay, bx: x, by: y, t: 0, dur, linear: true };
+    this.tween = { ax, ay, bx: x, by: y, cx: (ax + x) / 2, cy: (ay + y) / 2, t: 0, dur, linear: true };
     return new Promise((res) => {
       this.tweenResolve = res;
       this.tweenTimer = window.setTimeout(() => this.resolveTween(), Math.round(dur * 1000) + 500);
@@ -279,24 +342,41 @@ export class GuideCursor {
    *  through the rest so there's no slowdown at each waypoint. Empty array is a no-op. */
   async glide(points: Pt[], pxPerSec = 700): Promise<void> {
     if (points.length === 0) return;
-    this.visible = true;
+    this.reenterNear(points[0].x, points[0].y);
+    this.show();
     await this.moveTo(points[0].x, points[0].y);   // eased entry to the path start
     for (let i = 1; i < points.length; i++) {
       await this.linearMoveTo(points[i].x, points[i].y, pxPerSec);
     }
   }
 
-  /** A wide clockwise oval through four anchor points (top, right, bottom, left) and back
-   *  to the start. Useful for framing a screenshot or chart with one big looping gesture. */
-  async oval(top: Pt, right: Pt, bottom: Pt, left: Pt, pxPerSec = 700): Promise<void> {
-    await this.glide([top, right, bottom, left, top], pxPerSec);
+  /** A wide clockwise oval through four anchor points (top, right, bottom, left). Now a
+   *  single continuous ellipse orbit — one flowing loop that frames the subject without
+   *  pausing at any anchor. */
+  async oval(top: Pt, right: Pt, bottom: Pt, left: Pt, _pxPerSec = 700): Promise<void> {
+    this.reenterNear(top.x, top.y);
+    this.show();
+    const cx = (left.x + right.x) / 2;
+    const cy = (top.y + bottom.y) / 2;
+    const rx = Math.max(24, (right.x - left.x) / 2);
+    const ry = Math.max(18, (bottom.y - top.y) / 2);
+    if (this.reduced) { this.place(cx, cy); return; }
+    await this.moveTo(top.x, top.y);               // arc onto the rim
+    await this.runOrbit(cx, cy, rx, ry, 1);
   }
 
-  /** Slow left-to-right underline sweep from start to end (typically a few px below a
-   *  heading's baseline). Constant velocity so it reads as a deliberate "highlight." */
+  /** Slow left-to-right underline sweep — drawn as a slightly wavering polyline so it
+   *  reads as a hand-drawn highlight rather than a laser-straight rule. */
   async underline(start: Pt, end: Pt, pxPerSec = 250): Promise<void> {
+    this.reenterNear(start.x, start.y);
     await this.moveTo(start.x, start.y);
-    await this.linearMoveTo(end.x, end.y, pxPerSec);
+    if (this.reduced) { this.place(end.x, end.y); return; }
+    const segs = 6;
+    for (let i = 1; i <= segs; i++) {
+      const f = i / segs;
+      const wob = i === segs ? 0 : Math.sin(f * Math.PI * 2.2) * 1.6;
+      await this.linearMoveTo(start.x + (end.x - start.x) * f, start.y + (end.y - start.y) * f + wob, pxPerSec);
+    }
   }
 
   private resolveTween() {
@@ -319,19 +399,43 @@ export class GuideCursor {
 
   private update(dt: number) {
     this.clock += dt;
+    // fade toward the target alpha (~5 frames to materialize, ~8 to dissolve)
+    const fadeRate = this.targetAlpha > this.alpha ? 7.5 : 4.5;
+    this.alpha += (this.targetAlpha - this.alpha) * Math.min(1, fadeRate * dt);
+    if (this.targetAlpha === 0 && this.alpha < 0.02) { this.alpha = 0; this.visible = false; }
+
     if (this.tween) {
       const f = this.tween;
       f.t += dt;
       const p = clamp01(f.t / f.dur);
-      const e = f.linear ? p : easeInOut(p);
-      const nx = f.ax + (f.bx - f.ax) * e;
-      const ny = f.ay + (f.by - f.ay) * e;
+      const e = f.linear ? p : minJerk(p);
+      // quadratic bezier through the control point — a shallow, hand-like arc
+      const u = 1 - e;
+      const nx = u * u * f.ax + 2 * u * e * f.cx + e * e * f.bx;
+      const ny = u * u * f.ay + 2 * u * e * f.cy + e * e * f.by;
       this.vx = nx - this.x;
       this.vy = ny - this.y;
       this.x = nx;
       this.y = ny;
       if (p >= 1) {
         this.tween = null;
+        this.resolveTween();
+      }
+    } else if (this.orbit) {
+      const o = this.orbit;
+      o.t += dt;
+      const p = clamp01(o.t / o.dur);
+      const a = o.a0 + (o.a1 - o.a0) * minJerk(p);
+      // tiny radius wobble → hand-drawn loop, not a compass arc
+      const w = 1 + Math.sin(a * 2.7 + o.phase) * o.wobble;
+      const nx = o.cx + Math.cos(a) * o.rx * w;
+      const ny = o.cy + Math.sin(a) * o.ry * w;
+      this.vx = nx - this.x;
+      this.vy = ny - this.y;
+      this.x = nx;
+      this.y = ny;
+      if (p >= 1) {
+        this.orbit = null;
         this.resolveTween();
       }
     } else {
@@ -345,11 +449,11 @@ export class GuideCursor {
   private draw() {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.w, this.h);
-    if (!this.visible) return;
+    if (!this.visible || this.alpha <= 0.01) return;
 
     // gentle idle hand-drift so a resting pointer is never perfectly stiff (skip while
-    // gliding — the tween carries it then — and under reduced motion)
-    const idle = !this.tween && !this.reduced;
+    // gliding/orbiting — the animation carries it then — and under reduced motion)
+    const idle = !this.tween && !this.orbit && !this.reduced;
     const driftX = idle ? Math.sin(this.clock * 1.5) * 3 + Math.sin(this.clock * 0.8 + 1) * 1.6 : 0;
     const driftY = idle ? Math.cos(this.clock * 1.2) * 2.6 + Math.sin(this.clock * 0.55) * 1.4 : 0;
     const tipX = this.x + driftX;
@@ -358,7 +462,7 @@ export class GuideCursor {
     // click ripple (ring expanding from the tip)
     if (this.clickT < 0.5) {
       const rp = this.clickT / 0.5;
-      ctx.globalAlpha = (1 - rp) * 0.55;
+      ctx.globalAlpha = (1 - rp) * 0.55 * this.alpha;
       ctx.strokeStyle = 'rgb(180,83,9)';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -371,7 +475,7 @@ export class GuideCursor {
     const s = this.scale * (1 - 0.16 * bump);
     const dotR = this.pitchUnit * s * 0.62;
 
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = this.alpha;
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.28)';
     ctx.shadowBlur = 4;

@@ -40,18 +40,29 @@ export interface TourStep {
 }
 
 /**
- * Per-page cursor choreography. When present for a step's path, runStep runs this
- * sequence instead of the generic browseStep auto-picker.
+ * Per-page cursor choreography, anchored to the narration's own clock.
+ *
+ * Every step may carry a `cue`: a verbatim phrase from that step's narration. The engine
+ * estimates when the phrase is spoken (character offset ÷ total characters × the clip's
+ * real duration) and holds the step until the clip's playback clock reaches that moment,
+ * minus `leadMs` (default ≈450ms) so the gesture LANDS as the words are said. Steps
+ * without a cue run immediately after the previous one. Because scheduling reads
+ * `audio.currentTime`, a paused tour freezes the choreography for free.
+ *
+ * `fade` dissolves the pointer: use it whenever the narration goes somewhere the screen
+ * can't follow (back-story, competitor talk, a punchline). The cursor exists to point at
+ * what is being discussed; when nothing on screen is being discussed, it leaves.
  *
  * Targets are resolved by:
  *   - "icon:/projects"   → desktop folder icon (anchor by href)
  *   - "card:/projects/..." → listing card inside an open folder (the card container)
  *   - "selector:.foo"     → CSS selector inside the desktop window body
+ *   - "shot:N"            → Nth screenshot/figure on the page (1-indexed)
  *   - "close"             → the desktop window's X close button
  *   - "next:Label"        → bottom-nav "next" link whose label/path contains Label
  *   - anything else       → text search across h1/h2/h3, strong, .project-card, etc.
  */
-export type ChoreographyStep =
+export type ChoreographyStep = (
   | { kind: 'pause'; ms: number }
   | { kind: 'scroll'; ticks: number; dir: 'up' | 'down' }
   | { kind: 'move'; target: string; dwellMs?: number }
@@ -61,7 +72,14 @@ export type ChoreographyStep =
   | { kind: 'circle'; target: string; radius?: number; loops?: number }
   | { kind: 'oval'; target: string }
   | { kind: 'underline'; target: string; passes?: number }
-  | { kind: 'glide'; targets: string[]; pxPerSec?: number };
+  | { kind: 'glide'; targets: string[]; pxPerSec?: number }
+  | { kind: 'fade' }
+) & {
+  /** Verbatim phrase from this step's narration; the gesture waits for it to be spoken. */
+  cue?: string;
+  /** How far ahead of the cue to start moving, so the gesture lands on the words (default ~450). */
+  leadMs?: number;
+};
 
 /**
  * Codified cursor choreography, keyed by step.path. Phase A ships the framework with
@@ -69,264 +87,300 @@ export type ChoreographyStep =
  * populate per-page sequences from the spec.
  */
 export const TOUR_CHOREOGRAPHY: Record<string, ChoreographyStep[]> = {
+  // Every gesture below is pinned (via `cue`) to the phrase it illustrates, so the cursor
+  // points at what the voice is talking about AS it is said, and dissolves (`fade`) whenever
+  // the narration goes somewhere the screen can't follow. The dwells are short on purpose:
+  // the next cue does the pacing, not the dwell.
   '/projects': [
-    // 1. Land on and sweep the italic description line.
+    // "This is Porter's flagship work" → sweep the section's own description line.
     { kind: 'move', target: 'selector:.ethos', dwellMs: 500 },
-    { kind: 'underline', target: 'selector:.ethos' },
-    { kind: 'pause', ms: 250 },
-    // 2. Scroll down to bring the project cards into the visible region of the window.
-    { kind: 'scroll', ticks: 2, dir: 'down' },
-    // 3. Quick pass over the five cards in document order, ~0.8s each (the folder view is brief).
-    { kind: 'hover', target: 'card:/projects/ember-onboarding-agent', dwellMs: 800 },
-    { kind: 'hover', target: 'card:/projects/ember-agent-platform', dwellMs: 800 },
-    { kind: 'scroll', ticks: 2, dir: 'down' },
-    { kind: 'hover', target: 'card:/projects/ember-data-agents', dwellMs: 800 },
-    { kind: 'hover', target: 'card:/projects/ember-analytics', dwellMs: 800 },
-    { kind: 'scroll', ticks: 2, dir: 'down' },
-    { kind: 'hover', target: 'card:/projects/ember-workflows', dwellMs: 800 },
-    { kind: 'pause', ms: 250 },
-    // 4. Scroll back to the top so the auto-advance click on the Onboarding Agent card
-    //    lands on a visible target (the system will fire driveTo + gestureClick next).
-    { kind: 'scroll', ticks: 10, dir: 'up' },
+    { kind: 'underline', target: 'selector:.ethos', cue: 'flagship work' },
+    { kind: 'fade', cue: 'turns the scattered' },                       // platform talk — nothing to point at
+    { kind: 'scroll', ticks: 2, dir: 'down', cue: 'These five case studies', leadMs: 900 },
+    { kind: 'hover', target: 'card:/projects/ember-onboarding-agent', dwellMs: 700 },
+    { kind: 'hover', target: 'card:/projects/ember-agent-platform', dwellMs: 700 },
+    { kind: 'scroll', ticks: 2, dir: 'down', cue: 'the thinking', leadMs: 700 },
+    { kind: 'hover', target: 'card:/projects/ember-data-agents', dwellMs: 700 },
+    { kind: 'hover', target: 'card:/projects/ember-analytics', dwellMs: 700 },
+    { kind: 'hover', target: 'card:/projects/ember-workflows', cue: 'what actually shipped', dwellMs: 900 },
   ],
-  // Case-study choreography: the narration replaces reading the text, so the cursor spends
-  // MOST of its time framing and resting on the screenshots (the visual payoff), then takes a
-  // quick scroll through the body. Pattern: brief title glance -> frame each screenshot and sit
-  // on it -> light scroll-through.
   '/projects/ember-onboarding-agent': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'oval', target: 'shot:1' },                    // the 5-stage stepper chat UI (longest stop on the tour)
-    { kind: 'move', target: 'shot:1', dwellMs: 6500 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 4500 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    // 47s clip. Long churn back-story up front → the cursor leaves and lets it breathe,
+    // then reappears to frame the stepper-chat screenshot exactly as "this agent" enters.
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1200 },
+    { kind: 'fade', cue: 'never finish onboarding' },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'This agent does the whole thing', leadMs: 1100 },
+    { kind: 'oval', target: 'shot:1' },
+    { kind: 'move', target: 'shot:1', dwellMs: 1000 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'under thirty cents a run', leadMs: 500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1500 },
+    { kind: 'fade', cue: 'Everyone else outsources' },                  // closing kicker — voice only
   ],
   '/projects/ember-agent-platform': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 4, dir: 'down' },
-    { kind: 'oval', target: 'shot:1' },                    // Agent Store (agents by category)
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    // 59s clip, the longest pitch. Rhetorical open → faded; frame the Agent Store when it's
+    // introduced; leave during competitor talk; return for the thesis and the build stats.
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1200 },
+    { kind: 'fade', cue: "Porter's bet is the latter" },
+    { kind: 'scroll', ticks: 4, dir: 'down', cue: 'he built an Agent Platform', leadMs: 1100 },
+    { kind: 'oval', target: 'shot:1' },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'fade', cue: 'Competitors like Salsify' },                  // competitor talk — off screen
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'The features become tools', leadMs: 500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'hover', target: 'shot:1', cue: 'registry of 45 tools', dwellMs: 1400 },
+    { kind: 'move', target: 'shot:1', cue: 'ships in about a week', dwellMs: 1200 },
+    { kind: 'fade', cue: 'logged and auditable' },
   ],
   '/projects/ember-data-agents': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    // "This is one of the data agents" — pure deixis, so frame the shot immediately; fade
+    // for the Standard Plumbing story; come back for the two-weeks punchline.
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'one of the data agents', leadMs: 800 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'fade', cue: 'Standard Plumbing had three hundred thousand' },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'enriched the entire catalog', leadMs: 500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1000 },
+    { kind: 'hover', target: 'shot:1', cue: 'cross-referenced and validated', dwellMs: 1600 },
+    { kind: 'fade', cue: 'across multiple sources' },
   ],
   '/projects/ember-analytics': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1000 },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'Here they build their own dashboards', leadMs: 1000 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'A built-in agent answers', leadMs: 500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1400 },
+    { kind: 'fade', cue: 'fixed set of charts' },                       // category talk — off screen
   ],
   '/projects/ember-workflows': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    // 62s clip. The cursor works in waves: frame the page when "the workflow page" is named,
+    // emphasize on each capability beat, and sit out the abstract stretches.
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1200 },
+    { kind: 'fade', cue: "alone don't fix it" },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'The workflow page closes that gap', leadMs: 1000 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 5500 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 3500 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'Users schedule tasks', leadMs: 400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1500 },
+    { kind: 'hover', target: 'shot:1', cue: 'the engine under everything else', dwellMs: 1800 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'Fifteen functions', leadMs: 400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'hover', target: 'shot:1', cue: 'human approval is a built-in step', dwellMs: 1600 },
+    { kind: 'fade', cue: 'Most tools cram storage' },
   ],
   '/agents': [
-    { kind: 'scroll', ticks: 2, dir: 'down' },
-    { kind: 'point', target: 'SKU Enrichment Agent', dwellMs: 1100 },
-    { kind: 'point', target: 'Cold Email Agent', dwellMs: 1100 },
-    { kind: 'point', target: 'Sales Call Analyzer', dwellMs: 1100 },
-    { kind: 'scroll', ticks: 2, dir: 'down' },
-    { kind: 'point', target: 'Daily Intelligence Brief', dwellMs: 1100 },
-    { kind: 'point', target: 'Market Sizing Pro', dwellMs: 1100 },
-    { kind: 'point', target: 'Cross Listing Agent', dwellMs: 1100 },
-    { kind: 'scroll', ticks: 10, dir: 'up' },
-    { kind: 'pause', ms: 800 },
+    // The narration never names an agent ("eleven of them here"), so the cursor never singles
+    // one out — it underlines the section's framing line, then takes one flowing pass over the
+    // grid as a whole. (The old version pointed at six specific agents the voice never
+    // mentioned, which is exactly the misalignment this rewrite removes.)
+    { kind: 'move', target: 'selector:.ethos', dwellMs: 500 },
+    { kind: 'underline', target: 'selector:.ethos', cue: 'shipping AI agents for customers' },
+    { kind: 'scroll', ticks: 2, dir: 'down', cue: 'eleven of them here', leadMs: 700 },
+    { kind: 'glide', targets: ['card:/agents/sku-enrichment-agent', 'card:/agents/cold-email-agent', 'card:/agents/sales-call-analyzer'], pxPerSec: 380 },
+    { kind: 'fade', cue: 'packaged to embed cleanly' },
   ],
   '/agents/cold-email-agent': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    // 47s, three screenshots: the sender UI, the vitals dashboard, the example email — each
+    // revealed at the line that describes it.
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1100 },
+    { kind: 'fade', cue: 'The second it smells automated' },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'drafts and sends genuinely personalized', leadMs: 1000 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 4200 },
-    { kind: 'scroll', ticks: 2, dir: 'down' },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'hover', target: 'shot:1', cue: 'Five cents a run', dwellMs: 1500 },
+    { kind: 'scroll', ticks: 2, dir: 'down', cue: 'watches its own vitals', leadMs: 900 },
     { kind: 'oval', target: 'shot:2' },
-    { kind: 'move', target: 'shot:2', dwellMs: 3800 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'oval', target: 'shot:4' },   // example output
-    { kind: 'move', target: 'shot:4', dwellMs: 5000 },
+    { kind: 'move', target: 'shot:2', dwellMs: 1300 },
+    { kind: 'scroll', ticks: 6, dir: 'down', cue: "what's landing", leadMs: 900 },
+    { kind: 'oval', target: 'shot:4' },
+    { kind: 'move', target: 'shot:4', dwellMs: 1500 },
+    { kind: 'fade', cue: 'learns to write email' },
   ],
   '/agents/daily-intelligence-brief': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1100 },
+    { kind: 'fade', cue: 'markets, competitors, regulations' },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'This agent does it for you', leadMs: 900 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 5500 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'oval', target: 'shot:2' },   // example SMS output
-    { kind: 'move', target: 'shot:2', dwellMs: 4500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1300 },
+    // "Porter gets a text" → the example SMS screenshot, right as it's described.
+    { kind: 'scroll', ticks: 6, dir: 'down', cue: 'Porter gets a text', leadMs: 900 },
+    { kind: 'oval', target: 'shot:2' },
+    { kind: 'move', target: 'shot:2', dwellMs: 1300 },
+    { kind: 'circle', target: 'shot:2', loops: 1, cue: 'two dollars and twenty cents', leadMs: 400 },
+    { kind: 'move', target: 'shot:2', dwellMs: 1200 },
+    { kind: 'fade', cue: 'cheaper than a part-time analyst' },
   ],
   '/agents/sales-call-analyzer': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1100 },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'Drop in the recording', leadMs: 900 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'becomes structured notes', leadMs: 500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1400 },
+    { kind: 'fade', cue: 'The real payoff compounds' },
   ],
   '/agents/sku-enrichment-agent': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'oval', target: 'shot:1' },   // the big MindStudio flow diagram (the longest visual stop)
-    { kind: 'move', target: 'shot:1', dwellMs: 7000 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 5000 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    // "This takes a single product..." — deixis from the first word, so the flow diagram
+    // comes up immediately and the cursor stays in conversation with it.
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'takes a single product', leadMs: 800 },
+    { kind: 'oval', target: 'shot:1' },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'confidence score and a source', leadMs: 400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1300 },
+    { kind: 'hover', target: 'shot:1', cue: 'Eighty-nine seconds', dwellMs: 1400 },
+    { kind: 'fade', cue: 'engines behind the catalog' },
   ],
   '/agents/market-sizing-pro': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'oval', target: 'shot:1' },   // main flow
-    { kind: 'move', target: 'shot:1', dwellMs: 4800 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'oval', target: 'shot:2' },   // find-sources subflow
-    { kind: 'move', target: 'shot:2', dwellMs: 4200 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'oval', target: 'shot:3' },   // scrape-sources subflow
-    { kind: 'move', target: 'shot:3', dwellMs: 4000 },
+    // Three subflow diagrams, each walked at its matching beat: the model, the live
+    // sources, the deep research.
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1200 },
+    { kind: 'fade', cue: 'can be contested too' },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'bottom-up model Porter designed', leadMs: 1000 },
+    { kind: 'oval', target: 'shot:1' },
+    { kind: 'move', target: 'shot:1', dwellMs: 1100 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'TAM, SAM, and SOM', leadMs: 400 },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'live sources behind every number', leadMs: 900 },
+    { kind: 'oval', target: 'shot:2' },
+    { kind: 'move', target: 'shot:2', dwellMs: 1200 },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'Six minutes of deep research', leadMs: 900 },
+    { kind: 'oval', target: 'shot:3' },
+    { kind: 'move', target: 'shot:3', dwellMs: 1300 },
+    { kind: 'fade', cue: 'commissioning a research firm' },
   ],
   '/agents/adding-leads-agent': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1100 },
+    { kind: 'fade', cue: 'waking up to a fresh batch' },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: "That's this agent", leadMs: 900 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'already deduped', leadMs: 400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1400 },
+    { kind: 'hover', target: 'shot:1', cue: 'deliberately used a stronger model', dwellMs: 1600 },
+    { kind: 'fade', cue: 'misses the nuance' },
   ],
   '/agents/realestate-setter-agent': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'finds for-sale-by-owner listings', leadMs: 1000 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 5500 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'shot:1', dwellMs: 1300 },
+    // "it drives a real browser" → the Skyvern workflow shot, exactly on cue.
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'drives a real browser', leadMs: 900 },
     { kind: 'oval', target: 'shot:2' },
-    { kind: 'move', target: 'shot:2', dwellMs: 5000 },
+    { kind: 'move', target: 'shot:2', dwellMs: 1300 },
+    { kind: 'fade', cue: 'No CAPTCHAs' },
   ],
   '/agents/product-image-compliance-editor': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1100 },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'takes a messy supplier photo', leadMs: 900 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1300 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'before it spends a cent', leadMs: 500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1300 },
+    { kind: 'fade', cue: 'forty-four cents an image' },
   ],
   '/agents/cross-listing-agent': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1100 },
+    { kind: 'fade', cue: "weren't getting enough rentals" },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'instantly cross-lists their items', leadMs: 1000 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 4800 },
-    { kind: 'scroll', ticks: 4, dir: 'down' },
+    { kind: 'move', target: 'shot:1', dwellMs: 1300 },
+    { kind: 'scroll', ticks: 4, dir: 'down', cue: 'drive a real browser the way a person would', leadMs: 900 },
     { kind: 'oval', target: 'shot:2' },
-    { kind: 'move', target: 'shot:2', dwellMs: 4200 },
-    { kind: 'scroll', ticks: 4, dir: 'down' },
+    { kind: 'move', target: 'shot:2', dwellMs: 1300 },
+    { kind: 'scroll', ticks: 4, dir: 'down', cue: 'It also handles the replies', leadMs: 900 },
     { kind: 'oval', target: 'shot:3' },
-    { kind: 'move', target: 'shot:3', dwellMs: 4000 },
+    { kind: 'move', target: 'shot:3', dwellMs: 1300 },
+    { kind: 'fade', cue: 'rent it directly on Yoodlize' },
   ],
   '/agents/yoodlize-blog-poster': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'picks a city, writes the post', leadMs: 1000 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 5500 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: "tracks what it's already covered", leadMs: 900 },
     { kind: 'oval', target: 'shot:2' },
-    { kind: 'move', target: 'shot:2', dwellMs: 5000 },
+    { kind: 'move', target: 'shot:2', dwellMs: 1200 },
+    { kind: 'fade', cue: 'fifty cents a post' },
   ],
   '/agents/website-hell-s-kitchen': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1100 },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'Gordon Ramsay-grade roast', leadMs: 900 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1300 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'scrapes the subpages too', leadMs: 500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'fade', cue: 'Seventy-four seconds' },
   ],
   '/fun/ai-managed-evidence-pipeline': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1100 },
+    { kind: 'fade', cue: 'fifteen to thirty minutes' },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'This watches a Drive folder', leadMs: 1000 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'atomic takeaways', leadMs: 400 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1400 },
+    { kind: 'fade', cue: 'no one pressing a button' },
   ],
   '/fun/job-application-agent': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1100 },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'pulls listings from LinkedIn', leadMs: 1000 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 4000 },
-    { kind: 'move', target: 'shot:1', dwellMs: 6000 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'only writes a letter', leadMs: 500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1300 },
+    { kind: 'hover', target: 'shot:1', cue: 'scores with a cheap model', dwellMs: 1500 },
+    { kind: 'fade', cue: 'leaves the twenty percent' },
   ],
   '/fun/sales-manager-agent': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
+    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1100 },
+    { kind: 'fade', cue: 'pull three systems together' },
+    { kind: 'scroll', ticks: 3, dir: 'down', cue: 'runs that loop every Monday', leadMs: 1000 },
     { kind: 'oval', target: 'shot:1' },
-    { kind: 'move', target: 'shot:1', dwellMs: 5500 },
-    { kind: 'scroll', ticks: 6, dir: 'down' },
-    { kind: 'oval', target: 'shot:2' },   // example output
-    { kind: 'move', target: 'shot:2', dwellMs: 4500 },
+    { kind: 'move', target: 'shot:1', dwellMs: 1200 },
+    { kind: 'circle', target: 'shot:1', loops: 1, cue: 'issues scorecards', leadMs: 400 },
+    // "It ships in shadow mode" → the example output shot.
+    { kind: 'scroll', ticks: 6, dir: 'down', cue: 'ships in shadow mode', leadMs: 900 },
+    { kind: 'oval', target: 'shot:2' },
+    { kind: 'move', target: 'shot:2', dwellMs: 1400 },
+    { kind: 'fade', cue: 'no tool to message a person' },
   ],
   // ── Folders + galleries (the lighter tail of the tour) ──────────────────
   '/fun': [
-    { kind: 'move', target: 'selector:.ethos', dwellMs: 600 },
-    { kind: 'underline', target: 'selector:.ethos' },
-    { kind: 'scroll', ticks: 2, dir: 'down' },
-    { kind: 'hover', target: 'card:/fun/ai-managed-evidence-pipeline', dwellMs: 900 },
-    { kind: 'hover', target: 'card:/fun/job-application-agent', dwellMs: 900 },
-    { kind: 'hover', target: 'card:/fun/sales-manager-agent', dwellMs: 900 },
-    { kind: 'pause', ms: 700 },
-    { kind: 'scroll', ticks: 8, dir: 'up' },
+    { kind: 'move', target: 'selector:.ethos', dwellMs: 500 },
+    { kind: 'underline', target: 'selector:.ethos', cue: "they're infrastructure" },
+    { kind: 'scroll', ticks: 2, dir: 'down', cue: 'ships the agent that removes it', leadMs: 800 },
+    // "A Mac mini in his apartment runs these every day" — "these" = the cards, swept as one.
+    { kind: 'glide', targets: ['card:/fun/ai-managed-evidence-pipeline', 'card:/fun/job-application-agent', 'card:/fun/sales-manager-agent'], pxPerSec: 380, cue: 'A Mac mini in his apartment', leadMs: 800 },
+    { kind: 'fade', cue: 'for him and his company' },
   ],
   '/photos': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1300 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 2200 },
-    { kind: 'scroll', ticks: 2, dir: 'down' },
-    { kind: 'circle', target: 'shot:4', loops: 1 },
-    { kind: 'move', target: 'shot:4', dwellMs: 2600 },
+    // The narration lists the three kinds of headshots; the cursor introduces one photo per kind.
+    { kind: 'scroll', ticks: 2, dir: 'down', cue: 'Headshots', leadMs: 700 },
+    { kind: 'hover', target: 'shot:1', cue: 'formal', dwellMs: 600 },
+    { kind: 'hover', target: 'shot:2', cue: 'casual', dwellMs: 600 },
+    { kind: 'hover', target: 'shot:3', cue: 'personality', dwellMs: 600 },
+    { kind: 'fade', cue: 'yours to download' },
   ],
   '/books': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1300 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 2400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'move', target: 'shot:3', dwellMs: 2600 },
+    { kind: 'scroll', ticks: 2, dir: 'down', cue: 'books that shaped how he thinks', leadMs: 800 },
+    { kind: 'hover', target: 'shot:1', dwellMs: 600 },
+    { kind: 'hover', target: 'shot:2', cue: 'middle of right now', dwellMs: 700 },
+    { kind: 'hover', target: 'shot:3', cue: 'few recent ones', dwellMs: 700 },
+    { kind: 'fade', cue: 'better tell than a résumé' },
   ],
   '/movies': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1300 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'circle', target: 'shot:1', loops: 1 },
-    { kind: 'move', target: 'shot:1', dwellMs: 2400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'move', target: 'shot:3', dwellMs: 2600 },
+    { kind: 'scroll', ticks: 2, dir: 'down', cue: 'films he keeps coming back to', leadMs: 800 },
+    { kind: 'hover', target: 'shot:1', dwellMs: 600 },
+    { kind: 'glide', targets: ['shot:2', 'shot:4', 'shot:5'], pxPerSec: 420, cue: 'handful that stuck', leadMs: 400 },
+    { kind: 'fade', cue: 'off-the-clock version' },
   ],
   '/stack': [
-    { kind: 'move', target: 'selector:.t-h1', dwellMs: 1400 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'point', target: 'selector:.prose h2', dwellMs: 2600 },
-    { kind: 'scroll', ticks: 3, dir: 'down' },
-    { kind: 'pause', ms: 2000 },
+    // "this site itself" → underline the page's own title; point at the architecture notes
+    // when the build comes up; sit out the philosophy beat.
+    { kind: 'underline', target: 'selector:.t-h1', cue: 'this site itself', leadMs: 300 },
+    { kind: 'fade', cue: 'not a designer' },
+    { kind: 'scroll', ticks: 2, dir: 'down', cue: 'The draggable windows', leadMs: 900 },
+    { kind: 'point', target: 'The desktop metaphor', cue: 'this guided tour', dwellMs: 1800 },
+    { kind: 'fade', cue: 'feel the texture of the work' },
+    { kind: 'scroll', ticks: 2, dir: 'down', cue: 'breaks down exactly', leadMs: 800 },
   ],
 };
 

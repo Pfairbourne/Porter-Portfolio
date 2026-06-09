@@ -27,6 +27,7 @@
 </button>
 
 <div class="guide-panel" id="guide-panel" role="dialog" aria-label="Site guide" aria-modal="false" hidden>
+  <span class="guide-tour-progress" data-guide-progress aria-hidden="true"></span>
   <header class="guide-panel__head">
     <span class="guide-avatar" data-guide-avatar aria-hidden="true"><span class="guide-avatar__core"></span></span>
     <span class="guide-panel__titles">
@@ -111,6 +112,7 @@
     const resumeBtn = panel.querySelector('[data-guide-resume]') as HTMLButtonElement;
     const pauseBtn = panel.querySelector('[data-guide-pause]') as HTMLButtonElement;
     const orbSlot = panel.querySelector('[data-guide-orb-slot]') as HTMLElement;
+    const progressEl = panel.querySelector('[data-guide-progress]') as HTMLElement;
     const fsBtn = panel.querySelector('[data-guide-fullscreen]') as HTMLButtonElement;
     const ccBtn = panel.querySelector('[data-guide-captions]') as HTMLButtonElement;
     const msgHome = msgEl.parentElement as HTMLElement;   // .guide-panel__body — where the caption lives outside the tour
@@ -445,7 +447,13 @@
       if (r) r();
     }
     clipAudio.addEventListener('ended', finishClip);
-    clipAudio.addEventListener('error', () => { if (clipResolve) finishClip(); });
+    clipAudio.addEventListener('error', () => {
+      // Only a REAL load failure may finish the clip (so a missing MP3 can't stall the tour).
+      // Swapping src mid-load fires abort-class errors (MEDIA_ERR_ABORTED) in some engines —
+      // ignore those, or the next clip's awaiter would be released the instant it's created.
+      const err = clipAudio.error;
+      if (clipResolve && err && err.code !== 1) finishClip();
+    });
     // Play one narration clip; resolve when it ends. captionText is the exact string the clip was
     // synthesized from, so the rolling caption can be driven by this element's own playback clock.
     function playClip(id: string, captionText: string | null): Promise<void> {
@@ -466,19 +474,51 @@
         if (p && typeof p.catch === 'function') p.catch(() => {/* autoplay race: 'error'/'ended' still resolves us */});
       });
     }
-    function pauseClip() { try { clipAudio.pause(); } catch (_) {} }
+    // Short volume ramps so Pause/Resume sound like a fade, not a cut. The ramp is purely
+    // cosmetic (180–220ms); the freeze-frame contract is unaffected.
+    let volRamp = 0;
+    function rampVolume(to: number, ms: number, then?: () => void) {
+      const id = ++volRamp;
+      const from = clipAudio.volume;
+      const t0 = performance.now();
+      const tick = () => {
+        if (id !== volRamp) return;                      // a newer ramp superseded this one
+        const p = Math.min(1, (performance.now() - t0) / ms);
+        try { clipAudio.volume = from + (to - from) * p; } catch (_) {}
+        if (p < 1) requestAnimationFrame(tick);
+        else if (then) then();
+      };
+      requestAnimationFrame(tick);
+    }
+    function pauseClip() {
+      if (clipPlaying && !clipAudio.paused) rampVolume(0, 180, () => { try { clipAudio.pause(); } catch (_) {} });
+      else { try { clipAudio.pause(); } catch (_) {} }
+    }
     function resumeClip() {
       if (!clipPlaying) return;
-      clipAudio.volume = outputMuted ? 0 : 1;
       const p = clipAudio.play();
       if (p && typeof p.catch === 'function') p.catch(() => {});
+      rampVolume(outputMuted ? 0 : 1, 220);
     }
+    // (Cue → clip-clock scheduling lives in runChoreography's waitForCue, which polls
+    // clipAudio.currentTime — so a paused clip freezes the choreography for free.)
     // Hard-stop narration (teardown): drop playback and release any pending awaiter.
     function stopClip() {
       try { clipAudio.pause(); } catch (_) {}
       clipPlaying = false;
       const r = clipResolve; clipResolve = null;
       if (r) r();
+    }
+    // Warm the next clip into the HTTP cache while the current one plays, so step
+    // transitions never wait on the network. Fire-and-forget; failures are harmless.
+    function preloadClip(id?: string) {
+      if (!id) return;
+      try { fetch(tourAudioSrc(id), { cache: 'force-cache' }).catch(() => {}); } catch (_) {}
+    }
+    // Hairline progress along the top of the slim bar: a 26-stop tour deserves a sense of
+    // how far along it is. Only rendered in tour-mode (see the CSS).
+    function setTourProgress(frac: number) {
+      try { progressEl.style.width = (Math.max(0, Math.min(1, frac)) * 100).toFixed(1) + '%'; } catch (_) {}
     }
     const bodyEl = () => document.getElementById('desktop-window-body');
     // eased scroll of a container — smooth, unlike the browser's choppy 'smooth' behavior
@@ -521,8 +561,13 @@
       if (!cursorFx || reduceMotion) return;
       const r = (el as HTMLElement).getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return;
+      const tx = r.left + Math.min(r.width * 0.4, 80);
+      const ty = r.top + Math.min(r.height * 0.5, 28);
+      // Re-entering after a fade: materialize just below the target and settle onto it, instead
+      // of swooping across the whole screen from wherever the pointer happened to dissolve.
+      if (cursorFx.isFaded()) cursorFx.place(tx + 70, ty + 110);
       cursorFx.show();
-      cursorFx.moveTo(r.left + Math.min(r.width * 0.4, 80), r.top + Math.min(r.height * 0.5, 28));
+      cursorFx.moveTo(tx, ty);
     }
     // Gesture at an element (scrolls it into view first). Used by the agent's pointAt tool
     // and project highlights.
@@ -579,62 +624,10 @@
         await gestureForEl(el);
       }, delay);
     }
-    // Up to 3 prominent elements currently in the body's viewport, in document order, for
-    // the cursor to walk through and gesture at while the agent talks about the section.
-    function pickBrowseTargets(body: HTMLElement): Element[] {
-      const br = body.getBoundingClientRect();
-      const cands = Array.from(body.querySelectorAll('img, figure, video, picture, svg, .project-card, h2, h3, blockquote, strong, .stat, [class*="metric"], [class*="screenshot"]'));
-      const seen = new Set<Element>();
-      const visible: Element[] = [];
-      for (const el of cands) {
-        const r = el.getBoundingClientRect();
-        if (r.width < 24 || r.height < 14) continue;
-        if (r.top >= br.bottom - 40 || r.bottom <= br.top + 60) continue;
-        // Dedup: if a child of an already-picked card is visible, skip it.
-        let skip = false;
-        for (const s of seen) { if (s.contains(el) || el.contains(s)) { skip = true; break; } }
-        if (skip) continue;
-        seen.add(el);
-        visible.push(el);
-        if (visible.length >= 3) break;
-      }
-      return visible;
-    }
-    // After a page opens, browse it: dwell on the top, then scroll down in stages, moving
-    // the cursor to point at what's in view at each stop — until the step advances. A token
-    // + the step index make it self-terminate the moment the next step starts.
+    // (The old browseStep auto-wanderer is gone. The cursor never free-roams a page anymore:
+    // it gestures only at cue-anchored choreography targets — the things the narration is
+    // actually talking about — and fades out everywhere else.)
     let browseToken = 0;
-    async function browseStep() {
-      if (reduceMotion || !cursorFx || !touring) return;
-      const myStep = tourStep;
-      const token = ++browseToken;
-      const body = bodyEl();
-      if (!body) return;
-      const live = () => touring && !navigating && tourStep === myStep && token === browseToken;
-      await sleep(650);
-      if (!live()) return;
-      const head = body.querySelector('h1, .project-title, h2, .project-card');
-      if (head) { moveCursorToEl(head); pulseEl(head); }
-      await sleep(1700);
-      let guard = 0;
-      while (live() && guard++ < 4) {
-        const max = body.scrollHeight - body.clientHeight;
-        if (max <= 8 || body.scrollTop >= max - 8) break;
-        await smoothScrollTo(body, Math.min(max, body.scrollTop + body.clientHeight * 0.75), 1100);
-        if (!live()) return;
-        const tgts = pickBrowseTargets(body);
-        for (const tgt of tgts) {
-          if (!live()) return;
-          moveCursorToEl(tgt);
-          pulseEl(tgt);
-          await sleep(240);
-          if (!live()) return;
-          await gestureForEl(tgt);   // circle big screenshots, sweep headings, etc.
-          await sleep(280);
-        }
-        await sleep(500);
-      }
-    }
     // Build the desktop preamble at run time from whatever icons are currently rendered,
     // in their actual document order. Adapts automatically when icons are hidden via the
     // Settings CMS, renamed, reordered, or new ones are added — no code edit needed.
@@ -650,11 +643,17 @@
       };
       folders.sort(docOrder);
       files.sort(docOrder);
-      // Dwell on each folder while the agent describes it (about a sentence each), then a quicker
-      // pass over the files, then settle on the first folder for runStep(0)'s opening click.
-      for (const f of folders) steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 2800 });
-      for (const f of files) steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 1100 });
-      if (folders[0]) steps.push({ kind: 'move', target: 'icon:' + folders[0].p, dwellMs: 400 });
+      // Each icon is hovered AS the narration names it (cued to the preamble script), so the
+      // pointer and the voice introduce the desktop together. The cursor stays invisible for
+      // the opening line, dissolves for the dock mention (the caption bar covers the dock),
+      // and lands back on the first folder for runStep(0)'s opening click.
+      const FOLDER_CUES = ['full app prototype', 'AI agent build list', 'tools he built for his own work'];
+      const FILE_CUES = ['his résumé', 'more about him', 'working on right now'];
+      steps.push({ kind: 'fade' });   // hold off-screen through "Here's the desktop"
+      folders.forEach((f, i) => steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 900, cue: FOLDER_CUES[i], leadMs: 550 }));
+      files.forEach((f, i) => steps.push({ kind: 'hover', target: 'icon:' + f.p, dwellMs: 700, cue: FILE_CUES[i], leadMs: 550 }));
+      steps.push({ kind: 'fade', cue: 'down in the dock' });
+      if (folders[0]) steps.push({ kind: 'move', target: 'icon:' + folders[0].p, dwellMs: 400, cue: 'start on the left', leadMs: 600 });
       return steps;
     }
     // The full tour-start flow: play the desktop-orientation clip (preamble.mp3) while the cursor
@@ -668,16 +667,23 @@
       // Scope the preamble's cursor walk to "step -1" so its live() (tourStep === myStep) can't be
       // confused with the first real step's walk.
       tourStep = -1;
+      setTourProgress(0.02);   // a visible sliver from the first second
       document.body.classList.add('tour-preamble');
       try {
+        // Start the clip FIRST so its playback clock is live before the cue-anchored cursor
+        // walk begins polling it; then run both to completion together.
+        const clipDone = playClip(TOUR_PREAMBLE.id, TOUR_PREAMBLE.narration);
+        preloadClip(TOUR_STEPS[0]?.id);   // warm the first stop's narration while the preamble plays
         await Promise.all([
-          playClip(TOUR_PREAMBLE.id, TOUR_PREAMBLE.narration),
-          cursorWalk ? runChoreography(buildDesktopPreamble()) : Promise.resolve(),
+          clipDone,
+          cursorWalk ? runChoreography(buildDesktopPreamble(), TOUR_PREAMBLE.narration) : Promise.resolve(),
         ]);
       } finally {
         document.body.classList.remove('tour-preamble');
       }
-      if (!touring || tourPaused) return;
+      // Hand off to step 0 only if the preamble is still the active scope — if anything else
+      // (a dev skip, a force-advance) already moved tourStep on, never yank the tour backward.
+      if (!touring || tourPaused || tourStep !== -1) return;
       runStep(0);
     }
     // ---- Cursor choreography: scripted per-page sequences from tour-guide-cursor-spec.md.
@@ -726,7 +732,7 @@
       const r = (el as HTMLElement).getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     }
-    async function runChoreography(steps: ChoreographyStep[]) {
+    async function runChoreography(steps: ChoreographyStep[], narration?: string) {
       if (reduceMotion || !cursorFx || !touring) return;
       const myStep = tourStep;
       const token = ++browseToken;
@@ -735,12 +741,41 @@
       // cursor tween / held scroll, so the walk simply hangs at its current frame until Resume.
       const live = () => touring && !navigating && tourStep === myStep && token === browseToken;
       const body = bodyEl();
+      // Hold a cued step until the narration reaches its phrase (minus the lead, so the gesture
+      // LANDS on the words). Tolerates late audio metadata; a missing cue or finished clip
+      // releases immediately so the walk can never hang.
+      const waitForCue = (cue: string, leadMs: number): Promise<void> => new Promise((resolve) => {
+        if (!narration) { resolve(); return; }
+        const idx = narration.indexOf(cue);
+        if (idx < 0) {
+          if (import.meta.env.DEV) console.warn('[guide] choreography cue not in narration:', JSON.stringify(cue));
+          resolve(); return;
+        }
+        const poll = () => {
+          if (!live() || !clipPlaying) { resolve(); return; }
+          const dur = clipAudio.duration;
+          if (!dur || !isFinite(dur) || dur <= 0) { window.setTimeout(poll, 80); return; }   // metadata still loading
+          const target = Math.max(0, (idx / narration.length) * dur - leadMs / 1000);
+          let t = 0; try { t = clipAudio.currentTime || 0; } catch (_) {}
+          if (t >= target) { resolve(); return; }
+          window.setTimeout(poll, 80);
+        };
+        poll();
+      });
       try {
       for (const step of steps) {
+        if (!live()) return;
+        if (step.cue) await waitForCue(step.cue, step.leadMs ?? 450);
         if (!live()) return;
         switch (step.kind) {
           case 'pause': {
             await sleep(step.ms);
+            break;
+          }
+          case 'fade': {
+            // The narration has moved somewhere the screen can't follow — the pointer leaves
+            // rather than hover meaninglessly. The next gesture fades it back in on approach.
+            cursorFx.fadeOut();
             break;
           }
           case 'scroll': {
@@ -1353,6 +1388,7 @@
         }, capMs);
       }
       tourStep = i;
+      setTourProgress((i + 1) / (TOUR_STEPS.length + 1));   // +1 leaves headroom for the wrap
       const step = TOUR_STEPS[i];
       const prev = i > 0 ? TOUR_STEPS[i - 1] : null;
       try {
@@ -1378,12 +1414,14 @@
       navigating = false;
       if (!touring) return;
       repinOrb();                            // float the orb beside the freshly opened window
-      // Run the per-page cursor choreography (or the generic auto-picker) ALONGSIDE the narration
-      // clip; the clip's length sets the pacing. Advance the instant the clip ends.
+      // Start the narration FIRST (the choreography schedules itself off the clip's playback
+      // clock), then run the cue-anchored cursor walk alongside it. Advance when the clip ends.
+      const clipDone = playClip(step.id, step.narration);
+      preloadClip(i + 1 < TOUR_STEPS.length ? TOUR_STEPS[i + 1].id : TOUR_WRAP.id);
       const choreography = TOUR_CHOREOGRAPHY[step.path];
-      if (choreography && choreography.length > 0) runChoreography(choreography);
-      else browseStep();
-      await playClip(step.id, step.narration);
+      if (choreography && choreography.length > 0) runChoreography(choreography, step.narration);
+      else cursorFx?.fadeOut();              // nothing here worth pointing at — the pointer leaves
+      await clipDone;
       // Don't advance if the tour was torn down, is paused at the clip boundary, or this step was
       // already superseded (e.g. the watchdog force-advanced a dead clip → tourStep moved on).
       if (!touring || tourPaused || tourStep !== i) return;
@@ -1391,8 +1429,20 @@
     }
     async function finishTour() {
       clearStepWatchdog();
-      // Final clip: play wrap.mp3 with the cursor parked, then fold back into the full Q&A panel.
-      await playClip(TOUR_WRAP.id, TOUR_WRAP.narration);
+      // Final clip, with one last piece of stagecraft: the cursor closes the window so the
+      // desktop is visible again, and when the wrap mentions the résumé "right there on the
+      // desktop" it points at the actual icon — then dissolves for the goodbye.
+      tourStep = TOUR_STEPS.length;          // unique scope for the wrap walk's live() guard
+      setTourProgress(1);
+      const clipDone = playClip(TOUR_WRAP.id, TOUR_WRAP.narration);
+      if (!reduceMotion && cursorFx) {
+        runChoreography([
+          { kind: 'click', target: 'close' },
+          { kind: 'hover', target: 'icon:/resume', cue: 'right there on the desktop', leadMs: 600, dwellMs: 1200 },
+          { kind: 'fade', cue: 'Thanks for spending the time' },
+        ], TOUR_WRAP.narration);
+      }
+      await clipDone;
       touring = false; tourPaused = false; navigating = false;
       document.body.classList.remove('tour-locked');
       pauseBtn.hidden = true; hideResume();
@@ -1928,6 +1978,7 @@
     soundBtn.addEventListener('click', () => {
       outputMuted = !outputMuted;
       try { conversation && conversation.setVolume({ volume: outputMuted ? 0 : 1 }); } catch (_) {}
+      try { clipAudio.volume = outputMuted ? 0 : 1; } catch (_) {}   // tour narration obeys the mute too
       soundBtn.classList.toggle('is-off', outputMuted);
       soundBtn.setAttribute('aria-label', outputMuted ? "Unmute the guide's voice" : "Mute the guide's voice");
     });
@@ -1998,8 +2049,13 @@
     // (cost + privacy). A quick flick back cancels it; the visitor re-engages with the
     // mic or a question when they return.
     let hideTimer: number | null = null;
+    let autoPausedByHide = false;
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
+        // Mid-tour, freeze-frame the whole walkthrough: otherwise the narration keeps playing
+        // against a stopped rAF loop and the visitor returns to a cursor that has teleported
+        // past everything it was supposed to point at. Manual pauses are left alone.
+        if (touring && !tourPaused) { autoPausedByHide = true; pauseTour(); }
         // pause the canvas loops outright (no point burning battery on an unseen tab)
         orbFx?.stop();
         cursorFx?.stop();
@@ -2008,8 +2064,10 @@
         }
       } else {
         orbFx?.start();
-        if (touring) cursorFx?.start();
+        if (touring && !tourPaused) cursorFx?.start();   // a paused cursor is restarted by resume(), never here
         if (hideTimer !== null) { clearTimeout(hideTimer); hideTimer = null; }
+        // Only resume what WE paused — a visitor's own pause stays theirs to release.
+        if (autoPausedByHide) { autoPausedByHide = false; if (touring && tourPaused) resumeTourPlayback(); }
       }
     });
     tourBtn.addEventListener('click', takeTour);
@@ -2263,6 +2321,21 @@
     padding: 8px 22px 10px;
     gap: 4px;
     border-radius: 44px;   /* matches the slot circles' silhouette without going fully pill */
+  }
+  /* Hairline tour progress along the bar's top edge (tour mode only). Inset from the pill's
+     corners; width is driven inline by the engine as the walkthrough advances. */
+  .guide-tour-progress { display: none; }
+  body.tour-mode .guide-tour-progress {
+    display: block;
+    position: absolute;
+    top: 0; left: 28px;
+    height: 2px;
+    max-width: calc(100% - 56px);
+    width: 0%;
+    border-radius: 2px;
+    background: color-mix(in oklab, var(--accent) 75%, transparent);
+    transition: width 600ms ease;
+    pointer-events: none;
   }
   body.tour-mode .guide-panel__body { display: none; }
   body.tour-mode .guide-avatar,
